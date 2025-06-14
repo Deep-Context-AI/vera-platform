@@ -42,6 +42,33 @@ class DEAResponse(BaseResponse):
     address: Optional[Dict[str, Any]] = Field(None, description="Registrant address")
     is_active: Optional[bool] = Field(None, description="Whether the DEA registration is active")
 
+class AddressOfRecord(BaseModel):
+    """Address of record model for DEA verification"""
+    line1: str = Field(..., description="Address line 1")
+    line2: Optional[str] = Field(None, description="Address line 2")
+    city: str = Field(..., description="City")
+    state: str = Field(..., description="State")
+    zip: str = Field(..., description="ZIP code")
+
+class DEAVerificationResponse(BaseResponse):
+    """Response model for comprehensive DEA verification"""
+    verification_date: str = Field(..., description="Date of verification (YYYY-MM-DD)")
+    dea_number: str = Field(..., description="DEA registration number")
+    practitioner_name: str = Field(..., description="Practitioner name")
+    business_activity: str = Field(..., description="Business activity type")
+    registration_status: str = Field(..., description="Registration status")
+    authorized_schedules: List[str] = Field(..., description="Authorized controlled substance schedules")
+    issue_date: str = Field(..., description="DEA issue date (YYYY-MM-DD)")
+    expiration_date: str = Field(..., description="DEA expiration date (YYYY-MM-DD)")
+    address_of_record: AddressOfRecord = Field(..., description="Address of record")
+    state_license_number: str = Field(..., description="State license number")
+    state_license_status: str = Field(..., description="State license status")
+    state_verified: bool = Field(..., description="Whether state license is verified")
+    match_score: int = Field(..., description="Match score (0-100)")
+    notes: Optional[str] = Field(None, description="Additional notes")
+    document_url: Optional[str] = Field(None, description="URL to verification document")
+    verified_by: str = Field(..., description="Verification source")
+
 class ABMSResponse(BaseResponse):
     """Response model for ABMS lookup"""
     physician_name: Optional[str] = Field(None, description="Physician name")

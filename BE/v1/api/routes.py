@@ -3,11 +3,11 @@ from typing import Optional, List
 from datetime import datetime
 
 from models.requests import (
-    NPIRequest, DEARequest, ABMSRequest, NPDBRequest, 
+    NPIRequest, DEARequest, DEAVerificationRequest, ABMSRequest, NPDBRequest, 
     SANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest
 )
 from models.responses import (
-    NPIResponse, DEAResponse, ABMSResponse, NPDBResponse,
+    NPIResponse, DEAResponse, DEAVerificationResponse, ABMSResponse, NPDBResponse,
     SANCTIONResponse, LADMFResponse, BatchNPIResponse, BatchDEAResponse,
     VerificationSummaryResponse, ResponseStatus
 )
@@ -64,6 +64,17 @@ async def get_dea(
     """Lookup a single DEA registration"""
     request = DEARequest(dea_number=dea_number)
     return await dea_service.lookup_dea(request)
+
+@router.post(
+    "/dea/verify",
+    response_model=DEAVerificationResponse,
+    tags=["DEA"],
+    summary="Comprehensive DEA verification",
+    description="Perform comprehensive DEA verification with detailed practitioner information"
+)
+async def verify_dea_practitioner(request: DEAVerificationRequest) -> DEAVerificationResponse:
+    """Verify DEA registration with comprehensive practitioner information"""
+    return await dea_service.verify_dea_practitioner(request)
 
 @router.get(
     "/dea/batch",

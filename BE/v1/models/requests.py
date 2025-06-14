@@ -29,6 +29,29 @@ class DEARequest(BaseRequest):
             raise ValueError('DEA number must be 2 letters followed by 7 digits')
         return v.upper()
 
+class DEAVerificationRequest(BaseRequest):
+    """Request model for comprehensive DEA verification"""
+    first_name: str = Field(..., description="First name of the practitioner", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Last name of the practitioner", min_length=1, max_length=50)
+    date_of_birth: str = Field(..., description="Date of birth (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    dea_number: str = Field(..., description="Unique DEA registration number", min_length=9, max_length=9)
+    zip_code: str = Field(..., description="ZIP code from registered business location", min_length=5, max_length=10)
+    last_four_ssn: str = Field(..., description="Last 4 digits of SSN", min_length=4, max_length=4, pattern=r"^\d{4}$")
+    expiration_date: str = Field(..., description="DEA expiration date (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    state_license_number: str = Field(..., description="Linked medical license number", min_length=1, max_length=50)
+    state_abbreviation: str = Field(..., description="2-letter state code", min_length=2, max_length=2)
+    
+    @field_validator('dea_number')
+    def validate_dea_number(cls, v):
+        # Basic DEA number format validation (2 letters + 7 digits)
+        if len(v) != 9 or not v[:2].isalpha() or not v[2:].isdigit():
+            raise ValueError('DEA number must be 2 letters followed by 7 digits')
+        return v.upper()
+    
+    @field_validator('state_abbreviation')
+    def validate_state_abbreviation(cls, v):
+        return v.upper()
+
 class ABMSRequest(BaseRequest):
     """Request model for ABMS (American Board of Medical Specialties) lookup"""
     physician_name: str = Field(..., description="Physician full name", min_length=2, max_length=100)

@@ -3,8 +3,10 @@ from typing import Optional, List
 import httpx
 from datetime import datetime
 
-from ...models.requests import DEARequest, BatchDEARequest
-from ...models.responses import DEAResponse, BatchDEAResponse, ResponseStatus
+from ...models.requests import DEARequest, DEAVerificationRequest, BatchDEARequest
+from ...models.responses import (
+    DEAResponse, DEAVerificationResponse, AddressOfRecord, BatchDEAResponse, ResponseStatus
+)
 from ...exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -71,6 +73,102 @@ class DEAService:
             logger.error(f"Unexpected error during DEA lookup for {request.dea_number}: {e}")
             raise ExternalServiceException(
                 detail="Unexpected error during DEA lookup",
+                service_name="DEA Registry"
+            )
+    
+    async def verify_dea_practitioner(self, request: DEAVerificationRequest) -> DEAVerificationResponse:
+        """
+        Perform comprehensive DEA verification
+        
+        Args:
+            request: DEAVerificationRequest containing all practitioner information
+            
+        Returns:
+            DEAVerificationResponse with comprehensive verification results
+            
+        Raises:
+            ExternalServiceException: If external service fails
+        """
+        try:
+            logger.info(f"Verifying DEA practitioner: {request.first_name} {request.last_name}, DEA: {request.dea_number}")
+            
+            # Validate required fields
+            required_fields = [
+                'first_name', 'last_name', 'date_of_birth', 'dea_number', 
+                'zip_code', 'last_four_ssn', 'expiration_date', 
+                'state_license_number', 'state_abbreviation'
+            ]
+            
+            for field in required_fields:
+                if not getattr(request, field, None):
+                    return DEAVerificationResponse(
+                        status=ResponseStatus.ERROR,
+                        message=f"Missing required field: {field}",
+                        verification_date=datetime.now().strftime("%Y-%m-%d"),
+                        dea_number=request.dea_number,
+                        practitioner_name=f"Dr. {request.first_name} {request.last_name}",
+                        business_activity="Individual Practitioner",
+                        registration_status="Error",
+                        authorized_schedules=[],
+                        issue_date="",
+                        expiration_date=request.expiration_date,
+                        address_of_record=AddressOfRecord(
+                            line1="",
+                            city="",
+                            state=request.state_abbreviation,
+                            zip=request.zip_code
+                        ),
+                        state_license_number=request.state_license_number,
+                        state_license_status="Unknown",
+                        state_verified=False,
+                        match_score=0,
+                        notes=f"Verification failed due to missing field: {field}",
+                        document_url=None,
+                        verified_by="Vera Credential Engine"
+                    )
+            
+            # Simulate API call delay
+            await self._simulate_api_call()
+            
+            # Mock comprehensive verification response
+            # In a real implementation, this would navigate the DEA Certificate Reprint page
+            # or use secure API with all the provided information
+            
+            practitioner_name = f"Dr. {request.first_name} {request.last_name}"
+            verification_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # Mock successful verification
+            return DEAVerificationResponse(
+                status=ResponseStatus.SUCCESS,
+                message="DEA verification successful",
+                verification_date=verification_date,
+                dea_number=request.dea_number,
+                practitioner_name=practitioner_name,
+                business_activity="Individual Practitioner",
+                registration_status="Active",
+                authorized_schedules=["II", "IIN", "III", "IV", "V"],
+                issue_date="2023-03-15",
+                expiration_date=request.expiration_date,
+                address_of_record=AddressOfRecord(
+                    line1="1234 Wellness Ave.",
+                    line2="Suite 400",
+                    city="Los Angeles",
+                    state=request.state_abbreviation,
+                    zip=request.zip_code
+                ),
+                state_license_number=request.state_license_number,
+                state_license_status="Active",
+                state_verified=True,
+                match_score=100,
+                notes="No disciplinary action found.",
+                document_url=f"https://vera.ai/documents/dea-verifications/{request.dea_number}.pdf",
+                verified_by="Vera Credential Engine"
+            )
+                
+        except Exception as e:
+            logger.error(f"Unexpected error during DEA verification for {request.dea_number}: {e}")
+            raise ExternalServiceException(
+                detail="Unexpected error during DEA verification",
                 service_name="DEA Registry"
             )
     
