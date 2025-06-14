@@ -22,15 +22,41 @@ class BaseResponse(BaseModel):
 class NPIResponse(BaseResponse):
     """Response model for NPI lookup"""
     npi: Optional[str] = Field(None, description="National Provider Identifier")
-    provider_name: Optional[str] = Field(None, description="Provider name")
+    provider_name: Optional[str] = Field(None, description="Provider name or Organization name")
     provider_type: Optional[str] = Field(None, description="Provider type (Individual/Organization)")
+    
+    # Taxonomy and specialty information
     primary_taxonomy: Optional[str] = Field(None, description="Primary taxonomy code")
-    specialty: Optional[str] = Field(None, description="Primary specialty")
+    specialty: Optional[str] = Field(None, description="Primary specialty description")
+    secondary_taxonomies: Optional[List[Dict[str, Any]]] = Field(None, description="Secondary taxonomy codes and descriptions")
+    
+    # License information
     license_state: Optional[str] = Field(None, description="Primary license state")
     license_number: Optional[str] = Field(None, description="Primary license number")
-    address: Optional[Dict[str, Any]] = Field(None, description="Provider address information")
+    
+    # Address information
+    practice_address: Optional[Dict[str, Any]] = Field(None, description="Practice address information")
+    mailing_address: Optional[Dict[str, Any]] = Field(None, description="Mailing address information")
+    
+    # Contact information
     phone: Optional[str] = Field(None, description="Provider phone number")
+    fax: Optional[str] = Field(None, description="Provider fax number")
+    
+    # Status and dates
     is_active: Optional[bool] = Field(None, description="Whether the NPI is active")
+    enumeration_date: Optional[str] = Field(None, description="Date NPI was issued (YYYY-MM-DD)")
+    last_update_date: Optional[str] = Field(None, description="Last update date (YYYY-MM-DD)")
+    
+    # Organization-specific fields
+    sole_proprietor: Optional[str] = Field(None, description="Sole Proprietor (Yes/No) - for individuals")
+    authorized_official: Optional[Dict[str, Any]] = Field(None, description="Authorized official information (for organizations)")
+    
+    # Additional fields
+    gender: Optional[str] = Field(None, description="Provider gender (for individuals)")
+    credential: Optional[str] = Field(None, description="Provider credential (e.g., M.D., D.O.)")
+    
+    # Legacy field for backward compatibility
+    address: Optional[Dict[str, Any]] = Field(None, description="Provider address information (deprecated - use practice_address)")
 
 class DEAResponse(BaseResponse):
     """Response model for DEA lookup"""

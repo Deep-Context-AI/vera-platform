@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import httpx
 from datetime import datetime
 
@@ -18,10 +18,10 @@ class NPIService:
     
     async def lookup_npi(self, request: NPIRequest) -> NPIResponse:
         """
-        Lookup a single NPI
+        Lookup NPI using various search criteria
         
         Args:
-            request: NPIRequest containing the NPI to lookup
+            request: NPIRequest containing search criteria
             
         Returns:
             NPIResponse with the lookup results
@@ -31,86 +31,228 @@ class NPIService:
             ExternalServiceException: If external service fails
         """
         try:
-            logger.info(f"Looking up NPI: {request.npi}")
+            search_params = self._build_search_params(request)
+            logger.info(f"Looking up NPI with params: {search_params}")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                params = {
-                    "number": request.npi,
-                    "version": "2.1"
-                }
-                
-                response = await client.get(f"{self.base_url}/", params=params)
+                response = await client.get(f"{self.base_url}/", params=search_params)
                 response.raise_for_status()
                 
                 data = response.json()
                 
                 if not data.get("results"):
-                    logger.warning(f"NPI not found: {request.npi}")
+                    logger.warning(f"No NPI results found for search criteria")
                     return NPIResponse(
                         status=ResponseStatus.NOT_FOUND,
-                        message=f"NPI {request.npi} not found",
+                        message="No NPI found matching the search criteria",
                         npi=request.npi
                     )
                 
-                # Parse the first result
+                # Parse the first result (most relevant)
                 result = data["results"][0]
-                basic_info = result.get("basic", {})
-                addresses = result.get("addresses", [])
-                taxonomies = result.get("taxonomies", [])
+                parsed_response = self._parse_npi_result(result, request)
                 
-                # Get primary address
-                primary_address = None
-                if addresses:
-                    primary_address = {
-                        "address_1": addresses[0].get("address_1"),
-                        "address_2": addresses[0].get("address_2"),
-                        "city": addresses[0].get("city"),
-                        "state": addresses[0].get("state"),
-                        "postal_code": addresses[0].get("postal_code"),
-                        "country_code": addresses[0].get("country_code")
-                    }
-                
-                # Get primary taxonomy
-                primary_taxonomy = None
-                primary_specialty = None
-                if taxonomies:
-                    primary_tax = next((t for t in taxonomies if t.get("primary")), taxonomies[0])
-                    primary_taxonomy = primary_tax.get("code")
-                    primary_specialty = primary_tax.get("desc")
-                
-                logger.info(f"Successfully found NPI: {request.npi}")
-                
-                return NPIResponse(
-                    status=ResponseStatus.SUCCESS,
-                    message="NPI lookup successful",
-                    npi=request.npi,
-                    provider_name=basic_info.get("name"),
-                    provider_type=basic_info.get("enumeration_type"),
-                    primary_taxonomy=primary_taxonomy,
-                    specialty=primary_specialty,
-                    address=primary_address,
-                    phone=addresses[0].get("telephone_number") if addresses else None,
-                    is_active=basic_info.get("status") == "A"
-                )
+                logger.info(f"Successfully found NPI: {parsed_response.npi}")
+                return parsed_response
                 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error during NPI lookup for {request.npi}: {e}")
+            logger.error(f"HTTP error during NPI lookup: {e}")
             raise ExternalServiceException(
                 detail=f"NPI registry service returned error: {e.response.status_code}",
                 service_name="NPI Registry"
             )
         except httpx.RequestError as e:
-            logger.error(f"Request error during NPI lookup for {request.npi}: {e}")
+            logger.error(f"Request error during NPI lookup: {e}")
             raise ExternalServiceException(
                 detail="Failed to connect to NPI registry service",
                 service_name="NPI Registry"
             )
         except Exception as e:
-            logger.error(f"Unexpected error during NPI lookup for {request.npi}: {e}")
+            logger.error(f"Unexpected error during NPI lookup: {e}")
             raise ExternalServiceException(
                 detail="Unexpected error during NPI lookup",
                 service_name="NPI Registry"
             )
+    
+    def _build_search_params(self, request: NPIRequest) -> Dict[str, str]:
+        """Build search parameters for the NPI API"""
+        params = {"version": "2.1"}
+        
+        if request.npi:
+            params["number"] = request.npi
+        elif request.organization_name:
+            params["organization_name"] = request.organization_name
+        elif request.first_name or request.last_name:
+            if request.first_name:
+                params["first_name"] = request.first_name
+            if request.last_name:
+                params["last_name"] = request.last_name
+        
+        # Add optional address filters
+        if request.city:
+            params["city"] = request.city
+        if request.state:
+            params["state"] = request.state
+        if request.postal_code:
+            params["postal_code"] = request.postal_code
+        
+        # Limit results for performance
+        params["limit"] = "10"
+        
+        return params
+    
+    def _parse_npi_result(self, result: Dict[str, Any], request: NPIRequest) -> NPIResponse:
+        """Parse NPI API result into NPIResponse"""
+        basic_info = result.get("basic", {})
+        addresses = result.get("addresses", [])
+        taxonomies = result.get("taxonomies", [])
+        identifiers = result.get("identifiers", [])
+        
+        # Basic information
+        npi = result.get("number")
+        provider_name = basic_info.get("name")
+        provider_type = "Individual" if basic_info.get("enumeration_type") == "NPI-1" else "Organization"
+        
+        # Parse addresses
+        practice_address = None
+        mailing_address = None
+        phone = None
+        fax = None
+        
+        for addr in addresses:
+            address_data = {
+                "address_1": addr.get("address_1"),
+                "address_2": addr.get("address_2"),
+                "city": addr.get("city"),
+                "state": addr.get("state"),
+                "postal_code": addr.get("postal_code"),
+                "country_code": addr.get("country_code", "US")
+            }
+            
+            if addr.get("address_purpose") == "LOCATION":
+                practice_address = address_data
+                phone = addr.get("telephone_number")
+                fax = addr.get("fax_number")
+            elif addr.get("address_purpose") == "MAILING":
+                mailing_address = address_data
+                if not phone:  # Use mailing phone if no practice phone
+                    phone = addr.get("telephone_number")
+                if not fax:  # Use mailing fax if no practice fax
+                    fax = addr.get("fax_number")
+        
+        # If no specific addresses found, use the first one as practice address
+        if not practice_address and addresses:
+            addr = addresses[0]
+            practice_address = {
+                "address_1": addr.get("address_1"),
+                "address_2": addr.get("address_2"),
+                "city": addr.get("city"),
+                "state": addr.get("state"),
+                "postal_code": addr.get("postal_code"),
+                "country_code": addr.get("country_code", "US")
+            }
+            phone = addr.get("telephone_number")
+            fax = addr.get("fax_number")
+        
+        # Parse taxonomies
+        primary_taxonomy = None
+        specialty = None
+        secondary_taxonomies = []
+        
+        for taxonomy in taxonomies:
+            tax_data = {
+                "code": taxonomy.get("code"),
+                "description": taxonomy.get("desc"),
+                "primary": taxonomy.get("primary", False),
+                "state": taxonomy.get("state"),
+                "license": taxonomy.get("license")
+            }
+            
+            if taxonomy.get("primary"):
+                primary_taxonomy = taxonomy.get("code")
+                specialty = taxonomy.get("desc")
+            else:
+                secondary_taxonomies.append(tax_data)
+        
+        # If no primary taxonomy found, use the first one
+        if not primary_taxonomy and taxonomies:
+            primary_taxonomy = taxonomies[0].get("code")
+            specialty = taxonomies[0].get("desc")
+        
+        # Parse identifiers for license information
+        license_number = None
+        license_state = None
+        
+        for identifier in identifiers:
+            if identifier.get("code") == "05":  # State license number
+                license_number = identifier.get("identifier")
+                license_state = identifier.get("state")
+                break
+        
+        # Parse dates
+        enumeration_date = basic_info.get("enumeration_date")
+        last_update_date = basic_info.get("last_updated")
+        
+        # Format dates if they exist
+        if enumeration_date:
+            try:
+                enumeration_date = datetime.strptime(enumeration_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+            except:
+                pass  # Keep original format if parsing fails
+        
+        if last_update_date:
+            try:
+                last_update_date = datetime.strptime(last_update_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+            except:
+                pass  # Keep original format if parsing fails
+        
+        # Individual-specific fields
+        gender = None
+        credential = None
+        sole_proprietor = None
+        authorized_official = None
+        
+        if provider_type == "Individual":
+            gender = basic_info.get("gender")
+            credential = basic_info.get("credential")
+            sole_proprietor = basic_info.get("sole_proprietor")
+        else:
+            # Organization-specific fields
+            auth_official = basic_info.get("authorized_official")
+            if auth_official:
+                authorized_official = {
+                    "first_name": auth_official.get("first_name"),
+                    "last_name": auth_official.get("last_name"),
+                    "title": auth_official.get("title_or_position"),
+                    "phone": auth_official.get("telephone_number"),
+                    "credential": auth_official.get("credential")
+                }
+        
+        return NPIResponse(
+            status=ResponseStatus.SUCCESS,
+            message="NPI lookup successful",
+            npi=npi,
+            provider_name=provider_name,
+            provider_type=provider_type,
+            primary_taxonomy=primary_taxonomy,
+            specialty=specialty,
+            secondary_taxonomies=secondary_taxonomies if secondary_taxonomies else None,
+            license_state=license_state,
+            license_number=license_number,
+            practice_address=practice_address,
+            mailing_address=mailing_address,
+            phone=phone,
+            fax=fax,
+            is_active=basic_info.get("status") == "A",
+            enumeration_date=enumeration_date,
+            last_update_date=last_update_date,
+            sole_proprietor=sole_proprietor,
+            authorized_official=authorized_official,
+            gender=gender,
+            credential=credential,
+            # Legacy field for backward compatibility
+            address=practice_address
+        )
     
     async def batch_lookup_npi(self, request: BatchNPIRequest) -> BatchNPIResponse:
         """

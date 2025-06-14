@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -10,13 +10,35 @@ class BaseRequest(BaseModel):
 
 class NPIRequest(BaseRequest):
     """Request model for NPI (National Provider Identifier) lookup"""
-    npi: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    # Search criteria - at least one must be provided
+    npi: Optional[str] = Field(None, description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    first_name: Optional[str] = Field(None, description="Provider's first name", min_length=1, max_length=50)
+    last_name: Optional[str] = Field(None, description="Provider's last name", min_length=1, max_length=50)
+    organization_name: Optional[str] = Field(None, description="Organization name", min_length=2, max_length=200)
+    
+    # Optional address fields for more specific searches
+    city: Optional[str] = Field(None, description="City", max_length=50)
+    state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
+    postal_code: Optional[str] = Field(None, description="ZIP/Postal code", max_length=10)
     
     @field_validator('npi')
-    def validate_npi(cls, v):
-        if not v.isdigit():
+    def validate_npi(cls, v: str):
+        if v and not v.isdigit():
             raise ValueError('NPI must contain only digits')
         return v
+    
+    @field_validator('state')
+    def validate_state(cls, v):
+        if v:
+            return v.upper()
+        return v
+    
+    @model_validator(mode='after')
+    def validate_search_criteria(self):
+        """Ensure at least one search criterion is provided"""
+        if not any([self.npi, self.first_name, self.last_name, self.organization_name]):
+            raise ValueError('At least one search criterion must be provided: npi, first_name/last_name, or organization_name')
+        return self
 
 class DEARequest(BaseRequest):
     """Request model for DEA (Drug Enforcement Administration) lookup"""

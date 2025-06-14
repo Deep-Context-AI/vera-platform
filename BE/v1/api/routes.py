@@ -37,6 +37,45 @@ async def get_npi(
     return await npi_service.lookup_npi(request)
 
 @router.get(
+    "/npi/search",
+    response_model=NPIResponse,
+    tags=["NPI"],
+    summary="Search NPI by various criteria",
+    description="Search for National Provider Identifier using provider name, organization name, or address"
+)
+async def search_npi(
+    npi: Optional[str] = Query(None, description="10-digit National Provider Identifier", regex=r"^\d{10}$"),
+    first_name: Optional[str] = Query(None, description="Provider's first name"),
+    last_name: Optional[str] = Query(None, description="Provider's last name"),
+    organization_name: Optional[str] = Query(None, description="Organization name"),
+    city: Optional[str] = Query(None, description="City"),
+    state: Optional[str] = Query(None, description="State abbreviation (2 letters)", regex=r"^[A-Z]{2}$"),
+    postal_code: Optional[str] = Query(None, description="ZIP/Postal code")
+) -> NPIResponse:
+    """Search for NPI using various criteria"""
+    request = NPIRequest(
+        npi=npi,
+        first_name=first_name,
+        last_name=last_name,
+        organization_name=organization_name,
+        city=city,
+        state=state,
+        postal_code=postal_code
+    )
+    return await npi_service.lookup_npi(request)
+
+@router.post(
+    "/npi/search",
+    response_model=NPIResponse,
+    tags=["NPI"],
+    summary="Search NPI by criteria (POST)",
+    description="Search for National Provider Identifier using detailed search criteria via POST request"
+)
+async def search_npi_post(request: NPIRequest) -> NPIResponse:
+    """Search for NPI using detailed criteria via POST"""
+    return await npi_service.lookup_npi(request)
+
+@router.get(
     "/npi/batch",
     response_model=BatchNPIResponse,
     tags=["NPI"],
