@@ -51,13 +51,63 @@ class ABMSResponse(BaseResponse):
     initial_certification_date: Optional[datetime] = Field(None, description="Initial certification date")
     recertification_date: Optional[datetime] = Field(None, description="Most recent recertification date")
 
+class NPDBAddress(BaseModel):
+    """Address model for NPDB responses"""
+    line1: str = Field(..., description="Address line 1")
+    line2: Optional[str] = Field(None, description="Address line 2")
+    city: str = Field(..., description="City")
+    state: str = Field(..., description="State")
+    zip: str = Field(..., description="ZIP code")
+
+class NPDBSubjectIdentification(BaseModel):
+    """Subject identification information"""
+    full_name: str = Field(..., description="Full name")
+    date_of_birth: str = Field(..., description="Date of birth")
+    gender: Optional[str] = Field(None, description="Gender")
+    organization_name: Optional[str] = Field(None, description="Organization name")
+    work_address: Optional[NPDBAddress] = Field(None, description="Work address")
+    home_address: Optional[NPDBAddress] = Field(None, description="Home address")
+    ssn_last4: str = Field(..., description="Last 4 digits of SSN")
+    dea_number: Optional[str] = Field(None, description="DEA number")
+    npi_number: str = Field(..., description="NPI number")
+    upin: Optional[str] = Field(None, description="UPIN")
+    license_number: str = Field(..., description="License number")
+    state_of_license: str = Field(..., description="State of license")
+    professional_school: Optional[str] = Field(None, description="Professional school")
+
+class NPDBContinuousQueryInfo(BaseModel):
+    """Continuous query information"""
+    statuses_queried: List[str] = Field(..., description="Statuses queried")
+    query_type: str = Field(..., description="Query type")
+    entity_name: str = Field(..., description="Entity name")
+    authorized_submitter: str = Field(..., description="Authorized submitter")
+    customer_use: str = Field(..., description="Customer use")
+
+class NPDBReportDetail(BaseModel):
+    """Report detail information"""
+    action_type: Optional[str] = Field(None, description="Action type")
+    action_date: Optional[str] = Field(None, description="Action date")
+    issuing_state: Optional[str] = Field(None, description="Issuing state")
+    description: Optional[str] = Field(None, description="Description")
+
+class NPDBReportType(BaseModel):
+    """Report type information"""
+    result: str = Field(..., description="Result (Yes/No)")
+    details: List[NPDBReportDetail] = Field(default_factory=list, description="Report details")
+
+class NPDBReportSummary(BaseModel):
+    """Report summary information"""
+    summary_date: str = Field(..., description="Summary date")
+    report_types: Dict[str, NPDBReportType] = Field(..., description="Report types")
+
 class NPDBResponse(BaseResponse):
-    """Response model for NPDB lookup"""
-    practitioner_name: Optional[str] = Field(None, description="Practitioner name")
-    has_reports: Optional[bool] = Field(None, description="Whether there are any reports")
-    report_count: Optional[int] = Field(None, description="Number of reports")
-    report_types: Optional[List[str]] = Field(None, description="Types of reports found")
-    last_report_date: Optional[datetime] = Field(None, description="Date of most recent report")
+    """Response model for NPDB verification"""
+    name: str = Field(..., description="Practitioner name")
+    query_response_type: str = Field(..., description="Query response type")
+    process_date: str = Field(..., description="Process date")
+    subject_identification: NPDBSubjectIdentification = Field(..., description="Subject identification")
+    continuous_query_info: NPDBContinuousQueryInfo = Field(..., description="Continuous query info")
+    report_summary: NPDBReportSummary = Field(..., description="Report summary")
 
 class SANCTIONResponse(BaseResponse):
     """Response model for sanctions lookup"""

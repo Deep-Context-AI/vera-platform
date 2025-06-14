@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -12,7 +12,7 @@ class NPIRequest(BaseRequest):
     """Request model for NPI (National Provider Identifier) lookup"""
     npi: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
     
-    @validator('npi')
+    @field_validator('npi')
     def validate_npi(cls, v):
         if not v.isdigit():
             raise ValueError('NPI must contain only digits')
@@ -22,7 +22,7 @@ class DEARequest(BaseRequest):
     """Request model for DEA (Drug Enforcement Administration) lookup"""
     dea_number: str = Field(..., description="DEA registration number", min_length=9, max_length=9)
     
-    @validator('dea_number')
+    @field_validator('dea_number')
     def validate_dea_number(cls, v):
         # Basic DEA number format validation (2 letters + 7 digits)
         if len(v) != 9 or not v[:2].isalpha() or not v[2:].isdigit():
@@ -35,23 +35,48 @@ class ABMSRequest(BaseRequest):
     state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
     specialty: Optional[str] = Field(None, description="Medical specialty", max_length=100)
     
-    @validator('state')
+    @field_validator('state')
     def validate_state(cls, v):
         if v:
             return v.upper()
         return v
 
-class NPDBRequest(BaseRequest):
-    """Request model for NPDB (National Practitioner Data Bank) lookup"""
-    practitioner_name: str = Field(..., description="Practitioner full name", min_length=2, max_length=100)
-    license_number: Optional[str] = Field(None, description="Professional license number", max_length=50)
-    state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
+class NPDBAddress(BaseModel):
+    """Address model for NPDB requests"""
+    line1: str = Field(..., description="Address line 1", max_length=100)
+    line2: Optional[str] = Field("", description="Address line 2", max_length=100)
+    city: str = Field(..., description="City", max_length=50)
+    state: str = Field(..., description="State abbreviation", min_length=2, max_length=2)
+    zip: str = Field(..., description="ZIP code", max_length=10)
     
-    @validator('state')
-    def validate_state(cls, v):
-        if v:
-            return v.upper()
-        return v
+    @field_validator('state')
+    def validate_state(cls, v: str) -> str:
+        # We can assume that its a string because this is mode='after' BaseModel validation
+        return v.upper()
+
+class NPDBRequest(BaseRequest):
+    """Request model for NPDB (National Practitioner Data Bank) verification"""
+    first_name: str = Field(..., description="First name", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Last name", min_length=1, max_length=50)
+    date_of_birth: str = Field(..., description="Date of birth (YYYY-MM-DD)", regex=r"^\d{4}-\d{2}-\d{2}$")
+    ssn_last4: str = Field(..., description="Last 4 digits of SSN", min_length=4, max_length=4, regex=r"^\d{4}$")
+    address: NPDBAddress = Field(..., description="Address information")
+    npi_number: str = Field(..., description="10-digit NPI number", min_length=10, max_length=10, regex=r"^\d{10}$")
+    license_number: str = Field(..., description="Professional license number", max_length=50)
+    state_of_license: str = Field(..., description="State of license", min_length=2, max_length=2)
+    upin: Optional[str] = Field(None, description="UPIN number", max_length=20)
+    dea_number: Optional[str] = Field(None, description="DEA number", max_length=9)
+    organization_name: Optional[str] = Field(None, description="Organization name", max_length=100)
+    
+    @field_validator('state_of_license')
+    def validate_state_of_license(cls, v):
+        return v.upper()
+    
+    @field_validator('dea_number')
+    def validate_dea_number(cls, v):
+        if v and (len(v) != 9 or not v[:2].isalpha() or not v[2:].isdigit()):
+            raise ValueError('DEA number must be 2 letters followed by 7 digits')
+        return v.upper() if v else v
 
 class SANCTIONRequest(BaseRequest):
     """Request model for sanctions/exclusions lookup"""
@@ -59,7 +84,7 @@ class SANCTIONRequest(BaseRequest):
     last_name: str = Field(..., description="Last name", min_length=1, max_length=50)
     state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
     
-    @validator('state')
+    @field_validator('state')
     def validate_state(cls, v):
         if v:
             return v.upper()
@@ -71,7 +96,7 @@ class LADMFRequest(BaseRequest):
     state: str = Field(..., description="State abbreviation", min_length=2, max_length=2)
     license_type: Optional[str] = Field(None, description="Type of professional license", max_length=50)
     
-    @validator('state')
+    @field_validator('state')
     def validate_state(cls, v):
         return v.upper()
 
@@ -80,7 +105,7 @@ class BatchNPIRequest(BaseRequest):
     """Request model for batch NPI lookups"""
     npis: List[str] = Field(..., description="List of NPIs to lookup", min_items=1, max_items=100)
     
-    @validator('npis')
+    @field_validator('npis')
     def validate_npis(cls, v):
         for npi in v:
             if not npi.isdigit() or len(npi) != 10:
@@ -91,7 +116,7 @@ class BatchDEARequest(BaseRequest):
     """Request model for batch DEA lookups"""
     dea_numbers: List[str] = Field(..., description="List of DEA numbers to lookup", min_items=1, max_items=50)
     
-    @validator('dea_numbers')
+    @field_validator('dea_numbers')
     def validate_dea_numbers(cls, v):
         for dea in v:
             if len(dea) != 9 or not dea[:2].isalpha() or not dea[2:].isdigit():
