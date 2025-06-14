@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import Link, { LinkProps } from "next/link";
-import React, { useState, createContext, useContext } from "react";
+import React, { useState, createContext, useContext, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 
@@ -30,7 +30,7 @@ export const useSidebar = () => {
   return context;
 };
 
-export const SidebarProvider = ({
+export const SidebarProvider = React.memo(({
   children,
   open: openProp,
   setOpen: setOpenProp,
@@ -41,19 +41,60 @@ export const SidebarProvider = ({
   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   animate?: boolean;
 }) => {
-  const [openState, setOpenState] = useState(false);
+  const [openState, setOpenState] = useState(true); // Default to open
+
+  // Load from localStorage on mount
+  React.useEffect(() => {
+    const loadSidebarState = async () => {
+      try {
+        const saved = localStorage.getItem('sidebar-open');
+        if (saved !== null) {
+          setOpenState(JSON.parse(saved));
+        }
+      } catch (error) {
+        console.error('Failed to load sidebar state:', error);
+      }
+    };
+    
+    loadSidebarState();
+  }, []);
 
   const open = openProp !== undefined ? openProp : openState;
-  const setOpen = setOpenProp !== undefined ? setOpenProp : setOpenState;
+  
+  const setOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    const newValue = typeof value === 'function' ? value(open) : value;
+    
+    // Save to localStorage
+    try {
+      localStorage.setItem('sidebar-open', JSON.stringify(newValue));
+    } catch (error) {
+      console.error('Failed to save sidebar state:', error);
+    }
+    
+    if (setOpenProp) {
+      setOpenProp(newValue);
+    } else {
+      setOpenState(newValue);
+    }
+  }, [open, setOpenProp]);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    open,
+    setOpen,
+    animate
+  }), [open, setOpen, animate]);
 
   return (
-    <SidebarContext.Provider value={{ open, setOpen, animate }}>
+    <SidebarContext.Provider value={contextValue}>
       {children}
     </SidebarContext.Provider>
   );
-};
+});
 
-export const Sidebar = ({
+SidebarProvider.displayName = "SidebarProvider";
+
+export const Sidebar = React.memo(({
   children,
   open,
   setOpen,
@@ -69,7 +110,9 @@ export const Sidebar = ({
       {children}
     </SidebarProvider>
   );
-};
+});
+
+Sidebar.displayName = "Sidebar";
 
 export const SidebarBody = (props: React.ComponentProps<typeof motion.div>) => {
   return (
@@ -80,36 +123,52 @@ export const SidebarBody = (props: React.ComponentProps<typeof motion.div>) => {
   );
 };
 
-export const DesktopSidebar = ({
+export const DesktopSidebar = React.memo(({
   className,
   children,
   ...props
 }: React.ComponentProps<typeof motion.div>) => {
-  const { open, setOpen, animate } = useSidebar();
+  const { open, animate } = useSidebar();
+  
+  // Memoize animation config to prevent unnecessary re-renders
+  const animationConfig = useMemo(() => ({
+    width: animate ? (open ? "300px" : "60px") : "300px",
+  }), [animate, open]);
+
+  // Memoize transition config
+  const transition = useMemo(() => ({
+    duration: 0.3,
+    ease: "easeInOut" as const,
+  }), []);
+
   return (
     <motion.div
       className={cn(
-        "h-full px-4 py-4 hidden md:flex md:flex-col bg-neutral-100 dark:bg-neutral-800 w-[300px] flex-shrink-0",
+        "h-full hidden md:flex md:flex-col bg-neutral-100 dark:bg-neutral-800 flex-shrink-0",
         className
       )}
-      animate={{
-        width: animate ? (open ? "300px" : "60px") : "300px",
-      }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      animate={animationConfig}
+      transition={transition}
       {...props}
     >
       {children}
     </motion.div>
   );
-};
+});
 
-export const MobileSidebar = ({
+DesktopSidebar.displayName = "DesktopSidebar";
+
+export const MobileSidebar = React.memo(({
   className,
   children,
   ...props
 }: React.ComponentProps<"div">) => {
   const { open, setOpen } = useSidebar();
+  
+  const toggleSidebar = useCallback(() => {
+    setOpen(!open);
+  }, [open, setOpen]);
+
   return (
     <>
       <div
@@ -121,7 +180,7 @@ export const MobileSidebar = ({
         <div className="flex justify-end z-20 w-full">
           <Menu
             className="text-neutral-800 dark:text-neutral-200 cursor-pointer"
-            onClick={() => setOpen(!open)}
+            onClick={toggleSidebar}
           />
         </div>
         <AnimatePresence>
@@ -141,7 +200,7 @@ export const MobileSidebar = ({
             >
               <div
                 className="absolute right-10 top-10 z-50 text-neutral-800 dark:text-neutral-200 cursor-pointer"
-                onClick={() => setOpen(!open)}
+                onClick={toggleSidebar}
               >
                 <X />
               </div>
@@ -152,9 +211,11 @@ export const MobileSidebar = ({
       </div>
     </>
   );
-};
+});
 
-export const SidebarLink = ({
+MobileSidebar.displayName = "MobileSidebar";
+
+export const SidebarLink = React.memo(({
   link,
   className,
   ...props
@@ -164,25 +225,43 @@ export const SidebarLink = ({
   props?: LinkProps;
 }) => {
   const { open, animate } = useSidebar();
+  
+  // Memoize the icon to prevent re-renders
+  const memoizedIcon = useMemo(() => link.icon, [link.icon]);
+  
+  // Improved animation config for smoother text transitions
+  const textAnimation = useMemo(() => ({
+    opacity: animate ? (open ? 1 : 0) : 1,
+    width: animate ? (open ? "auto" : "0px") : "auto",
+    marginLeft: animate ? (open ? "8px" : "0px") : "8px",
+  }), [animate, open]);
+
+  const textTransition = useMemo(() => ({
+    duration: 0.3,
+    ease: "easeInOut" as const,
+  }), []);
+
   return (
     <Link
       href={link.href}
       className={cn(
-        "flex items-center justify-start gap-2 group/sidebar py-2",
+        "flex items-center justify-start group/sidebar py-2",
         className
       )}
       {...props}
     >
-      {link.icon}
+      <div className="flex-shrink-0">
+        {memoizedIcon}
+      </div>
       <motion.span
-        animate={{
-          display: animate ? (open ? "inline-block" : "none") : "inline-block",
-          opacity: animate ? (open ? 1 : 0) : 1,
-        }}
-        className="text-neutral-700 dark:text-neutral-200 text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre inline-block !p-0 !m-0"
+        animate={textAnimation}
+        transition={textTransition}
+        className="text-neutral-700 dark:text-neutral-200 text-sm group-hover/sidebar:translate-x-1 whitespace-nowrap overflow-hidden"
       >
         {link.label}
       </motion.span>
     </Link>
   );
-}; 
+});
+
+SidebarLink.displayName = "SidebarLink"; 
