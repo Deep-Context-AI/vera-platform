@@ -146,16 +146,24 @@ class SANCTIONResponse(BaseResponse):
     excluding_agency: Optional[str] = Field(None, description="Agency that imposed the exclusion")
     exclusion_reason: Optional[str] = Field(None, description="Reason for exclusion")
 
+class LADMFMatchedRecord(BaseModel):
+    """Matched death record from LADMF"""
+    full_name: str = Field(..., description="Name from LADMF record")
+    date_of_birth: str = Field(..., description="DOB from LADMF")
+    date_of_death: str = Field(..., description="DOD from LADMF")
+    social_security_number: str = Field(..., description="SSN match confirmation")
+    state_of_issue: str = Field(..., description="State where SSN was issued")
+    last_known_residence: str = Field(..., description="ZIP Code of last known address")
+    record_status: str = Field(..., description="e.g., Confirmed, Tentative")
+
 class LADMFResponse(BaseResponse):
-    """Response model for LADMF lookup"""
-    license_number: Optional[str] = Field(None, description="License number")
-    licensee_name: Optional[str] = Field(None, description="Licensee name")
-    license_type: Optional[str] = Field(None, description="Type of license")
-    license_status: Optional[str] = Field(None, description="License status")
-    issue_date: Optional[datetime] = Field(None, description="License issue date")
-    expiration_date: Optional[datetime] = Field(None, description="License expiration date")
-    disciplinary_actions: Optional[List[Dict[str, Any]]] = Field(None, description="Disciplinary actions")
-    has_disciplinary_action: Optional[bool] = Field(None, description="Whether there are disciplinary actions")
+    """Response model for LADMF (Limited Access Death Master File) verification"""
+    match_found: bool = Field(..., description="Whether a record was found in LADMF")
+    matched_record: Optional[LADMFMatchedRecord] = Field(None, description="Details of the matched death record")
+    match_confidence: str = Field(..., description="Match level: high, medium, low, none")
+    verification_timestamp: datetime = Field(default_factory=datetime.utcnow, description="ISO date/time of verification")
+    source: str = Field(default="SSA LADMF", description="Source of truth")
+    notes: str = Field(..., description="Any flags or contextual remarks")
 
 # Batch response models
 class BatchNPIResponse(BaseResponse):

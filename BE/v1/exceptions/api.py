@@ -33,12 +33,14 @@ class RateLimitException(HTTPException):
 async def validation_exception_handler(request: Request, exc: ValidationException) -> JSONResponse:
     """Handle validation exceptions"""
     logger.warning(f"Validation error on {request.url}: {exc.detail}")
+    from datetime import datetime
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": "Validation Error",
-            "detail": exc.detail,
-            "status_code": exc.status_code
+            "status_code": exc.status_code,
+            "message": exc.detail,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }
     )
 
@@ -86,12 +88,13 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     logger.error(f"Unhandled exception (ID: {error_id}) on {request.url}: {str(exc)}")
     logger.error(f"Traceback: {traceback.format_exc()}")
     
+    from datetime import datetime
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal Server Error",
-            "detail": "An unexpected error occurred. Please try again later.",
-            "error_id": error_id,
-            "status_code": 500
+            "error": True,
+            "status_code": 500,
+            "message": "An unexpected error occurred. Please try again later.",
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }
     )

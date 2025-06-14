@@ -137,18 +137,13 @@ async def get_sanctions(
     return await sanction_service.lookup_sanctions(request)
 
 # LADMF Endpoints
-@router.get(
-    "/ladmf/license",
+@router.post(
+    "/ladmf/verify",
     response_model=LADMFResponse,
     tags=["LADMF"],
-    summary="Lookup professional license",
-    description="Retrieve professional license information and disciplinary history"
+    summary="Verify death record in LADMF",
+    description="Verify if an individual is deceased using the Limited Access Death Master File (SSA LADMF)"
 )
-async def get_license_info(
-    license_number: str = Query(..., description="Professional license number"),
-    state: str = Query(..., description="State abbreviation"),
-    license_type: Optional[str] = Query(None, description="Type of professional license (optional)")
-) -> LADMFResponse:
-    """Lookup professional license information"""
-    request = LADMFRequest(license_number=license_number, state=state, license_type=license_type)
-    return await ladmf_service.lookup_license(request)
+async def verify_death_record(request: LADMFRequest) -> LADMFResponse:
+    """Verify death record in LADMF with individual's information"""
+    return await ladmf_service.verify_death_record(request)

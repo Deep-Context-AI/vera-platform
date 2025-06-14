@@ -114,14 +114,18 @@ class SANCTIONRequest(BaseRequest):
         return v
 
 class LADMFRequest(BaseRequest):
-    """Request model for LADMF (License and Disciplinary Master File) lookup"""
-    license_number: str = Field(..., description="Professional license number", min_length=1, max_length=50)
-    state: str = Field(..., description="State abbreviation", min_length=2, max_length=2)
-    license_type: Optional[str] = Field(None, description="Type of professional license", max_length=50)
+    """Request model for LADMF (Limited Access Death Master File) verification"""
+    first_name: str = Field(..., description="First name of the individual", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Last name of the individual", min_length=1, max_length=50)
+    middle_name: Optional[str] = Field(None, description="Middle name or initial (for higher match rate)", max_length=50)
+    date_of_birth: str = Field(..., description="Date of birth in YYYY-MM-DD format", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    social_security_number: str = Field(..., description="Full 9-digit SSN of the individual", min_length=9, max_length=9)
     
-    @field_validator('state')
-    def validate_state(cls, v):
-        return v.upper()
+    @field_validator('social_security_number')
+    def validate_ssn(cls, v):
+        if not v.isdigit():
+            raise ValueError('Social Security Number must contain only digits')
+        return v
 
 # Batch request models
 class BatchNPIRequest(BaseRequest):
