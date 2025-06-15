@@ -1,16 +1,17 @@
 from fastapi import APIRouter, Depends, Query, Path
+from fastapi.responses import FileResponse
 from typing import Optional, List
 from datetime import datetime
 
 from v1.models.requests import (
     NPIRequest, DEARequest, DEAVerificationRequest, ABMSRequest, NPDBRequest, 
     SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest,
-    MedicalRequest, DCARequest, MedicareRequest
+    MedicalRequest, DCARequest, MedicareRequest, EducationRequest
 )
 from v1.models.responses import (
     NPIResponse, DEAResponse, DEAVerificationResponse, ABMSResponse, NPDBResponse,
     SANCTIONResponse, ComprehensiveSANCTIONResponse, LADMFResponse, BatchNPIResponse, BatchDEAResponse,
-    VerificationSummaryResponse, ResponseStatus, MedicalResponse, DCAResponse, MedicareResponse
+    VerificationSummaryResponse, ResponseStatus, MedicalResponse, DCAResponse, MedicareResponse, EducationResponse
 )
 from v1.services.external.NPI import npi_service
 from v1.services.external.DEA import dea_service
@@ -21,6 +22,7 @@ from v1.services.external.LADMF import ladmf_service
 from v1.services.external.MEDICAL import medical_service
 from v1.services.external.DCA import dca_service
 from v1.services.external.MEDICARE import medicare_service
+from v1.services.external.EDUCATION import education_service
 
 # Create router
 router = APIRouter()
@@ -232,3 +234,39 @@ async def verify_dca_license(request: DCARequest) -> DCAResponse:
 async def verify_medicare_provider(request: MedicareRequest) -> MedicareResponse:
     """Verify provider Medicare enrollment status across FFS and O&R datasets"""
     return await medicare_service.verify_provider(request)
+
+# EDUCATION Endpoints
+@router.post(
+    "/education/verify",
+    response_model=EducationResponse,
+    tags=["Education"],
+    summary="Education verification with transcript generation and audio conversion",
+    description="Verify education credentials and generate transcript with audio conversion using AI services"
+)
+async def verify_education(request: EducationRequest) -> EducationResponse:
+    """Initiate education verification process with transcript generation and audio conversion"""
+    return await education_service.verify_education(request)
+
+@router.get(
+    "/education/result/{function_call_id}",
+    tags=["Education"],
+    summary="Get education verification result",
+    description="Retrieve the result of an education verification job using the function call ID"
+)
+async def get_education_result(
+    function_call_id: str = Path(..., description="Modal function call ID returned from the verify endpoint")
+):
+    """Get the result of an education verification job"""
+    return await education_service.get_verification_result(function_call_id)
+
+@router.get(
+    "/education/audio/{storage_path:path}",
+    tags=["Education"],
+    summary="Download education verification audio file",
+    description="Download the generated audio file using the storage path from the verification result"
+)
+async def download_education_audio(
+    storage_path: str = Path(..., description="Storage path from the verification result (e.g., 2025-01-15/fc-123/audio.mp3)")
+):
+    """Download the generated audio file"""
+    return await education_service.download_audio_file(storage_path)

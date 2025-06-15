@@ -424,3 +424,39 @@ class MedicareResponse(BaseResponse):
     npi: str = Field(..., description="National Provider Identifier")
     full_name: Optional[str] = Field(None, description="Provider full name")
     data_sources: MedicareDataSources = Field(..., description="Data sources verification results")
+
+class AudioFileInfo(BaseModel):
+    """Audio file information model"""
+    filename: str = Field(..., description="Generated audio filename")
+    format: str = Field(..., description="Audio format (e.g., mp3)")
+    size_bytes: int = Field(..., description="File size in bytes")
+    duration_estimate: float = Field(..., description="Estimated duration in minutes")
+    audio_data: str = Field(..., description="Base64 encoded audio data or URL to cloud storage")
+    generated_at: str = Field(..., description="ISO timestamp when audio was generated")
+
+class EducationVerificationDetails(BaseModel):
+    """Education verification details model"""
+    first_name: str = Field(..., description="First name of the individual")
+    last_name: str = Field(..., description="Last name of the individual")
+    institution: str = Field(..., description="Educational institution name")
+    degree_type: str = Field(..., description="Type of degree")
+    graduation_year: int = Field(..., description="Year of graduation")
+    verification_type: str = Field(..., description="Type of verification requested")
+
+class EducationResponse(BaseResponse):
+    """Response model for education verification with transcript generation and audio conversion"""
+    job_id: str = Field(..., description="Unique job identifier for tracking")
+    function_call_id: str = Field(..., description="Modal function call ID")
+    verification_status: str = Field(..., description="Status of verification (processing, completed, failed)")
+    first_name: str = Field(..., description="First name of the individual")
+    last_name: str = Field(..., description="Last name of the individual")
+    institution: str = Field(..., description="Educational institution name")
+    degree_type: str = Field(..., description="Type of degree")
+    graduation_year: int = Field(..., description="Year of graduation")
+    
+    # Optional fields populated when processing is complete
+    transcript: Optional[str] = Field(None, description="Generated transcript content")
+    audio_file: Optional[AudioFileInfo] = Field(None, description="Generated audio file information")
+    processed_at: Optional[str] = Field(None, description="ISO timestamp when processing completed")
+    verification_details: Optional[EducationVerificationDetails] = Field(None, description="Detailed verification information")
+    error_message: Optional[str] = Field(None, description="Error message if processing failed")
