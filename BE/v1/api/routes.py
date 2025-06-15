@@ -2,21 +2,21 @@ from fastapi import APIRouter, Depends, Query, Path
 from typing import Optional, List
 from datetime import datetime
 
-from models.requests import (
+from ..models.requests import (
     NPIRequest, DEARequest, DEAVerificationRequest, ABMSRequest, NPDBRequest, 
-    SANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest
+    SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest
 )
-from models.responses import (
+from ..models.responses import (
     NPIResponse, DEAResponse, DEAVerificationResponse, ABMSResponse, NPDBResponse,
-    SANCTIONResponse, LADMFResponse, BatchNPIResponse, BatchDEAResponse,
+    SANCTIONResponse, ComprehensiveSANCTIONResponse, LADMFResponse, BatchNPIResponse, BatchDEAResponse,
     VerificationSummaryResponse, ResponseStatus
 )
-from services.external.NPI import npi_service
-from services.external.DEA import dea_service
-from services.external.ABMS import abms_service
-from services.external.NPDB import npdb_service
-from services.external.SANCTION import sanction_service
-from services.external.LADMF import ladmf_service
+from ..services.external.NPI import npi_service
+from ..services.external.DEA import dea_service
+from ..services.external.ABMS import abms_service
+from ..services.external.NPDB import npdb_service
+from ..services.external.SANCTION import sanction_service
+from ..services.external.LADMF import ladmf_service
 
 # Create router
 router = APIRouter()
@@ -30,7 +30,7 @@ router = APIRouter()
     description="Retrieve National Provider Identifier information by NPI number"
 )
 async def get_npi(
-    npi: str = Path(..., description="10-digit National Provider Identifier", regex=r"^\d{10}$")
+    npi: str = Path(..., description="10-digit National Provider Identifier", pattern=r"^\d{10}$")
 ) -> NPIResponse:
     """Lookup a single NPI"""
     request = NPIRequest(npi=npi)
@@ -44,12 +44,12 @@ async def get_npi(
     description="Search for National Provider Identifier using provider name, organization name, or address"
 )
 async def search_npi(
-    npi: Optional[str] = Query(None, description="10-digit National Provider Identifier", regex=r"^\d{10}$"),
+    npi: Optional[str] = Query(None, description="10-digit National Provider Identifier", pattern=r"^\d{10}$"),
     first_name: Optional[str] = Query(None, description="Provider's first name"),
     last_name: Optional[str] = Query(None, description="Provider's last name"),
     organization_name: Optional[str] = Query(None, description="Organization name"),
     city: Optional[str] = Query(None, description="City"),
-    state: Optional[str] = Query(None, description="State abbreviation (2 letters)", regex=r"^[A-Z]{2}$"),
+    state: Optional[str] = Query(None, description="State abbreviation (2 letters)", pattern=r"^[A-Z]{2}$"),
     postal_code: Optional[str] = Query(None, description="ZIP/Postal code")
 ) -> NPIResponse:
     """Search for NPI using various criteria"""
@@ -98,7 +98,7 @@ async def get_batch_npi(
     description="Retrieve DEA registration information by DEA number"
 )
 async def get_dea(
-    dea_number: str = Path(..., description="9-character DEA registration number", regex=r"^[A-Z]{2}\d{7}$")
+    dea_number: str = Path(..., description="9-character DEA registration number", pattern=r"^[A-Z]{2}\d{7}$")
 ) -> DEAResponse:
     """Lookup a single DEA registration"""
     request = DEARequest(dea_number=dea_number)
@@ -174,6 +174,17 @@ async def get_sanctions(
     """Lookup sanctions and exclusions"""
     request = SANCTIONRequest(first_name=first_name, last_name=last_name, state=state)
     return await sanction_service.lookup_sanctions(request)
+
+@router.post(
+    "/sanctioncheck",
+    response_model=ComprehensiveSANCTIONResponse,
+    tags=["Sanctions"],
+    summary="Comprehensive sanctions check",
+    description="Perform comprehensive sanctions check across multiple sources including OIG LEIE, SAM.gov, State Medicaid, and Medical Boards"
+)
+async def comprehensive_sanctions_check(request: ComprehensiveSANCTIONRequest) -> ComprehensiveSANCTIONResponse:
+    """Perform comprehensive sanctions check with detailed practitioner information"""
+    return await sanction_service.comprehensive_sanctions_check(request)
 
 # LADMF Endpoints
 @router.post(

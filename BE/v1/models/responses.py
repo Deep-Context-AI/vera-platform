@@ -172,6 +172,39 @@ class SANCTIONResponse(BaseResponse):
     excluding_agency: Optional[str] = Field(None, description="Agency that imposed the exclusion")
     exclusion_reason: Optional[str] = Field(None, description="Reason for exclusion")
 
+class ProviderInfo(BaseModel):
+    """Provider information model"""
+    full_name: str = Field(..., description="Provider's full name")
+    npi: str = Field(..., description="National Provider Identifier")
+    dob: str = Field(..., description="Date of birth")
+    license_number: str = Field(..., description="License number")
+    state: str = Field(..., description="License state")
+    ssn_last4: str = Field(..., description="Last 4 digits of SSN")
+
+class SanctionMatch(BaseModel):
+    """Individual sanction match model"""
+    source: str = Field(..., description="Source of the sanction check")
+    matched: bool = Field(..., description="Whether a match was found")
+    status: Optional[str] = Field(None, description="Status of the sanction (Active, Resolved, etc.)")
+    date: Optional[str] = Field(None, description="Date of the sanction")
+    description: Optional[str] = Field(None, description="Description of the sanction")
+    type: Optional[str] = Field(None, description="Type of sanction")
+    source_url: Optional[str] = Field(None, description="URL to source documentation")
+    document_link: Optional[str] = Field(None, description="Link to supporting documents")
+
+class SanctionSummary(BaseModel):
+    """Summary of sanctions check"""
+    total_sources_checked: int = Field(..., description="Total number of sources checked")
+    matches_found: int = Field(..., description="Number of matches found")
+    flagged_for_review: bool = Field(..., description="Whether manual review is required")
+
+class ComprehensiveSANCTIONResponse(BaseResponse):
+    """Comprehensive response model for sanctions check"""
+    provider: ProviderInfo = Field(..., description="Provider information")
+    checked_on: datetime = Field(default_factory=datetime.utcnow, description="Timestamp of the check")
+    sanctions: List[SanctionMatch] = Field(..., description="List of sanction matches from various sources")
+    summary: SanctionSummary = Field(..., description="Summary of the sanctions check")
+
 class LADMFMatchedRecord(BaseModel):
     """Matched death record from LADMF"""
     full_name: str = Field(..., description="Name from LADMF record")

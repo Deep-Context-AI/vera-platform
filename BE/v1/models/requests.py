@@ -103,10 +103,10 @@ class NPDBRequest(BaseRequest):
     """Request model for NPDB (National Practitioner Data Bank) verification"""
     first_name: str = Field(..., description="First name", min_length=1, max_length=50)
     last_name: str = Field(..., description="Last name", min_length=1, max_length=50)
-    date_of_birth: str = Field(..., description="Date of birth (YYYY-MM-DD)", regex=r"^\d{4}-\d{2}-\d{2}$")
-    ssn_last4: str = Field(..., description="Last 4 digits of SSN", min_length=4, max_length=4, regex=r"^\d{4}$")
+    date_of_birth: str = Field(..., description="Date of birth (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    ssn_last4: str = Field(..., description="Last 4 digits of SSN", min_length=4, max_length=4, pattern=r"^\d{4}$")
     address: NPDBAddress = Field(..., description="Address information")
-    npi_number: str = Field(..., description="10-digit NPI number", min_length=10, max_length=10, regex=r"^\d{10}$")
+    npi_number: str = Field(..., description="10-digit NPI number", min_length=10, max_length=10, pattern=r"^\d{10}$")
     license_number: str = Field(..., description="Professional license number", max_length=50)
     state_of_license: str = Field(..., description="State of license", min_length=2, max_length=2)
     upin: Optional[str] = Field(None, description="UPIN number", max_length=20)
@@ -133,6 +133,32 @@ class SANCTIONRequest(BaseRequest):
     def validate_state(cls, v):
         if v:
             return v.upper()
+        return v
+
+class ComprehensiveSANCTIONRequest(BaseRequest):
+    """Request model for comprehensive sanctions check"""
+    first_name: str = Field(..., description="First name", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Last name", min_length=1, max_length=50)
+    date_of_birth: str = Field(..., description="Date of birth in YYYY-MM-DD format", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    npi: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    license_number: str = Field(..., description="Professional license number", min_length=1, max_length=50)
+    license_state: str = Field(..., description="State where license was issued", min_length=2, max_length=2)
+    ssn_last4: str = Field(..., description="Last 4 digits of SSN", min_length=4, max_length=4)
+    
+    @field_validator('npi')
+    def validate_npi(cls, v):
+        if not v.isdigit():
+            raise ValueError('NPI must contain only digits')
+        return v
+    
+    @field_validator('license_state')
+    def validate_license_state(cls, v):
+        return v.upper()
+    
+    @field_validator('ssn_last4')
+    def validate_ssn_last4(cls, v):
+        if not v.isdigit():
+            raise ValueError('SSN last 4 digits must contain only digits')
         return v
 
 class LADMFRequest(BaseRequest):
