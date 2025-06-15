@@ -263,3 +263,31 @@ class ErrorResponse(BaseResponse):
         if 'status' not in data:
             data['status'] = ResponseStatus.ERROR
         super().__init__(**data)
+
+class Practitioner(BaseModel):
+    """Practitioner information model for DEA verification"""
+    First_name: str = Field(..., description="First name")
+    Last_name: str = Field(..., description="Last name")
+    Middle_name: Optional[str] = Field(None, description="Middle name")
+    Title: str = Field(..., description="Professional title (MD, NP, DO, PA, etc.)")
+
+class RegisteredAddress(BaseModel):
+    """Registered address model for DEA verification"""
+    street: str = Field(..., description="Street address")
+    city: str = Field(..., description="City")
+    state: str = Field(..., description="State")
+    zip: str = Field(..., description="ZIP code")
+
+class NewDEAVerificationResponse(BaseResponse):
+    """New response model for DEA verification matching the updated structure"""
+    number: str = Field(..., description="DEA registration number")
+    Practitioner: Practitioner = Field(..., description="Practitioner information")
+    registeredAddress: RegisteredAddress = Field(..., description="Registered address")
+    expiration: str = Field(..., description="Expiration date (YYYY-MM-DD)")
+    paid_status: str = Field(..., description="Payment status (PAID, UNPAID, etc.)")
+    drug_schedule_type: str = Field(..., description="Drug schedule type (FULL, LIMITED, etc.)")
+    drug_schedules: List[str] = Field(..., description="Authorized drug schedules")
+    current_status: str = Field(..., description="Current registration status (ACTIVE, INACTIVE, etc.)")
+    has_restrictions: str = Field(..., description="Whether there are restrictions (YES, NO)")
+    restriction_details: List[str] = Field(default_factory=list, description="Details of any restrictions")
+    business_activity_code: str = Field(..., description="Business activity code")

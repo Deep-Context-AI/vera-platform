@@ -3,11 +3,12 @@ from typing import Optional, List
 import httpx
 from datetime import datetime
 
-from ...models.requests import DEARequest, DEAVerificationRequest, BatchDEARequest
-from ...models.responses import (
-    DEAResponse, DEAVerificationResponse, AddressOfRecord, BatchDEAResponse, ResponseStatus
+from v1.models.requests import DEARequest, DEAVerificationRequest, BatchDEARequest
+from v1.models.responses import (
+    DEAResponse, DEAVerificationResponse, AddressOfRecord, BatchDEAResponse, ResponseStatus,
+    NewDEAVerificationResponse, Practitioner, RegisteredAddress
 )
-from ...exceptions.api import ExternalServiceException, NotFoundException
+from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
 
@@ -76,15 +77,15 @@ class DEAService:
                 service_name="DEA Registry"
             )
     
-    async def verify_dea_practitioner(self, request: DEAVerificationRequest) -> DEAVerificationResponse:
+    async def verify_dea_practitioner(self, request: DEAVerificationRequest) -> NewDEAVerificationResponse:
         """
         Perform comprehensive DEA verification
         
         Args:
-            request: DEAVerificationRequest containing all practitioner information
+            request: DEAVerificationRequest containing practitioner information
             
         Returns:
-            DEAVerificationResponse with comprehensive verification results
+            NewDEAVerificationResponse with comprehensive verification results
             
         Raises:
             ExternalServiceException: If external service fails
@@ -95,74 +96,47 @@ class DEAService:
             # Validate required fields
             required_fields = [
                 'first_name', 'last_name', 'date_of_birth', 'dea_number', 
-                'zip_code', 'last_four_ssn', 'expiration_date', 
-                'state_license_number', 'state_abbreviation'
+                'zip_code', 'last_four_ssn', 'expiration_date'
             ]
             
             for field in required_fields:
                 if not getattr(request, field, None):
-                    return DEAVerificationResponse(
-                        status=ResponseStatus.ERROR,
-                        message=f"Missing required field: {field}",
-                        verification_date=datetime.now().strftime("%Y-%m-%d"),
-                        dea_number=request.dea_number,
-                        practitioner_name=f"Dr. {request.first_name} {request.last_name}",
-                        business_activity="Individual Practitioner",
-                        registration_status="Error",
-                        authorized_schedules=[],
-                        issue_date="",
-                        expiration_date=request.expiration_date,
-                        address_of_record=AddressOfRecord(
-                            line1="",
-                            city="",
-                            state=request.state_abbreviation,
-                            zip=request.zip_code
-                        ),
-                        state_license_number=request.state_license_number,
-                        state_license_status="Unknown",
-                        state_verified=False,
-                        match_score=0,
-                        notes=f"Verification failed due to missing field: {field}",
-                        document_url=None,
-                        verified_by="Vera Credential Engine"
+                    raise ExternalServiceException(
+                        detail=f"Missing required field: {field}",
+                        service_name="DEA Registry"
                     )
             
             # Simulate API call delay
             await self._simulate_api_call()
             
             # Mock comprehensive verification response
-            # In a real implementation, this would navigate the DEA Certificate Reprint page
-            # or use secure API with all the provided information
+            # In a real implementation, this would call the actual DEA API
+            # with all the provided information
             
-            practitioner_name = f"Dr. {request.first_name} {request.last_name}"
-            verification_date = datetime.now().strftime("%Y-%m-%d")
-            
-            # Mock successful verification
-            return DEAVerificationResponse(
+            return NewDEAVerificationResponse(
                 status=ResponseStatus.SUCCESS,
                 message="DEA verification successful",
-                verification_date=verification_date,
-                dea_number=request.dea_number,
-                practitioner_name=practitioner_name,
-                business_activity="Individual Practitioner",
-                registration_status="Active",
-                authorized_schedules=["II", "IIN", "III", "IV", "V"],
-                issue_date="2023-03-15",
-                expiration_date=request.expiration_date,
-                address_of_record=AddressOfRecord(
-                    line1="1234 Wellness Ave.",
-                    line2="Suite 400",
+                number=request.dea_number,
+                Practitioner=Practitioner(
+                    First_name=request.first_name,
+                    Last_name=request.last_name,
+                    Middle_name=None,  # Not provided in request
+                    Title="MD"  # Default title, would be determined from actual API
+                ),
+                registeredAddress=RegisteredAddress(
+                    street="1234 Wellness Ave., Suite 400",
                     city="Los Angeles",
-                    state=request.state_abbreviation,
+                    state="CA",
                     zip=request.zip_code
                 ),
-                state_license_number=request.state_license_number,
-                state_license_status="Active",
-                state_verified=True,
-                match_score=100,
-                notes="No disciplinary action found.",
-                document_url=f"https://vera.ai/documents/dea-verifications/{request.dea_number}.pdf",
-                verified_by="Vera Credential Engine"
+                expiration=request.expiration_date,
+                paid_status="PAID",
+                drug_schedule_type="FULL",
+                drug_schedules=["2", "2-N", "3", "3-N", "4", "5"],
+                current_status="ACTIVE",
+                has_restrictions="NO",
+                restriction_details=[],
+                business_activity_code="C"
             )
                 
         except Exception as e:

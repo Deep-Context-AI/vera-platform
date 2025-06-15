@@ -3,13 +3,13 @@ from typing import Optional, List
 import httpx
 from datetime import datetime
 
-from ...models.requests import NPDBRequest, NPDBAddress
-from ...models.responses import (
+from v1.models.requests import NPDBRequest, NPDBAddress
+from v1.models.responses import (
     NPDBResponse, NPDBSubjectIdentification, NPDBContinuousQueryInfo, 
     NPDBReportSummary, NPDBReportType, NPDBReportDetail, NPDBAddress,
     ResponseStatus, VerificationSummaryResponse
 )
-from ...exceptions.api import ExternalServiceException, NotFoundException
+from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
 

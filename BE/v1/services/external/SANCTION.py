@@ -3,12 +3,12 @@ from typing import Optional, List
 import httpx
 from datetime import datetime
 
-from ...models.requests import SANCTIONRequest, ComprehensiveSANCTIONRequest
-from ...models.responses import (
+from v1.models.requests import SANCTIONRequest, ComprehensiveSANCTIONRequest
+from v1.models.responses import (
     SANCTIONResponse, ComprehensiveSANCTIONResponse, ProviderInfo, 
     SanctionMatch, SanctionSummary, ResponseStatus
 )
-from ...exceptions.api import ExternalServiceException, NotFoundException
+from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
 

@@ -3,9 +3,9 @@ from typing import Optional, List, Dict, Any
 import httpx
 from datetime import datetime
 
-from ...models.requests import NPIRequest, BatchNPIRequest
-from ...models.responses import NPIResponse, BatchNPIResponse, ResponseStatus
-from ...exceptions.api import ExternalServiceException, NotFoundException
+from v1.models.requests import NPIRequest, BatchNPIRequest
+from v1.models.responses import NPIResponse, BatchNPIResponse, ResponseStatus
+from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
 

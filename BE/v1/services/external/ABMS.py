@@ -3,9 +3,9 @@ from typing import Optional, List
 import httpx
 from datetime import datetime
 
-from ...models.requests import ABMSRequest
-from ...models.responses import ABMSResponse, ResponseStatus
-from ...exceptions.api import ExternalServiceException, NotFoundException
+from v1.models.requests import ABMSRequest
+from v1.models.responses import ABMSResponse, ResponseStatus
+from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
 

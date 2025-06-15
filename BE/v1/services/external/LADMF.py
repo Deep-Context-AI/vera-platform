@@ -3,9 +3,9 @@ from typing import Optional, List
 import httpx
 from datetime import datetime
 
-from ...models.requests import LADMFRequest
-from ...models.responses import LADMFResponse, LADMFMatchedRecord, ResponseStatus
-from ...exceptions.api import ExternalServiceException, NotFoundException, ValidationException
+from v1.models.requests import LADMFRequest
+from v1.models.responses import LADMFResponse, LADMFMatchedRecord, ResponseStatus
+from v1.exceptions.api import ExternalServiceException, NotFoundException, ValidationException
 
 logger = logging.getLogger(__name__)
 
