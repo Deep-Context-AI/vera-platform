@@ -2,21 +2,25 @@ from fastapi import APIRouter, Depends, Query, Path
 from typing import Optional, List
 from datetime import datetime
 
-from ..models.requests import (
+from v1.models.requests import (
     NPIRequest, DEARequest, DEAVerificationRequest, ABMSRequest, NPDBRequest, 
-    SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest
+    SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest,
+    MedicalRequest, DCARequest, MedicareRequest
 )
-from ..models.responses import (
+from v1.models.responses import (
     NPIResponse, DEAResponse, DEAVerificationResponse, ABMSResponse, NPDBResponse,
     SANCTIONResponse, ComprehensiveSANCTIONResponse, LADMFResponse, BatchNPIResponse, BatchDEAResponse,
-    VerificationSummaryResponse, ResponseStatus
+    VerificationSummaryResponse, ResponseStatus, MedicalResponse, DCAResponse, MedicareResponse
 )
-from ..services.external.NPI import npi_service
-from ..services.external.DEA import dea_service
-from ..services.external.ABMS import abms_service
-from ..services.external.NPDB import npdb_service
-from ..services.external.SANCTION import sanction_service
-from ..services.external.LADMF import ladmf_service
+from v1.services.external.NPI import npi_service
+from v1.services.external.DEA import dea_service
+from v1.services.external.ABMS import abms_service
+from v1.services.external.NPDB import npdb_service
+from v1.services.external.SANCTION import sanction_service
+from v1.services.external.LADMF import ladmf_service
+from v1.services.external.MEDICAL import medical_service
+from v1.services.external.DCA import dca_service
+from v1.services.external.MEDICARE import medicare_service
 
 # Create router
 router = APIRouter()
@@ -130,20 +134,15 @@ async def get_batch_dea(
     return await dea_service.batch_lookup_dea(request)
 
 # ABMS Endpoints
-@router.get(
+@router.post(
     "/abms/certification",
     response_model=ABMSResponse,
     tags=["ABMS"],
     summary="Lookup board certification",
-    description="Retrieve board certification information by physician name"
+    description="Retrieve board certification information by physician details"
 )
-async def get_board_certification(
-    physician_name: str = Query(..., description="Full name of the physician"),
-    state: Optional[str] = Query(None, description="State abbreviation (optional)"),
-    specialty: Optional[str] = Query(None, description="Medical specialty (optional)")
-) -> ABMSResponse:
+async def get_board_certification(request: ABMSRequest) -> ABMSResponse:
     """Lookup board certification information"""
-    request = ABMSRequest(physician_name=physician_name, state=state, specialty=specialty)
     return await abms_service.lookup_board_certification(request)
 
 # NPDB Endpoints
@@ -197,3 +196,39 @@ async def comprehensive_sanctions_check(request: ComprehensiveSANCTIONRequest) -
 async def verify_death_record(request: LADMFRequest) -> LADMFResponse:
     """Verify death record in LADMF with individual's information"""
     return await ladmf_service.verify_death_record(request)
+
+# MEDICAL Endpoints
+@router.post(
+    "/medical/verify",
+    response_model=MedicalResponse,
+    tags=["Medical"],
+    summary="Medi-Cal Managed Care + ORP verification",
+    description="Perform combined verification against Medi-Cal Managed Care and ORP (Other Recognized Provider) networks"
+)
+async def verify_medical_provider(request: MedicalRequest) -> MedicalResponse:
+    """Verify provider in both Medi-Cal Managed Care and ORP systems"""
+    return await medical_service.verify_provider(request)
+
+# DCA Endpoints
+@router.post(
+    "/dca/verify",
+    response_model=DCAResponse,
+    tags=["DCA"],
+    summary="DCA CA license verification",
+    description="Verify California license through Department of Consumer Affairs (DCA)"
+)
+async def verify_dca_license(request: DCARequest) -> DCAResponse:
+    """Verify CA license through DCA with provider information"""
+    return await dca_service.verify_license(request)
+
+# MEDICARE Endpoints
+@router.post(
+    "/medicare/verify",
+    response_model=MedicareResponse,
+    tags=["Medicare"],
+    summary="Medicare enrollment verification",
+    description="Verify if a provider is enrolled in Medicare and eligible to bill or order/refer"
+)
+async def verify_medicare_provider(request: MedicareRequest) -> MedicareResponse:
+    """Verify provider Medicare enrollment status across FFS and O&R datasets"""
+    return await medicare_service.verify_provider(request)

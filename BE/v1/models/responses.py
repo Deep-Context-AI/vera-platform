@@ -95,14 +95,60 @@ class DEAVerificationResponse(BaseResponse):
     document_url: Optional[str] = Field(None, description="URL to verification document")
     verified_by: str = Field(..., description="Verification source")
 
+class ABMSEducation(BaseModel):
+    """Education information for ABMS response"""
+    degree: str = Field(..., description="Medical degree (e.g., MD, DO)")
+    year: int = Field(..., description="Year of graduation")
+
+class ABMSAddress(BaseModel):
+    """Address information for ABMS response"""
+    city: str = Field(..., description="City")
+    country: str = Field(..., description="Country code (e.g., US)")
+    postal_code: str = Field(..., description="Postal code")
+
+class ABMSLicense(BaseModel):
+    """License information for ABMS response"""
+    state: str = Field(..., description="State abbreviation")
+    number: str = Field(..., description="License number")
+
+class ABMSCertificationOccurrence(BaseModel):
+    """Certification occurrence information"""
+    type: str = Field(..., description="Type of certification (e.g., Initial Certification, MOC Recertification)")
+    start_date: str = Field(..., description="Start date (YYYY-MM-DD)")
+    end_date: str = Field(..., description="End date (YYYY-MM-DD)")
+
+class ABMSCertification(BaseModel):
+    """Board certification information"""
+    board_name: str = Field(..., description="Name of the medical board")
+    specialty: str = Field(..., description="Medical specialty")
+    status: str = Field(..., description="Certification status (e.g., Certified)")
+    status_duration: str = Field(..., description="Status duration description")
+    occurrences: List[ABMSCertificationOccurrence] = Field(..., description="List of certification occurrences")
+    moc_participation: str = Field(..., description="MOC participation status (Yes/No)")
+
+class ABMSProfile(BaseModel):
+    """Profile information for ABMS response"""
+    name: str = Field(..., description="Full name of the physician")
+    abms_uid: str = Field(..., description="ABMS unique identifier")
+    viewed: str = Field(..., description="Date/time when profile was viewed (ISO format)")
+    date_of_birth: str = Field(..., description="Date of birth (YYYY-MM-DD)")
+    education: ABMSEducation = Field(..., description="Education information")
+    address: ABMSAddress = Field(..., description="Address information")
+    npi: str = Field(..., description="National Provider Identifier")
+    licenses: List[ABMSLicense] = Field(..., description="List of medical licenses")
+    certifications: List[ABMSCertification] = Field(..., description="List of board certifications")
+
+class ABMSNotes(BaseModel):
+    """Notes section for ABMS response"""
+    npi_not_for_psv: bool = Field(..., description="NPI not for PSV flag")
+    fsmg_license_not_for_psv: bool = Field(..., description="FSMG license not for PSV flag")
+    psv_compliance: List[str] = Field(..., description="PSV compliance organizations")
+    copyright: str = Field(..., description="Copyright notice")
+
 class ABMSResponse(BaseResponse):
     """Response model for ABMS lookup"""
-    physician_name: Optional[str] = Field(None, description="Physician name")
-    board_certifications: Optional[List[Dict[str, Any]]] = Field(None, description="Board certifications")
-    primary_specialty: Optional[str] = Field(None, description="Primary specialty")
-    certification_status: Optional[str] = Field(None, description="Certification status")
-    initial_certification_date: Optional[datetime] = Field(None, description="Initial certification date")
-    recertification_date: Optional[datetime] = Field(None, description="Most recent recertification date")
+    profile: Optional[ABMSProfile] = Field(None, description="Physician profile information")
+    notes: Optional[ABMSNotes] = Field(None, description="Additional notes and compliance information")
 
 class NPDBAddress(BaseModel):
     """Address model for NPDB responses"""
@@ -281,7 +327,7 @@ class RegisteredAddress(BaseModel):
 class NewDEAVerificationResponse(BaseResponse):
     """New response model for DEA verification matching the updated structure"""
     number: str = Field(..., description="DEA registration number")
-    Practitioner: Practitioner = Field(..., description="Practitioner information")
+    practitioner: Practitioner = Field(..., description="Practitioner information")
     registeredAddress: RegisteredAddress = Field(..., description="Registered address")
     expiration: str = Field(..., description="Expiration date (YYYY-MM-DD)")
     paid_status: str = Field(..., description="Payment status (PAID, UNPAID, etc.)")
@@ -291,3 +337,90 @@ class NewDEAVerificationResponse(BaseResponse):
     has_restrictions: str = Field(..., description="Whether there are restrictions (YES, NO)")
     restriction_details: List[str] = Field(default_factory=list, description="Details of any restrictions")
     business_activity_code: str = Field(..., description="Business activity code")
+
+class MedicalAddress(BaseModel):
+    """Address model for Medical verification"""
+    line1: str = Field(..., description="Address line 1")
+    city: str = Field(..., description="City")
+    state: str = Field(..., description="State")
+    zip: str = Field(..., description="ZIP code")
+
+class ManagedCareVerification(BaseModel):
+    """Managed Care verification details"""
+    match_status: str = Field(..., description="Match status (verified, not_found)")
+    plan_participation: Optional[List[str]] = Field(None, description="List of participating plans")
+    effective_date: Optional[str] = Field(None, description="Effective date (YYYY-MM-DD)")
+    last_updated: Optional[str] = Field(None, description="Last updated date (YYYY-MM-DD)")
+    address: Optional[MedicalAddress] = Field(None, description="Provider address")
+    source_file: Optional[str] = Field(None, description="Source file name")
+    reason: Optional[str] = Field(None, description="Reason if not found")
+
+class ORPVerification(BaseModel):
+    """ORP (Other Recognized Provider) verification details"""
+    match_status: str = Field(..., description="Match status (verified, not_found)")
+    status: Optional[str] = Field(None, description="Provider status (Active, Inactive)")
+    enrollment_date: Optional[str] = Field(None, description="Enrollment date (YYYY-MM-DD)")
+    last_updated: Optional[str] = Field(None, description="Last updated date (YYYY-MM-DD)")
+    source_file: Optional[str] = Field(None, description="Source file name")
+    reason: Optional[str] = Field(None, description="Reason if not found")
+
+class MedicalVerifications(BaseModel):
+    """Combined verification results"""
+    managed_care: ManagedCareVerification = Field(..., description="Managed Care verification results")
+    orp: ORPVerification = Field(..., description="ORP verification results")
+
+class MedicalResponse(BaseResponse):
+    """Response model for Medi-Cal Managed Care + ORP verification"""
+    response_id: str = Field(..., description="Unique response identifier")
+    npi: str = Field(..., description="National Provider Identifier")
+    provider_name: str = Field(..., description="Provider name")
+    verification_date: str = Field(..., description="Verification date (YYYY-MM-DD)")
+    verifications: MedicalVerifications = Field(..., description="Verification results")
+    notes: str = Field(..., description="Additional notes about the verification")
+
+class DCAResponse(BaseResponse):
+    """Response model for DCA (Department of Consumer Affairs) CA license verification"""
+    board_name: str = Field(..., description="Name of the medical board")
+    board_code: str = Field(..., description="Board code identifier")
+    license_number: int = Field(..., description="License number")
+    license_type: str = Field(..., description="License type code")
+    license_type_rank: str = Field(..., description="License type rank")
+    primary_status_code: str = Field(..., description="Primary status code")
+    secondary_status_code: List[str] = Field(default_factory=list, description="Secondary status codes")
+    expiration_date: str = Field(..., description="License expiration date (YYYY-MM-DD)")
+    has_discipline: bool = Field(..., description="Whether the license has disciplinary actions")
+    has_public_record_actions: bool = Field(..., description="Whether there are public record actions")
+
+class FFSProviderEnrollment(BaseModel):
+    """FFS Provider Enrollment verification details"""
+    found: bool = Field(..., description="Whether provider was found in FFS enrollment data")
+    enrollment_status: Optional[str] = Field(None, description="Enrollment status (e.g., Approved)")
+    enrollment_type: Optional[str] = Field(None, description="Enrollment type (e.g., Individual)")
+    specialty: Optional[str] = Field(None, description="Provider specialty")
+    reassignment: Optional[str] = Field(None, description="Reassignment status (Yes/No)")
+    practice_location: Optional[str] = Field(None, description="Practice location address")
+    last_updated: Optional[str] = Field(None, description="Last updated date (YYYY-MM-DD)")
+    reason: Optional[str] = Field(None, description="Reason if not found")
+
+class OrderingReferringProvider(BaseModel):
+    """Ordering/Referring Provider verification details"""
+    found: bool = Field(..., description="Whether provider was found in O&R dataset")
+    last_name: Optional[str] = Field(None, description="Last name from dataset")
+    first_name: Optional[str] = Field(None, description="First name from dataset")
+    npi: Optional[str] = Field(None, description="NPI from dataset")
+    specialty: Optional[str] = Field(None, description="Specialty from dataset")
+    eligible_to_order_or_refer: Optional[bool] = Field(None, description="Whether eligible to order or refer")
+    last_updated: Optional[str] = Field(None, description="Last updated date (YYYY-MM-DD)")
+    reason: Optional[str] = Field(None, description="Reason if not found")
+
+class MedicareDataSources(BaseModel):
+    """Medicare data sources verification results"""
+    ffs_provider_enrollment: Optional[FFSProviderEnrollment] = Field(None, description="FFS Provider Enrollment results")
+    ordering_referring_provider: Optional[OrderingReferringProvider] = Field(None, description="Ordering/Referring Provider results")
+
+class MedicareResponse(BaseResponse):
+    """Response model for Medicare enrollment verification"""
+    verification_result: str = Field(..., description="Overall verification result (verified, not_verified)")
+    npi: str = Field(..., description="National Provider Identifier")
+    full_name: Optional[str] = Field(None, description="Provider full name")
+    data_sources: MedicareDataSources = Field(..., description="Data sources verification results")

@@ -4,7 +4,10 @@ import httpx
 from datetime import datetime
 
 from v1.models.requests import ABMSRequest
-from v1.models.responses import ABMSResponse, ResponseStatus
+from v1.models.responses import (
+    ABMSResponse, ABMSProfile, ABMSNotes, ABMSEducation, ABMSAddress, 
+    ABMSLicense, ABMSCertification, ABMSCertificationOccurrence, ResponseStatus
+)
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,11 @@ class ABMSService:
             ExternalServiceException: If external service fails
         """
         try:
-            logger.info(f"Looking up ABMS certification for: {request.physician_name}")
+            full_name = f"{request.first_name} {request.last_name}"
+            if request.middle_name:
+                full_name = f"{request.first_name} {request.middle_name} {request.last_name}"
+            
+            logger.info(f"Looking up ABMS certification for: {full_name}, NPI: {request.npi_number}")
             
             # For demonstration purposes, we'll simulate the lookup
             # In a real implementation, this would call the actual ABMS API
@@ -41,43 +48,83 @@ class ABMSService:
             # Simulate API call delay
             await self._simulate_api_call()
             
-            # Mock response based on physician name pattern
-            if "smith" in request.physician_name.lower():
+            # Mock response based on last name pattern for demonstration
+            if request.last_name.lower() in ["smith", "doe", "johnson"]:
+                # Generate mock profile data
+                profile = ABMSProfile(
+                    name=f"{full_name} Jr" if request.last_name.lower() == "doe" else full_name,
+                    abms_uid="XXXXXX",
+                    viewed=datetime.utcnow().isoformat() + "Z",
+                    date_of_birth="1968-02-08",
+                    education=ABMSEducation(
+                        degree="MD",
+                        year=1993
+                    ),
+                    address=ABMSAddress(
+                        city="Anytown",
+                        country="US",
+                        postal_code="12345-6789"
+                    ),
+                    npi=request.npi_number,
+                    licenses=[
+                        ABMSLicense(
+                            state=request.state,
+                            number=request.active_state_medical_license or "12345"
+                        )
+                    ],
+                    certifications=[
+                        ABMSCertification(
+                            board_name="American Board of Internal Medicine",
+                            specialty=request.specialty or "Internal Medicine - General",
+                            status="Certified",
+                            status_duration="Active MOC Recertification",
+                            occurrences=[
+                                ABMSCertificationOccurrence(
+                                    type="MOC Recertification",
+                                    start_date="2018-08-13",
+                                    end_date="2026-04-01"
+                                ),
+                                ABMSCertificationOccurrence(
+                                    type="Time‑Limited Recertification",
+                                    start_date="2007-05-07",
+                                    end_date="2017-12-31"
+                                ),
+                                ABMSCertificationOccurrence(
+                                    type="Initial Certification",
+                                    start_date="1995-08-23",
+                                    end_date="2005-12-31"
+                                )
+                            ],
+                            moc_participation="Yes"
+                        )
+                    ]
+                )
+                
+                # Generate notes
+                notes = ABMSNotes(
+                    npi_not_for_psv=True,
+                    fsmg_license_not_for_psv=True,
+                    psv_compliance=["Joint Commission", "NCQA", "URAC"],
+                    copyright="© 2025 ABMS Solutions, LLC"
+                )
+                
                 return ABMSResponse(
                     status=ResponseStatus.SUCCESS,
                     message="ABMS lookup successful",
-                    physician_name=request.physician_name,
-                    board_certifications=[
-                        {
-                            "board_name": "American Board of Internal Medicine",
-                            "specialty": "Internal Medicine",
-                            "certification_status": "Certified",
-                            "initial_certification_date": "2015-01-15",
-                            "expiration_date": "2025-12-31"
-                        },
-                        {
-                            "board_name": "American Board of Internal Medicine",
-                            "specialty": "Cardiology",
-                            "certification_status": "Certified",
-                            "initial_certification_date": "2018-06-01",
-                            "expiration_date": "2028-05-31"
-                        }
-                    ],
-                    primary_specialty="Internal Medicine",
-                    certification_status="Current",
-                    initial_certification_date=datetime(2015, 1, 15),
-                    recertification_date=datetime(2022, 1, 15)
+                    profile=profile,
+                    notes=notes
                 )
             else:
-                logger.warning(f"ABMS certification not found for: {request.physician_name}")
+                logger.warning(f"ABMS certification not found for: {full_name}")
                 return ABMSResponse(
                     status=ResponseStatus.NOT_FOUND,
-                    message=f"No board certification found for {request.physician_name}",
-                    physician_name=request.physician_name
+                    message=f"No board certification found for {full_name}",
+                    profile=None,
+                    notes=None
                 )
                 
         except Exception as e:
-            logger.error(f"Unexpected error during ABMS lookup for {request.physician_name}: {e}")
+            logger.error(f"Unexpected error during ABMS lookup for {full_name}: {e}")
             raise ExternalServiceException(
                 detail="Unexpected error during ABMS lookup",
                 service_name="ABMS Registry"

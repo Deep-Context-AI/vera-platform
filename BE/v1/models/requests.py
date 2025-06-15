@@ -70,14 +70,24 @@ class DEAVerificationRequest(BaseRequest):
 
 class ABMSRequest(BaseRequest):
     """Request model for ABMS (American Board of Medical Specialties) lookup"""
-    physician_name: str = Field(..., description="Physician full name", min_length=2, max_length=100)
-    state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
-    specialty: Optional[str] = Field(None, description="Medical specialty", max_length=100)
+    first_name: str = Field(..., description="First name of the physician", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Last name of the physician", min_length=1, max_length=50)
+    middle_name: Optional[str] = Field(None, description="Middle name of the physician (optional)", max_length=50)
+    state: str = Field(..., description="State abbreviation", min_length=2, max_length=2)
+    npi_number: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    active_state_medical_license: Optional[str] = Field(None, description="Active state medical license (DCA) number (optional)", max_length=50)
+    specialty: Optional[str] = Field(None, description="Medical specialty (optional)", max_length=100)
     
     @field_validator('state')
     def validate_state(cls, v):
         if v:
             return v.upper()
+        return v
+    
+    @field_validator('npi_number')
+    def validate_npi_number(cls, v):
+        if not v.isdigit():
+            raise ValueError('NPI number must contain only digits')
         return v
 
 class NPDBAddress(BaseModel):
@@ -191,3 +201,62 @@ class BatchDEARequest(BaseRequest):
             if len(dea) != 9 or not dea[:2].isalpha() or not dea[2:].isdigit():
                 raise ValueError(f'Invalid DEA number: {dea}. Must be 2 letters followed by 7 digits.')
         return [dea.upper() for dea in v]
+
+class MedicalRequest(BaseRequest):
+    """Request model for Medi-Cal Managed Care + ORP verification"""
+    request_id: str = Field(..., description="Unique request identifier", max_length=100)
+    npi: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    first_name: str = Field(..., description="Provider's first name", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Provider's last name", min_length=1, max_length=50)
+    license_type: str = Field(..., description="License type (e.g., MD, NP, DO)", max_length=10)
+    taxonomy_code: str = Field(..., description="Provider taxonomy code", max_length=20)
+    provider_type: str = Field(..., description="Provider type/specialty", max_length=100)
+    city: str = Field(..., description="Provider city", max_length=50)
+    state: str = Field(..., description="Provider state", min_length=2, max_length=2)
+    zip: str = Field(..., description="Provider ZIP code", max_length=10)
+    
+    @field_validator('npi')
+    def validate_npi(cls, v: str):
+        if not v.isdigit():
+            raise ValueError('NPI must contain only digits')
+        return v
+    
+    @field_validator('state')
+    def validate_state(cls, v):
+        return v.upper()
+
+class DCARequest(BaseRequest):
+    """Request model for DCA (Department of Consumer Affairs) CA license verification"""
+    first_name: str = Field(..., description="Provider's first name", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Provider's last name", min_length=1, max_length=50)
+    license_number: str = Field(..., description="License number as issued by the medical board", min_length=1, max_length=50)
+
+class MedicareRequest(BaseRequest):
+    """Request model for Medicare enrollment verification"""
+    provider_verification_type: str = Field(..., description="Type of verification being performed", max_length=50)
+    npi: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    first_name: str = Field(..., description="Provider's first name", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Provider's last name", min_length=1, max_length=50)
+    specialty: Optional[str] = Field(None, description="Provider specialty for cross-check", max_length=100)
+    verification_sources: List[str] = Field(..., description="List of verification sources to check", min_items=1)
+    
+    @field_validator('npi')
+    def validate_npi(cls, v: str):
+        if not v.isdigit():
+            raise ValueError('NPI must contain only digits')
+        return v
+    
+    @field_validator('provider_verification_type')
+    def validate_verification_type(cls, v: str):
+        allowed_types = ["medicare_enrollment"]
+        if v not in allowed_types:
+            raise ValueError(f'provider_verification_type must be one of: {", ".join(allowed_types)}')
+        return v
+    
+    @field_validator('verification_sources')
+    def validate_verification_sources(cls, v: List[str]):
+        allowed_sources = ["ffs_provider_enrollment", "ordering_referring_provider"]
+        for source in v:
+            if source not in allowed_sources:
+                raise ValueError(f'verification_sources must contain only: {", ".join(allowed_sources)}')
+        return v
