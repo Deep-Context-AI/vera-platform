@@ -14,7 +14,13 @@ import {
   Calendar,
   FileText,
   Search,
-  Filter
+  Filter,
+  Gavel,
+  Mail,
+  Send,
+  Archive,
+  Star,
+  Reply
 } from 'lucide-react';
 import { SidebarLink } from './sidebar';
 
@@ -38,6 +44,12 @@ const ICONS = {
   fileText: <FileText className="h-4 w-4" />,
   search: <Search className="h-4 w-4" />,
   filter: <Filter className="h-4 w-4" />,
+  gavel: <Gavel className="h-4 w-4" />,
+  mail: <Mail className="h-4 w-4" />,
+  send: <Send className="h-4 w-4" />,
+  archive: <Archive className="h-4 w-4" />,
+  star: <Star className="h-4 w-4" />,
+  reply: <Reply className="h-4 w-4" />,
 } as const;
 
 // Memoized sidebar configurations to prevent recreation
@@ -48,6 +60,27 @@ const SIDEBAR_CONFIGS = {
     { label: 'Practitioners', href: '/practitioners', icon: ICONS.users },
     { label: 'Recent Activity', href: '/activity', icon: ICONS.bell },
     { label: 'Reports', href: '/reports', icon: ICONS.fileText },
+  ],
+  providers: [
+    { label: 'All Providers', href: '/providers', icon: ICONS.users },
+    { label: 'Add New Provider', href: '/providers/new', icon: ICONS.users },
+    { label: 'Import Providers', href: '/providers/import', icon: ICONS.fileText },
+    { label: 'Quick Filters', href: '/providers/filters', icon: ICONS.filter },
+    { label: 'Bulk Actions', href: '/providers/bulk', icon: ICONS.fileText },
+  ],
+  committee: [
+    { label: 'All Cases', href: '/committee', icon: ICONS.gavel },
+    { label: 'Ready for Review', href: '/committee/ready', icon: ICONS.calendar },
+    { label: 'Under Review', href: '/committee/review', icon: ICONS.fileCheck },
+    { label: 'Approved Cases', href: '/committee/approved', icon: ICONS.shield },
+    { label: 'Committee Schedule', href: '/committee/schedule', icon: ICONS.calendar },
+  ],
+  inbox: [
+    { label: 'All Messages', href: '/inbox', icon: ICONS.mail },
+    { label: 'Unread', href: '/inbox/unread', icon: ICONS.bell },
+    { label: 'Sent', href: '/inbox/sent', icon: ICONS.send },
+    { label: 'Starred', href: '/inbox/starred', icon: ICONS.star },
+    { label: 'Archive', href: '/inbox/archive', icon: ICONS.archive },
   ],
   verification: [
     { label: 'Pending Reviews', href: '/verification/pending', icon: ICONS.fileCheck },
@@ -72,6 +105,9 @@ const SIDEBAR_CONFIGS = {
   ],
   default: [
     { label: 'Dashboard', href: '/', icon: ICONS.home },
+    { label: 'Providers', href: '/providers', icon: ICONS.users },
+    { label: 'Committee', href: '/committee', icon: ICONS.gavel },
+    { label: 'Inbox', href: '/inbox', icon: ICONS.mail },
     { label: 'Practitioners', href: '/practitioners', icon: ICONS.users },
     { label: 'Verification', href: '/verification', icon: ICONS.fileCheck },
     { label: 'Settings', href: '/settings', icon: ICONS.settings },
@@ -81,6 +117,12 @@ const SIDEBAR_CONFIGS = {
 const getSidebarConfig = (pathname: string): readonly SidebarItem[] => {
   if (pathname === '/' || pathname.startsWith('/dashboard')) {
     return SIDEBAR_CONFIGS.dashboard;
+  } else if (pathname.startsWith('/providers')) {
+    return SIDEBAR_CONFIGS.providers;
+  } else if (pathname.startsWith('/committee')) {
+    return SIDEBAR_CONFIGS.committee;
+  } else if (pathname.startsWith('/inbox')) {
+    return SIDEBAR_CONFIGS.inbox;
   } else if (pathname.startsWith('/verification')) {
     return SIDEBAR_CONFIGS.verification;
   } else if (pathname.startsWith('/practitioners')) {

@@ -47,7 +47,7 @@ export default async function updateSession(request: NextRequest) {
       url.pathname = '/auth/v1/sign-in'
       return NextResponse.redirect(url)
     }
-  } catch (error) {
+  } catch {
     // Handle auth errors gracefully - redirect to login
     if (!request.nextUrl.pathname.startsWith('/auth')) {
       const url = request.nextUrl.clone()

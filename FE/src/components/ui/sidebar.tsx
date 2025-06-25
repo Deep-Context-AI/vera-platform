@@ -2,9 +2,48 @@
 
 import { cn } from "@/lib/utils";
 import Link, { LinkProps } from "next/link";
-import React, { useState, createContext, useContext, useMemo, useCallback } from "react";
+import React, { useState, createContext, useContext, useMemo, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
+
+// Custom hook to handle localStorage with SSR - prevents hydration mismatch
+function useLocalStorage(key: string, defaultValue: boolean) {
+  // Always start with the default value to match SSR
+  const [value, setValue] = useState(defaultValue);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    
+    // After mounting, read from localStorage and update if different
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null) {
+        const storedValue = JSON.parse(item);
+        if (storedValue !== defaultValue) {
+          setValue(storedValue);
+        }
+      }
+    } catch (error) {
+      console.error(`Error reading localStorage key "${key}":`, error);
+    }
+  }, [key, defaultValue]);
+
+  const setStoredValue = useCallback((newValue: boolean | ((val: boolean) => boolean)) => {
+    try {
+      const valueToStore = newValue instanceof Function ? newValue(value) : newValue;
+      setValue(valueToStore);
+      
+      if (mounted && typeof window !== 'undefined') {
+        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  }, [key, value, mounted]);
+
+  return [value, setStoredValue, mounted] as const;
+}
 
 interface Links {
   label: string;
@@ -41,53 +80,26 @@ export const SidebarProvider = React.memo(({
   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   animate?: boolean;
 }) => {
-  const [openState, setOpenState] = useState(true); // Default to open
-  const [mounted, setMounted] = useState(false);
-
-  // Load from localStorage on mount
-  React.useEffect(() => {
-    setMounted(true);
-    const loadSidebarState = async () => {
-      try {
-        const saved = localStorage.getItem('sidebar-open');
-        if (saved !== null) {
-          setOpenState(JSON.parse(saved));
-        }
-      } catch (error) {
-        console.error('Failed to load sidebar state:', error);
-      }
-    };
-    
-    loadSidebarState();
-  }, []);
+  const [openState, setOpenState, mounted] = useLocalStorage('sidebar-open', true);
 
   const open = openProp !== undefined ? openProp : openState;
   
   const setOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
     const newValue = typeof value === 'function' ? value(open) : value;
     
-    // Save to localStorage only if mounted (client-side)
-    if (mounted) {
-      try {
-        localStorage.setItem('sidebar-open', JSON.stringify(newValue));
-      } catch (error) {
-        console.error('Failed to save sidebar state:', error);
-      }
-    }
-    
     if (setOpenProp) {
       setOpenProp(newValue);
     } else {
       setOpenState(newValue);
     }
-  }, [open, setOpenProp, mounted]);
+  }, [open, setOpenProp, setOpenState]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
     open,
     setOpen,
-    animate
-  }), [open, setOpen, animate]);
+    animate: animate && mounted // Don't animate until mounted to prevent flash
+  }), [open, setOpen, animate, mounted]);
 
   return (
     <SidebarContext.Provider value={contextValue}>
@@ -136,14 +148,14 @@ export const DesktopSidebar = React.memo(({
   
   // Memoize animation config to prevent unnecessary re-renders
   const animationConfig = useMemo(() => ({
-    width: animate ? (open ? "300px" : "60px") : "300px",
-  }), [animate, open]);
+    width: open ? "300px" : "60px",
+  }), [open]);
 
-  // Memoize transition config
+  // Memoize transition config - disable transition on initial render
   const transition = useMemo(() => ({
-    duration: 0.3,
+    duration: animate ? 0.3 : 0,
     ease: "easeInOut" as const,
-  }), []);
+  }), [animate]);
 
   return (
     <motion.div
@@ -151,6 +163,7 @@ export const DesktopSidebar = React.memo(({
         "h-full hidden md:flex md:flex-col bg-neutral-100 dark:bg-neutral-800 flex-shrink-0",
         className
       )}
+      initial={{ width: "300px" }} // Always start with open state to match SSR
       animate={animationConfig}
       transition={transition}
       {...props}

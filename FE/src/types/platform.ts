@@ -182,6 +182,10 @@ export interface EmailMessage {
   responseRequired?: boolean;
   isVerificationResponse?: boolean;
   isSystemGenerated?: boolean;
+  isRead?: boolean;
+  isStarred?: boolean;
+  providerId?: string;
+  providerName?: string;
 }
 
 export interface VerificationFlag {
