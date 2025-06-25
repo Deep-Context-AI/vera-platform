@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { getPractitionerById } from '@/lib/data/mockData';
 import { Check, AlertTriangle, Clock } from 'lucide-react';
-import VerificationItem from '@/app/practitioners/VerificationItem';
+import VerificationItem from '@/app/(platform)/practitioners/VerificationItem';
 import Image from 'next/image';
 
 const PractitionerDetail: React.FC = () => {

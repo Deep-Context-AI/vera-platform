@@ -1,8 +1,9 @@
+"use client";
+
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { practitioners, Practitioner } from '@/lib/data/mockData';
 import { Check, Clock, AlertTriangle, Search } from 'lucide-react';
-import Image from 'next/image';
 
 const KanbanColumn: React.FC<{
   title: string;

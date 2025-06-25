@@ -44,8 +44,8 @@ export interface Practitioner {
   };
 }
 
-// Generate dates
-const today = new Date();
+// Generate dates - using fixed date to prevent hydration issues
+const today = new Date('2024-01-15T00:00:00.000Z');
 const formatDate = (date: Date) => format(date, 'yyyy-MM-dd');
 const oneYearLater = addMonths(today, 12);
 const twoYearsLater = addMonths(today, 24);
@@ -53,44 +53,47 @@ const threeYearsLater = addMonths(today, 36);
 const lastMonth = addMonths(today, -1);
 
 // Sample activity logs for education verification
-const generateEducationActivityLog = (school: string, completed: boolean = true): ActivityLogEntry[] => [
-  {
-    id: `act-call-${Math.random()}`,
-    date: format(addMonths(today, -1), 'yyyy-MM-dd HH:mm:ss'),
-    type: 'call' as const,
-    status: 'completed' as const,
-    description: `Initial call to ${school} registrar`,
-    details: {
-      transcript: `Examiner: Hello, I'm calling to verify a medical degree.
+const generateEducationActivityLog = (school: string, completed: boolean = true): ActivityLogEntry[] => {
+  const schoolId = school.toLowerCase().replace(/\s+/g, '-');
+  return [
+    {
+      id: `act-call-${schoolId}`,
+      date: format(addMonths(today, -1), 'yyyy-MM-dd HH:mm:ss'),
+      type: 'call' as const,
+      status: 'completed' as const,
+      description: `Initial call to ${school} registrar`,
+      details: {
+        transcript: `Examiner: Hello, I'm calling to verify a medical degree.
 Registrar: Yes, I can help with that. What information do you need?
 Examiner: I need to verify graduation and degree information.
 Registrar: I'll be happy to help with that verification.`
+      }
+    },
+    {
+      id: `act-email-${schoolId}`,
+      date: format(addMonths(today, -1), 'yyyy-MM-dd HH:mm:ss'),
+      type: 'email' as const,
+      status: completed ? ('completed' as const) : ('pending' as const),
+      description: 'Documentation request sent',
+      details: {
+        emailContent: `Following our phone conversation, I am writing to request official documentation of the medical degree from ${school}. Please provide transcripts and graduation verification.`,
+        attachments: ['verification_request_form.pdf']
+      }
+    },
+    {
+      id: `act-doc-${schoolId}`,
+      date: format(addMonths(today, -0.5), 'yyyy-MM-dd HH:mm:ss'),
+      type: 'document' as const,
+      status: completed ? ('completed' as const) : ('pending' as const),
+      description: completed ? 'Received verification documents' : 'Awaiting documentation',
+      details: completed ? {
+        response: `Official transcript and degree verification received from ${school}`
+      } : {
+        response: 'Pending response from institution'
+      }
     }
-  },
-  {
-    id: `act-email-${Math.random()}`,
-    date: format(addMonths(today, -1), 'yyyy-MM-dd HH:mm:ss'),
-    type: 'email' as const,
-    status: completed ? ('completed' as const) : ('pending' as const),
-    description: 'Documentation request sent',
-    details: {
-      emailContent: `Following our phone conversation, I am writing to request official documentation of the medical degree from ${school}. Please provide transcripts and graduation verification.`,
-      attachments: ['verification_request_form.pdf']
-    }
-  },
-  {
-    id: `act-doc-${Math.random()}`,
-    date: format(addMonths(today, -0.5), 'yyyy-MM-dd HH:mm:ss'),
-    type: 'document' as const,
-    status: completed ? ('completed' as const) : ('pending' as const),
-    description: completed ? 'Received verification documents' : 'Awaiting documentation',
-    details: completed ? {
-      response: `Official transcript and degree verification received from ${school}`
-    } : {
-      response: 'Pending response from institution'
-    }
-  }
-];
+  ];
+};
 
 // Verification types with descriptions
 const verificationTypes = [

@@ -42,9 +42,11 @@ export const SidebarProvider = React.memo(({
   animate?: boolean;
 }) => {
   const [openState, setOpenState] = useState(true); // Default to open
+  const [mounted, setMounted] = useState(false);
 
   // Load from localStorage on mount
   React.useEffect(() => {
+    setMounted(true);
     const loadSidebarState = async () => {
       try {
         const saved = localStorage.getItem('sidebar-open');
@@ -64,11 +66,13 @@ export const SidebarProvider = React.memo(({
   const setOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
     const newValue = typeof value === 'function' ? value(open) : value;
     
-    // Save to localStorage
-    try {
-      localStorage.setItem('sidebar-open', JSON.stringify(newValue));
-    } catch (error) {
-      console.error('Failed to save sidebar state:', error);
+    // Save to localStorage only if mounted (client-side)
+    if (mounted) {
+      try {
+        localStorage.setItem('sidebar-open', JSON.stringify(newValue));
+      } catch (error) {
+        console.error('Failed to save sidebar state:', error);
+      }
     }
     
     if (setOpenProp) {
@@ -76,7 +80,7 @@ export const SidebarProvider = React.memo(({
     } else {
       setOpenState(newValue);
     }
-  }, [open, setOpenProp]);
+  }, [open, setOpenProp, mounted]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({

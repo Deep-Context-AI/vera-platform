@@ -1,5 +1,5 @@
 import React from 'react';
-import { practitioners } from '../lib/data/mockData';
+import { practitioners } from '../../lib/data/mockData';
 import Link from 'next/link';
 import { Users, FileCheck, AlertCircle, Clock } from 'lucide-react';
 
