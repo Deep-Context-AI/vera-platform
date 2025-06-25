@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  Search, 
-  Eye, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  ChevronDown, 
+import {
+  Search,
+  Eye,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  ChevronDown,
   ChevronUp,
   FileText,
   User,
@@ -105,7 +105,7 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({ case_, isOpen, onClos
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-3">
                 <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                   <Gavel className="w-4 h-4 mr-2 inline" />
@@ -132,11 +132,10 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({ case_, isOpen, onClos
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key as 'summary' | 'flags' | 'reviews' | 'audit')}
-                    className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                      activeTab === tab.key
+                    className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.key
                         ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                    }`}
+                      }`}
                   >
                     <tab.icon className="w-4 h-4" />
                     <span>{tab.label}</span>
@@ -196,11 +195,10 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({ case_, isOpen, onClos
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500 dark:text-gray-400">Risk Assessment:</span>
-                        <span className={`font-medium capitalize ${
-                          case_.riskAssessment === 'high' ? 'text-red-600 dark:text-red-400' :
-                          case_.riskAssessment === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
-                          'text-green-600 dark:text-green-400'
-                        }`}>
+                        <span className={`font-medium capitalize ${case_.riskAssessment === 'high' ? 'text-red-600 dark:text-red-400' :
+                            case_.riskAssessment === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-green-600 dark:text-green-400'
+                          }`}>
                           {case_.riskAssessment}
                         </span>
                       </div>
@@ -271,11 +269,10 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({ case_, isOpen, onClos
                     <div className="flex items-center space-x-4">
                       <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                         <div
-                          className={`h-3 rounded-full ${
-                            case_.credentialingScore >= 90 ? 'bg-green-500' :
-                            case_.credentialingScore >= 80 ? 'bg-yellow-500' :
-                            'bg-red-500'
-                          }`}
+                          className={`h-3 rounded-full ${case_.credentialingScore >= 90 ? 'bg-green-500' :
+                              case_.credentialingScore >= 80 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                            }`}
                           style={{ width: `${case_.credentialingScore}%` }}
                         />
                       </div>
@@ -297,12 +294,11 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({ case_, isOpen, onClos
                 ) : (
                   case_.flags.map(flag => (
                     <div key={flag.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                      <div className={`px-4 py-3 border-l-4 ${
-                        flag.severity === 'critical' ? 'border-red-500 bg-red-50 dark:bg-red-900/10' :
-                        flag.severity === 'high' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10' :
-                        flag.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10' :
-                        'border-blue-500 bg-blue-50 dark:bg-blue-900/10'
-                      }`}>
+                      <div className={`px-4 py-3 border-l-4 ${flag.severity === 'critical' ? 'border-red-500 bg-red-50 dark:bg-red-900/10' :
+                          flag.severity === 'high' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10' :
+                            flag.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10' :
+                              'border-blue-500 bg-blue-50 dark:bg-blue-900/10'
+                        }`}>
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
@@ -339,12 +335,11 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({ case_, isOpen, onClos
                         <h4 className="font-medium text-gray-900 dark:text-white">{review.directorName}</h4>
                         <p className="text-sm text-gray-500 dark:text-gray-400">Reviewed on {new Date(review.reviewDate).toLocaleDateString()}</p>
                       </div>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        review.decision === 'approve' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
-                        review.decision === 'conditional' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300' :
-                        review.decision === 'defer' ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' :
-                        'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
-                      }`}>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${review.decision === 'approve' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
+                          review.decision === 'conditional' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300' :
+                            review.decision === 'defer' ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' :
+                              'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+                        }`}>
                         {review.decision.toUpperCase()}
                       </span>
                     </div>
@@ -425,15 +420,15 @@ export default function CommitteeReviewPage() {
 
   const filteredCases = cases.filter(case_ => {
     const matchesSearch = case_.providerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         case_.specialty.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         case_.id.includes(searchTerm) ||
-                         case_.npi.includes(searchTerm);
-    
+      case_.specialty.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      case_.id.includes(searchTerm) ||
+      case_.npi.includes(searchTerm);
+
     const matchesStatus = statusFilter === 'all' || case_.status === statusFilter;
-    const matchesFlag = flagFilter === 'all' || 
-                       (flagFilter === 'flagged' && case_.hasFlags) ||
-                       (flagFilter === 'clean' && !case_.hasFlags);
-    
+    const matchesFlag = flagFilter === 'all' ||
+      (flagFilter === 'flagged' && case_.hasFlags) ||
+      (flagFilter === 'clean' && !case_.hasFlags);
+
     return matchesSearch && matchesStatus && matchesFlag;
   });
 
@@ -478,7 +473,7 @@ export default function CommitteeReviewPage() {
   };
 
   const CaseCard = ({ case_ }: { case_: CommitteeCase }) => (
-    <div 
+    <div
       className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
       onClick={() => handleCaseClick(case_)}
     >
@@ -502,7 +497,7 @@ export default function CommitteeReviewPage() {
           {case_.status.replace('_', ' ').toUpperCase()}
         </span>
       </div>
-      
+
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <span className="text-gray-500 dark:text-gray-400">Examiner:</span>
@@ -523,7 +518,7 @@ export default function CommitteeReviewPage() {
           <p className="font-medium text-gray-900 dark:text-white">{case_.credentialingScore}/100</p>
         </div>
       </div>
-      
+
       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <span className="text-xs text-gray-500 dark:text-gray-400">
           Submitted: {new Date(case_.submittedToCommittee).toLocaleDateString()}
@@ -569,7 +564,7 @@ export default function CommitteeReviewPage() {
               />
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <select
               value={statusFilter}
@@ -583,7 +578,7 @@ export default function CommitteeReviewPage() {
               <option value="conditional">Conditional</option>
               <option value="deferred">Deferred</option>
             </select>
-            
+
             <select
               value={flagFilter}
               onChange={(e) => setFlagFilter(e.target.value)}
@@ -610,7 +605,7 @@ export default function CommitteeReviewPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-green-100 dark:bg-green-900/20">
@@ -622,7 +617,7 @@ export default function CommitteeReviewPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-red-100 dark:bg-red-900/20">
@@ -634,7 +629,7 @@ export default function CommitteeReviewPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-yellow-100 dark:bg-yellow-900/20">
@@ -660,7 +655,7 @@ export default function CommitteeReviewPage() {
               {readyForCommittee.length} cases
             </span>
           </div>
-          
+
           <div className="space-y-4 max-h-96 overflow-y-auto">
             {readyForCommittee.length === 0 ? (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -683,7 +678,7 @@ export default function CommitteeReviewPage() {
               {approvedCases.length} cases
             </span>
           </div>
-          
+
           <div className="space-y-4 max-h-96 overflow-y-auto">
             {approvedCases.length === 0 ? (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
