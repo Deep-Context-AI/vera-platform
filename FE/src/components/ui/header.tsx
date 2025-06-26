@@ -110,10 +110,10 @@ const Header: React.FC<HeaderProps> = ({ className }) => {
           Inbox
         </Link>
         <Link
-          href="/verification"
+          href="/workflows"
           className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
         >
-          Verification
+          Workflows
         </Link>
         <Link
           href="/settings"

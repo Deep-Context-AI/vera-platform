@@ -1,5 +1,4 @@
 import { createClient } from '@/utils/supabase/client';
-import { createClient as createServerClient } from '@/utils/supabase/server';
 import type { 
   Application, 
   CreateApplicationRequest, 
@@ -8,8 +7,8 @@ import type {
 } from '@/types/applications';
 
 export class ApplicationsAPI {
-  private static getClient(isServer = false) {
-    return isServer ? createServerClient() : createClient();
+  private static getClient() {
+    return createClient();
   }
 
   /**
@@ -20,11 +19,11 @@ export class ApplicationsAPI {
     provider_id?: number;
     limit?: number;
     offset?: number;
-    isServer?: boolean;
   }): Promise<{ data: Application[] | null; error: any }> {
     try {
-      const client = await this.getClient(options?.isServer);
+      const client = this.getClient();
       let query = client
+        .schema('vera')
         .from('applications')
         .select('*')
         .order('created_at', { ascending: false });
@@ -59,12 +58,12 @@ export class ApplicationsAPI {
    * Fetch a single application by ID
    */
   static async getApplication(
-    id: number, 
-    isServer = false
+    id: number
   ): Promise<{ data: Application | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .select('*')
         .eq('id', id)
@@ -80,12 +79,12 @@ export class ApplicationsAPI {
    * Create a new application
    */
   static async createApplication(
-    application: CreateApplicationRequest,
-    isServer = false
+    application: CreateApplicationRequest
   ): Promise<{ data: Application | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .insert(application)
         .select()
@@ -101,14 +100,14 @@ export class ApplicationsAPI {
    * Update an existing application
    */
   static async updateApplication(
-    application: UpdateApplicationRequest,
-    isServer = false
+    application: UpdateApplicationRequest
   ): Promise<{ data: Application | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { id, ...updateData } = application;
       
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .update(updateData)
         .eq('id', id)
@@ -125,12 +124,12 @@ export class ApplicationsAPI {
    * Delete an application
    */
   static async deleteApplication(
-    id: number,
-    isServer = false
+    id: number
   ): Promise<{ error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { error } = await client
+        .schema('vera')
         .from('applications')
         .delete()
         .eq('id', id);
@@ -144,12 +143,11 @@ export class ApplicationsAPI {
   /**
    * Get applications by status with counts
    */
-  static async getApplicationsByStatus(
-    isServer = false
-  ): Promise<{ data: { status: string; count: number }[] | null; error: any }> {
+  static async getApplicationsByStatus(): Promise<{ data: { status: string; count: number }[] | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .select('status')
         .not('status', 'is', null);
@@ -177,12 +175,12 @@ export class ApplicationsAPI {
    * Search applications by provider name or NPI
    */
   static async searchApplications(
-    searchTerm: string,
-    isServer = false
+    searchTerm: string
   ): Promise<{ data: Application[] | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .select(`
           *,
@@ -204,15 +202,15 @@ export class ApplicationsAPI {
    * Get recent applications (last 30 days)
    */
   static async getRecentApplications(
-    limit = 10,
-    isServer = false
+    limit = 10
   ): Promise<{ data: Application[] | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .select('*')
         .gte('created_at', thirtyDaysAgo.toISOString())
@@ -230,12 +228,12 @@ export class ApplicationsAPI {
    */
   static async updateApplicationStatus(
     id: number,
-    status: ApplicationStatus,
-    isServer = false
+    status: ApplicationStatus
   ): Promise<{ data: Application | null; error: any }> {
     try {
-      const client = await this.getClient(isServer);
+      const client = this.getClient();
       const { data, error } = await client
+        .schema('vera')
         .from('applications')
         .update({ status })
         .eq('id', id)
