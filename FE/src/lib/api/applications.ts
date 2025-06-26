@@ -1,9 +1,12 @@
 import { createClient } from '@/utils/supabase/client';
 import type { 
   Application, 
+  ApplicationWithDetails,
+  ApplicationDetailsView,
   CreateApplicationRequest, 
   UpdateApplicationRequest,
-  ApplicationStatus 
+  ApplicationStatus,
+  VerificationStatus
 } from '@/types/applications';
 
 export class ApplicationsAPI {
@@ -12,20 +15,50 @@ export class ApplicationsAPI {
   }
 
   /**
-   * Fetch all applications with optional filtering
+   * Get the comprehensive select string for applications with all related data
+   */
+  private static getDetailedSelectString(): string {
+    return `
+      *,
+      practitioners:provider_id (
+        id,
+        first_name,
+        last_name,
+        middle_name,
+        suffix,
+        education,
+        other_names,
+        home_address,
+        mailing_address,
+        demographics,
+        languages
+      ),
+      npi:npi_number (
+        id,
+        number,
+        type,
+        status,
+        taxonomy_code,
+        description
+      )
+    `;
+  }
+
+  /**
+   * Fetch all applications with comprehensive details including practitioner and NPI information
    */
   static async getApplications(options?: {
     status?: ApplicationStatus;
     provider_id?: number;
     limit?: number;
     offset?: number;
-  }): Promise<{ data: Application[] | null; error: any }> {
+  }): Promise<{ data: ApplicationWithDetails[] | null; error: any }> {
     try {
       const client = this.getClient();
       let query = client
         .schema('vera')
         .from('applications')
-        .select('*')
+        .select(this.getDetailedSelectString())
         .order('created_at', { ascending: false });
 
       // Apply filters
@@ -48,28 +81,28 @@ export class ApplicationsAPI {
 
       const { data, error } = await query;
       
-      return { data: data as Application[] | null, error };
+      return { data: data as ApplicationWithDetails[] | null, error };
     } catch (error) {
       return { data: null, error };
     }
   }
 
   /**
-   * Fetch a single application by ID
+   * Fetch a single application by ID with full details
    */
   static async getApplication(
     id: number
-  ): Promise<{ data: Application | null; error: any }> {
+  ): Promise<{ data: ApplicationWithDetails | null; error: any }> {
     try {
       const client = this.getClient();
       const { data, error } = await client
         .schema('vera')
         .from('applications')
-        .select('*')
+        .select(this.getDetailedSelectString())
         .eq('id', id)
         .single();
 
-      return { data: data as Application | null, error };
+      return { data: data as ApplicationWithDetails | null, error };
     } catch (error) {
       return { data: null, error };
     }
@@ -172,38 +205,38 @@ export class ApplicationsAPI {
   }
 
   /**
-   * Search applications by provider name or NPI
+   * Search applications by provider name, NPI number, or license number with full details
    */
   static async searchApplications(
     searchTerm: string
-  ): Promise<{ data: Application[] | null; error: any }> {
+  ): Promise<{ data: ApplicationWithDetails[] | null; error: any }> {
     try {
       const client = this.getClient();
       const { data, error } = await client
         .schema('vera')
         .from('applications')
-        .select(`
-          *,
-          practitioners!provider_id (
-            first_name,
-            last_name
-          )
+        .select(this.getDetailedSelectString())
+        .or(`
+          npi_number.ilike.%${searchTerm}%,
+          license_number.ilike.%${searchTerm}%,
+          dea_number.ilike.%${searchTerm}%,
+          practitioners.first_name.ilike.%${searchTerm}%,
+          practitioners.last_name.ilike.%${searchTerm}%
         `)
-        .or(`npi_number.ilike.%${searchTerm}%,license_number.ilike.%${searchTerm}%`)
         .order('created_at', { ascending: false });
 
-      return { data: data as Application[] | null, error };
+      return { data: data as ApplicationWithDetails[] | null, error };
     } catch (error) {
       return { data: null, error };
     }
   }
 
   /**
-   * Get recent applications (last 30 days)
+   * Get recent applications with full details (last 30 days)
    */
   static async getRecentApplications(
     limit = 10
-  ): Promise<{ data: Application[] | null; error: any }> {
+  ): Promise<{ data: ApplicationWithDetails[] | null; error: any }> {
     try {
       const client = this.getClient();
       const thirtyDaysAgo = new Date();
@@ -212,12 +245,12 @@ export class ApplicationsAPI {
       const { data, error } = await client
         .schema('vera')
         .from('applications')
-        .select('*')
+        .select(this.getDetailedSelectString())
         .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false })
         .limit(limit);
 
-      return { data: data as Application[] | null, error };
+      return { data: data as ApplicationWithDetails[] | null, error };
     } catch (error) {
       return { data: null, error };
     }
@@ -241,6 +274,183 @@ export class ApplicationsAPI {
         .single();
 
       return { data: data as Application | null, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Get applications by practitioner with verification status
+   */
+  static async getApplicationsByPractitioner(
+    practitionerId: number
+  ): Promise<{ data: ApplicationWithDetails[] | null; error: any }> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client
+        .schema('vera')
+        .from('applications')
+        .select(this.getDetailedSelectString())
+        .eq('provider_id', practitionerId)
+        .order('created_at', { ascending: false });
+
+      return { data: data as ApplicationWithDetails[] | null, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Get applications with NPI verification issues
+   */
+  static async getApplicationsWithNPIIssues(): Promise<{ data: ApplicationWithDetails[] | null; error: any }> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client
+        .schema('vera')
+        .from('applications')
+        .select(this.getDetailedSelectString())
+        .or('npi_number.is.null,npi.status.neq.Active')
+        .order('created_at', { ascending: false });
+
+      return { data: data as ApplicationWithDetails[] | null, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Query the application_details view directly for comprehensive provider information
+   * This method uses the database view for optimized queries with computed fields
+   */
+  static async getApplicationDetailsFromView(options?: {
+    status?: ApplicationStatus;
+    verification_status?: VerificationStatus;
+    practitioner_name?: string;
+    npi_taxonomy_code?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ data: ApplicationDetailsView[] | null; error: any }> {
+    try {
+      const client = this.getClient();
+      let query = client
+        .schema('vera')
+        .from('application_details')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      // Apply filters
+      if (options?.status) {
+        query = query.eq('status', options.status);
+      }
+      
+      if (options?.verification_status) {
+        query = query.eq('verification_status', options.verification_status);
+      }
+      
+      if (options?.practitioner_name) {
+        query = query.or(`
+          practitioner_first_name.ilike.%${options.practitioner_name}%,
+          practitioner_last_name.ilike.%${options.practitioner_name}%,
+          full_name.ilike.%${options.practitioner_name}%
+        `);
+      }
+      
+      if (options?.npi_taxonomy_code) {
+        query = query.eq('npi_taxonomy_code', options.npi_taxonomy_code);
+      }
+
+      // Apply pagination
+      if (options?.limit) {
+        query = query.limit(options.limit);
+      }
+      
+      if (options?.offset) {
+        query = query.range(options.offset, (options.offset + (options.limit || 10)) - 1);
+      }
+
+      const { data, error } = await query;
+      
+      return { data, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Search applications using the view with enhanced search capabilities
+   */
+  static async searchApplicationDetailsFromView(
+    searchTerm: string
+  ): Promise<{ data: ApplicationDetailsView[] | null; error: any }> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client
+        .schema('vera')
+        .from('application_details')
+        .select('*')
+        .or(`
+          npi_number.ilike.%${searchTerm}%,
+          license_number.ilike.%${searchTerm}%,
+          dea_number.ilike.%${searchTerm}%,
+          practitioner_first_name.ilike.%${searchTerm}%,
+          practitioner_last_name.ilike.%${searchTerm}%,
+          full_name.ilike.%${searchTerm}%,
+          npi_taxonomy_code.ilike.%${searchTerm}%,
+          npi_description.ilike.%${searchTerm}%
+        `)
+        .order('created_at', { ascending: false });
+
+      return { data, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Get verification statistics from the view
+   */
+  static async getVerificationStats(): Promise<{ data: any | null; error: any }> {
+    try {
+      const client = this.getClient();
+      
+      // Get counts by verification status
+      const { data: statusData, error: statusError } = await client
+        .schema('vera')
+        .from('application_details')
+        .select('verification_status')
+        .not('verification_status', 'is', null);
+
+      if (statusError) return { data: null, error: statusError };
+
+      // Get counts by NPI type
+      const { data: typeData, error: typeError } = await client
+        .schema('vera')
+        .from('application_details')
+        .select('npi_type')
+        .not('npi_type', 'is', null);
+
+      if (typeError) return { data: null, error: typeError };
+
+      // Process the data
+      const verificationStats = (statusData as { verification_status: string }[]).reduce((acc, item) => {
+        acc[item.verification_status] = (acc[item.verification_status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const npiTypeStats = (typeData as { npi_type: string }[]).reduce((acc, item) => {
+        acc[item.npi_type] = (acc[item.npi_type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      return { 
+        data: {
+          verificationStatus: verificationStats,
+          npiTypes: npiTypeStats,
+          totalApplications: statusData.length
+        }, 
+        error: null 
+      };
     } catch (error) {
       return { data: null, error };
     }

@@ -71,8 +71,7 @@ const ActionNode: React.FC<ActionNodeProps> = ({ data }) => {
           labelBg: 'bg-gray-700',
           labelText: 'text-gray-100'
         };
-      }
-    };
+    }
   };
 
   const { bgColor, borderColor, icon: Icon, textColor, labelBg, labelText } = getActionConfig(data.actionType);
@@ -82,7 +81,7 @@ const ActionNode: React.FC<ActionNodeProps> = ({ data }) => {
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 !bg-${bgColor} !border-2 !border-${borderColor}"
+        className={`w-3 h-3 !bg-${bgColor} !border-2 !border-${borderColor}`}
       />
       <div className="flex items-center gap-2 mb-2">
         <Icon className={`w-4 h-4 ${textColor}`} />
@@ -93,7 +92,7 @@ const ActionNode: React.FC<ActionNodeProps> = ({ data }) => {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-3 h-3 !bg-${bgColor} !border-2 !border-${borderColor}"
+        className={`w-3 h-3 !bg-${bgColor} !border-2 !border-${borderColor}`}
       />
     </div>
   );
