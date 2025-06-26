@@ -62,11 +62,9 @@ const SIDEBAR_CONFIGS = {
     { label: 'Reports', href: '/reports', icon: ICONS.fileText },
   ],
   providers: [
-    { label: 'All Providers', href: '/providers', icon: ICONS.users },
-    { label: 'Add New Provider', href: '/providers/new', icon: ICONS.users },
-    { label: 'Import Providers', href: '/providers/import', icon: ICONS.fileText },
-    { label: 'Quick Filters', href: '/providers/filters', icon: ICONS.filter },
-    { label: 'Bulk Actions', href: '/providers/bulk', icon: ICONS.fileText },
+    { label: 'Applications', href: '/providers', icon: ICONS.users },
+    { label: 'Batches', href: '/providers/batches', icon: ICONS.users },
+    { label: 'Reports', href: '/providers/reports', icon: ICONS.fileText },
   ],
   committee: [
     { label: 'All Cases', href: '/committee', icon: ICONS.gavel },

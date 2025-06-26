@@ -331,7 +331,7 @@ const ProvidersPage: React.FC = () => {
       cellRenderer: ({ row }) => (
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => window.location.href = `/practitioners/${row.original.provider_id || row.original.id}`}
+            onClick={() => window.location.href = `/providers/${row.original.provider_id || row.original.id}`}
             className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
             title="View Details"
           >
@@ -558,7 +558,7 @@ const ProvidersPage: React.FC = () => {
                 searchable={true}
                 searchPlaceholder="Search by provider name, NPI, license, specialty, or taxonomy code..."
                 onRowClick={(row) => {
-                  window.location.href = `/practitioners/${row.original.provider_id || row.original.id}`;
+                  window.location.href = `/providers/${row.original.provider_id || row.original.id}`;
                 }}
               />
               

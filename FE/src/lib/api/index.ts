@@ -13,5 +13,11 @@ export type {
   UpdateApplicationRequest,
   ApplicationStatus,
   WorkHistoryEntry,
-  MalpracticeInsurance
+  MalpracticeInsurance,
+  Practitioner,
+  Attestation,
+  AttestationResponse,
+  ApplicationWithDetails,
+  ApplicationDetailsView,
+  VerificationStatus
 } from '@/types/applications'; 

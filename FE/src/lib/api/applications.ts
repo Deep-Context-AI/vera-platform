@@ -6,7 +6,9 @@ import type {
   CreateApplicationRequest, 
   UpdateApplicationRequest,
   ApplicationStatus,
-  VerificationStatus
+  VerificationStatus,
+  Practitioner,
+  Attestation
 } from '@/types/applications';
 
 export class ApplicationsAPI {
@@ -451,6 +453,70 @@ export class ApplicationsAPI {
         }, 
         error: null 
       };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Get a single practitioner by ID
+   */
+  static async getPractitioner(
+    id: number
+  ): Promise<{ data: Practitioner | null; error: any }> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client
+        .schema('vera')
+        .from('practitioners')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      return { data: data as Practitioner | null, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Get attestations by practitioner ID
+   */
+  static async getAttestationsByPractitioner(
+    practitionerId: number
+  ): Promise<{ data: Attestation[] | null; error: any }> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client
+        .schema('vera')
+        .from('attestations')
+        .select('*')
+        .eq('practitioner_id', practitionerId);
+      console.log('Attestations:', data);
+      return { data: data as Attestation[] | null, error };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Get provider details from the application_details view by provider_id
+   */
+  static async getProviderDetails(
+    providerId: number
+  ): Promise<{ data: ApplicationDetailsView | null; error: any }> {
+    try {
+      const client = this.getClient();
+      const { data, error } = await client
+        .schema('vera')
+        .from('application_details')
+        .select('*')
+        .eq('provider_id', providerId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      return { data, error };
     } catch (error) {
       return { data: null, error };
     }
