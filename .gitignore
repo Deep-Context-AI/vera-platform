@@ -51,5 +51,8 @@ __pycache__/
 # Node.js
 node_modules/
 
-# Python
-env/
+# VSCode
+.vscode/
+
+# Supabase
+.temp/
