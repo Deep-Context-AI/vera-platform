@@ -132,31 +132,23 @@ const getSidebarConfig = (pathname: string): readonly SidebarItem[] => {
   }
 };
 
-const LoadingSkeleton = React.memo(() => (
-  <div className="space-y-2">
-    {[...Array(5)].map((_, i) => (
-      <div key={i} className="flex items-center gap-2 py-2">
-        <div className="h-4 w-4 bg-neutral-300 dark:bg-neutral-600 rounded animate-pulse" />
-        <div className="h-4 w-24 bg-neutral-300 dark:bg-neutral-600 rounded animate-pulse" />
-      </div>
-    ))}
-  </div>
-));
-
-LoadingSkeleton.displayName = "LoadingSkeleton";
-
 const DynamicSidebarContent: React.FC = React.memo(() => {
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   
   // Memoize sidebar items based on pathname
   const sidebarItems = useMemo(() => getSidebarConfig(pathname), [pathname]);
 
-  // Memoized loading effect
+  // Memoized loading effect with fade-in animation
   const startLoading = useCallback(() => {
     setIsLoading(true);
+    setIsVisible(false);
+    
     const timer = setTimeout(() => {
       setIsLoading(false);
+      // Add a small delay before showing content for smooth transition
+      setTimeout(() => setIsVisible(true), 50);
     }, 800); // Simulate loading delay
     
     return () => clearTimeout(timer);
@@ -168,17 +160,43 @@ const DynamicSidebarContent: React.FC = React.memo(() => {
   }, [pathname, startLoading]);
 
   if (isLoading) {
-    return <LoadingSkeleton />;
+    return (
+      <div className="space-y-1 animate-pulse">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-2 py-2 px-2">
+            <div className="h-4 w-4 bg-neutral-300 dark:bg-neutral-600 rounded animate-pulse" />
+            <div className="h-4 w-24 bg-neutral-300 dark:bg-neutral-600 rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-1">
-      {sidebarItems.map((item) => (
-        <SidebarLink
+    <div 
+      className={`space-y-1 transition-all duration-500 ease-out ${
+        isVisible 
+          ? 'opacity-100 translate-y-0' 
+          : 'opacity-0 translate-y-2'
+      }`}
+    >
+      {sidebarItems.map((item, index) => (
+        <div
           key={item.href}
-          link={item}
-          className="hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md px-2"
-        />
+          className={`transition-all duration-300 ease-out ${
+            isVisible 
+              ? 'opacity-100 translate-y-0' 
+              : 'opacity-0 translate-y-2'
+          }`}
+          style={{ 
+            transitionDelay: isVisible ? `${index * 50}ms` : '0ms' 
+          }}
+        >
+          <SidebarLink
+            link={item}
+            className="hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md px-2"
+          />
+        </div>
       ))}
     </div>
   );

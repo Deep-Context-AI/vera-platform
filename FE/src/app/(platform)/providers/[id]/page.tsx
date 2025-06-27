@@ -16,17 +16,21 @@ import {
   GraduationCap,
   Languages,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 import { ApplicationsAPI } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import type { 
   Practitioner, 
   ApplicationWithDetails, 
   Attestation, 
   AttestationResponse 
 } from '@/types/applications';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 const PractitionerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -203,7 +207,26 @@ const PractitionerDetail: React.FC = () => {
   };
 
   const formatAttestationKey = (key: string) => {
-    return key
+    // List of terms that should be capitalized
+    const capitalizeTerms = [
+      'npdb',
+      'npi',
+      'dea',
+      'cms',
+      'oig',
+      'fda',
+      'cdc',
+      'hhs',
+      'medicare',
+      'medicaid',
+      'hipaa',
+      'emtala',
+      'stark',
+      'fbi',
+      'doj'
+    ];
+    
+    let formatted = key
       .replace(/_/g, ' ')
       .replace(/\b\w/g, l => l.toUpperCase())
       .replace(/Or/g, 'or')
@@ -212,6 +235,14 @@ const PractitionerDetail: React.FC = () => {
       .replace(/For/g, 'for')
       .replace(/By/g, 'by')
       .replace(/From/g, 'from');
+    
+    // Apply custom capitalization rules
+    capitalizeTerms.forEach(term => {
+      const regex = new RegExp(`\\b${term}\\b`, 'gi');
+      formatted = formatted.replace(regex, term.toUpperCase());
+    });
+    
+    return formatted;
   };
 
   // Helper functions to parse JSON fields
@@ -307,6 +338,38 @@ const PractitionerDetail: React.FC = () => {
     return null;
   };
 
+  // Helper function to determine attestation status and color
+  const getAttestationStatus = (value: AttestationResponse) => {
+    const explanationRequired = value.explanation_required_on === 'true' || value.explanation_required_on === 'false';
+    const responseMatchesRequirement = value.explanation_required_on === (value.response ? 'true' : 'false');
+    const hasExplanation = value.explanation && value.explanation.trim().length > 0;
+    
+    if (!explanationRequired) {
+      // No explanation required - green
+      return {
+        color: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300',
+        isRequired: false,
+        hasResponse: false
+      };
+    }
+    
+    if (responseMatchesRequirement && hasExplanation) {
+      // Explanation required and provided - red
+      return {
+        color: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300',
+        isRequired: true,
+        hasResponse: true
+      };
+    }
+    
+    // Default case - gray for unclear states
+    return {
+      color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300',
+      isRequired: explanationRequired,
+      hasResponse: hasExplanation
+    };
+  };
+
   // Group attestations by category
   const groupAttestations = (attestation: Attestation) => {
     const groups: Record<string, Array<{ key: string; value: AttestationResponse }>> = {
@@ -356,6 +419,7 @@ const PractitionerDetail: React.FC = () => {
     return groups;
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="space-y-6">
@@ -411,6 +475,7 @@ const PractitionerDetail: React.FC = () => {
     );
   }
 
+  // Error handling
   if (error) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
@@ -443,10 +508,18 @@ const PractitionerDetail: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Link href="/providers">
+        <Button variant="outline" className="mb-4">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Providers
+        </Button>
+      </Link>
       {/* Provider Header */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex-1">
+            {/* Provider Name & Status */}
             <div className="flex items-center space-x-3 mb-4">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {formatName(practitioner)}
@@ -459,14 +532,11 @@ const PractitionerDetail: React.FC = () => {
               )}
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            {/* Provider ID, Sub header */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-gray-500 dark:text-gray-400">Provider ID</p>
                 <p className="font-medium text-gray-900 dark:text-gray-100">{practitioner.id}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 dark:text-gray-400">Applications</p>
-                <p className="font-medium text-gray-900 dark:text-gray-100">{applications.length}</p>
               </div>
               <div>
                 <p className="text-gray-500 dark:text-gray-400">Latest Application</p>
@@ -486,6 +556,7 @@ const PractitionerDetail: React.FC = () => {
             </div>
           </div>
           
+          {/* Attestations view & Avatar */}
           <div className="flex items-center space-x-3">
             <button
               onClick={handleShowAttestations}
@@ -500,104 +571,9 @@ const PractitionerDetail: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Applications Section */}
-        <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center space-x-2">
-                <FileText className="w-5 h-5" />
-                <span>Applications ({applications.length})</span>
-              </h2>
-            </div>
-            
-            <div className="p-6">
-              {applications.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">No applications found for this provider.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {applications.map((application) => (
-                    <div key={application.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                            Application #{application.id}
-                          </h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Created {new Date(application.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium border ${getStatusColor(application.status || '')}`}>
-                          {getStatusIcon(application.status || '')}
-                          <span>{application.status?.replace('_', ' ') || 'Unknown'}</span>
-                        </span>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-500 dark:text-gray-400">NPI Number</p>
-                          <p className="font-medium text-gray-900 dark:text-gray-100">
-                            {application.npi_number || 'Not provided'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500 dark:text-gray-400">License Number</p>
-                          <p className="font-medium text-gray-900 dark:text-gray-100">
-                            {application.license_number || 'Not provided'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500 dark:text-gray-400">DEA Number</p>
-                          <p className="font-medium text-gray-900 dark:text-gray-100">
-                            {application.dea_number || 'Not provided'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {application.work_history && application.work_history.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Work History</p>
-                          <div className="space-y-2">
-                            {application.work_history.slice(0, 2).map((work, index) => (
-                              <div key={index} className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded">
-                                <p className="font-medium">{work.position} at {work.organization}</p>
-                                <p className="text-gray-500 dark:text-gray-400">
-                                  {work.start_date} - {work.end_date || 'Present'}
-                                </p>
-                              </div>
-                            ))}
-                            {application.work_history.length > 2 && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                +{application.work_history.length - 2} more positions
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {application.malpractice_insurance && (
-                        <div className="mt-4">
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Malpractice Insurance</p>
-                          <div className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded">
-                            <p><span className="font-medium">Carrier:</span> {application.malpractice_insurance.carrier}</p>
-                            <p><span className="font-medium">Policy:</span> {application.malpractice_insurance.policy_number}</p>
-                            <p><span className="font-medium">Coverage:</span> {application.malpractice_insurance.coverage_start} - {application.malpractice_insurance.coverage_end}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
+      <div className="flex flex-col lg:flex-row gap-6 flex-1">
         {/* Practitioner Details Sidebar */}
-        <div>
+        <div className="lg:w-80 lg:flex-shrink-0">
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center space-x-2">
@@ -616,27 +592,6 @@ const PractitionerDetail: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Other Names</p>
                   <p className="text-gray-900 dark:text-gray-100">{practitioner.other_names}</p>
-                </div>
-              )}
-
-              {practitioner.demographics && (
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Demographics</p>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {(() => {
-                      const parsedDemo = parseDemographics(practitioner.demographics);
-                      if (parsedDemo && Array.isArray(parsedDemo)) {
-                        return (
-                          <div className="space-y-1">
-                            {parsedDemo.map((item, index) => (
-                              <div key={index}>{item}</div>
-                            ))}
-                          </div>
-                        );
-                      }
-                      return parsedDemo || 'No demographic information available';
-                    })()}
-                  </div>
                 </div>
               )}
 
@@ -730,6 +685,33 @@ const PractitionerDetail: React.FC = () => {
                 </div>
               )}
 
+              {practitioner.demographics && (
+                <Accordion type="single" collapsible>
+                  <AccordionItem value="demographics">
+                    <AccordionTrigger className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Demographics
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 p-2 rounded">
+                        {(() => {
+                          const parsedDemo = parseDemographics(practitioner.demographics);
+                          if (parsedDemo && Array.isArray(parsedDemo)) {
+                            return (
+                              <div className="space-y-1">
+                                {parsedDemo.map((item, index) => (
+                                  <div key={index}>{item}</div>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return parsedDemo || 'No demographic information available';
+                        })()}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              )}
+
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Created</span>
@@ -747,6 +729,103 @@ const PractitionerDetail: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Applications Section */}
+        <div className="flex-1">
+          <div className="bg-white dark:bg-gray-800">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center space-x-2">
+                <FileText className="w-5 h-5" />
+                <span>Applications</span>
+              </h2>
+            </div>
+            
+            <div className="p-6">
+              {applications.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">No applications found for this provider.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {applications.map((application) => (
+                    <div key={application.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                            Application #{application.id}
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Created {new Date(application.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium border ${getStatusColor(application.status || '')}`}>
+                          {getStatusIcon(application.status || '')}
+                          <span>{application.status?.replace('_', ' ') || 'Unknown'}</span>
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500 dark:text-gray-400">NPI Number</p>
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
+                            {application.npi_number || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 dark:text-gray-400">License Number</p>
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
+                            {application.license_number || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 dark:text-gray-400">DEA Number</p>
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
+                            {application.dea_number || 'Not provided'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {application.work_history && application.work_history.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Work History</p>
+                          <div className="space-y-2">
+                            {application.work_history.slice(0, 2).map((work, index) => (
+                              <div key={index} className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded">
+                                <p className="font-medium">{work.position} at {work.organization}</p>
+                                <p className="text-gray-500 dark:text-gray-400">
+                                  {work.start_date} - {work.end_date || 'Present'}
+                                </p>
+                              </div>
+                            ))}
+                            {application.work_history.length > 2 && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                +{application.work_history.length - 2} more positions
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {application.malpractice_insurance && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Malpractice Insurance</p>
+                          <div className="text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded">
+                            <p><span className="font-medium">Carrier:</span> {application.malpractice_insurance.carrier}</p>
+                            <p><span className="font-medium">Policy:</span> {application.malpractice_insurance.policy_number}</p>
+                            <p><span className="font-medium">Coverage:</span> {application.malpractice_insurance.coverage_start} - {application.malpractice_insurance.coverage_end}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+
       </div>
 
       {/* Attestations Dialog */}
@@ -803,6 +882,11 @@ const PractitionerDetail: React.FC = () => {
                               
                               const isExpanded = expandedAttestationSections.has(`${attestation.id}-${category}`);
                               
+                              const responsesCount = items.filter(({ value }) => {
+                                const status = getAttestationStatus(value);
+                                return status.hasResponse;
+                              }).length;
+                              
                               return (
                                 <div key={category} className="mb-4">
                                   <button
@@ -811,9 +895,11 @@ const PractitionerDetail: React.FC = () => {
                                   >
                                     <span className="font-medium text-gray-900 dark:text-gray-100">{category}</span>
                                     <div className="flex items-center space-x-2">
-                                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                                        {items.length} items
-                                      </span>
+                                      {responsesCount > 0 && (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                                          {responsesCount} responses
+                                        </span>
+                                      )}
                                       {isExpanded ? (
                                         <ChevronDown className="w-4 h-4" />
                                       ) : (
@@ -825,7 +911,7 @@ const PractitionerDetail: React.FC = () => {
                                   {isExpanded && (
                                     <div className="mt-2 space-y-2">
                                       {items.map(({ key, value }) => (
-                                        <div key={key} className="flex items-start justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded">
+                                        <div key={key} className="flex items-start justify-between p-3 bg-white dark:bg-gray-800">
                                           <div className="flex-1">
                                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                               {formatAttestationKey(key.replace(/^[^_]+_[^_]+_/, ''))}
@@ -837,11 +923,7 @@ const PractitionerDetail: React.FC = () => {
                                             )}
                                           </div>
                                           <div className="ml-4 flex items-center">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                              value.response 
-                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                                                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
-                                            }`}>
+                                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getAttestationStatus(value).color}`}>
                                               {value.response ? 'Yes' : 'No'}
                                             </span>
                                           </div>

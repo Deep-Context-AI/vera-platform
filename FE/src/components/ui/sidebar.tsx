@@ -5,29 +5,30 @@ import Link, { LinkProps } from "next/link";
 import React, { useState, createContext, useContext, useMemo, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
+import { setSidebarStateCookie } from "@/lib/sidebar-state";
 
-// Custom hook to handle localStorage with SSR - prevents hydration mismatch
-function useLocalStorage(key: string, defaultValue: boolean) {
-  // Always start with the default value to match SSR
-  const [value, setValue] = useState(defaultValue);
+// Enhanced hook that works with both localStorage and cookies
+function useSidebarState(key: string, defaultValue: boolean, initialServerState?: boolean) {
+  // Use server state if provided, otherwise use default
+  const [value, setValue] = useState(initialServerState ?? defaultValue);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     
-    // After mounting, read from localStorage and update if different
+    // After mounting, sync with localStorage if different from server state
     try {
       const item = window.localStorage.getItem(key);
       if (item !== null) {
         const storedValue = JSON.parse(item);
-        if (storedValue !== defaultValue) {
+        if (storedValue !== value) {
           setValue(storedValue);
         }
       }
     } catch (error) {
       console.error(`Error reading localStorage key "${key}":`, error);
     }
-  }, [key, defaultValue]);
+  }, [key, value]);
 
   const setStoredValue = useCallback((newValue: boolean | ((val: boolean) => boolean)) => {
     try {
@@ -35,7 +36,9 @@ function useLocalStorage(key: string, defaultValue: boolean) {
       setValue(valueToStore);
       
       if (mounted && typeof window !== 'undefined') {
+        // Update both localStorage and cookie
         window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        setSidebarStateCookie(valueToStore);
       }
     } catch (error) {
       console.error(`Error setting localStorage key "${key}":`, error);
@@ -74,13 +77,15 @@ export const SidebarProvider = React.memo(({
   open: openProp,
   setOpen: setOpenProp,
   animate = true,
+  initialServerState,
 }: {
   children: React.ReactNode;
   open?: boolean;
   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   animate?: boolean;
+  initialServerState?: boolean;
 }) => {
-  const [openState, setOpenState, mounted] = useLocalStorage('sidebar-open', true);
+  const [openState, setOpenState, mounted] = useSidebarState('sidebar-open', true, initialServerState);
 
   const open = openProp !== undefined ? openProp : openState;
   
@@ -115,14 +120,16 @@ export const Sidebar = React.memo(({
   open,
   setOpen,
   animate,
+  initialServerState,
 }: {
   children: React.ReactNode;
   open?: boolean;
   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   animate?: boolean;
+  initialServerState?: boolean;
 }) => {
   return (
-    <SidebarProvider open={open} setOpen={setOpen} animate={animate}>
+    <SidebarProvider open={open} setOpen={setOpen} animate={animate} initialServerState={initialServerState}>
       {children}
     </SidebarProvider>
   );
@@ -163,7 +170,7 @@ export const DesktopSidebar = React.memo(({
         "h-full hidden md:flex md:flex-col bg-neutral-100 dark:bg-neutral-800 flex-shrink-0",
         className
       )}
-      initial={{ width: "300px" }} // Always start with open state to match SSR
+      initial={animationConfig} // Start with the correct state based on server/cookie state
       animate={animationConfig}
       transition={transition}
       {...props}
