@@ -6,11 +6,7 @@ import {
   User, 
   FileText, 
   Shield, 
-  Clock, 
-  CheckCircle, 
   AlertTriangle, 
-  AlertCircle,
-  Eye,
   MapPin,
   Mail,
   GraduationCap,
@@ -30,6 +26,7 @@ import type {
   AttestationResponse 
 } from '@/types/applications';
 import { Button } from '@/components/ui/button';
+import { getApplicationStatusColor, getApplicationStatusIcon } from '@/lib/utils';
 import Link from 'next/link';
 
 const PractitionerDetail: React.FC = () => {
@@ -172,39 +169,7 @@ const PractitionerDetail: React.FC = () => {
     return parts.join(' ');
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'verified':
-      case 'approved':
-        return 'text-green-600 bg-green-100 border-green-200';
-      case 'pending':
-      case 'submitted':
-        return 'text-yellow-600 bg-yellow-100 border-yellow-200';
-      case 'under_review':
-        return 'text-blue-600 bg-blue-100 border-blue-200';
-      case 'rejected':
-        return 'text-red-600 bg-red-100 border-red-200';
-      default:
-        return 'text-gray-600 bg-gray-100 border-gray-200';
-    }
-  };
 
-  const getStatusIcon = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'verified':
-      case 'approved':
-        return <CheckCircle className="w-4 h-4" />;
-      case 'pending':
-      case 'submitted':
-        return <Clock className="w-4 h-4" />;
-      case 'under_review':
-        return <Eye className="w-4 h-4" />;
-      case 'rejected':
-        return <AlertTriangle className="w-4 h-4" />;
-      default:
-        return <AlertCircle className="w-4 h-4" />;
-    }
-  };
 
   const formatAttestationKey = (key: string) => {
     // List of terms that should be capitalized
@@ -525,8 +490,11 @@ const PractitionerDetail: React.FC = () => {
                 {formatName(practitioner)}
               </h1>
               {applications.length > 0 && (
-                <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(applications[0].status || '')}`}>
-                  {getStatusIcon(applications[0].status || '')}
+                <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium border ${getApplicationStatusColor(applications[0].status || '')}`}>
+                  {(() => {
+                    const IconComponent = getApplicationStatusIcon(applications[0].status || '');
+                    return <IconComponent className="w-4 h-4" />;
+                  })()}
                   <span>{applications[0].status?.replace('_', ' ') || 'Unknown'}</span>
                 </span>
               )}
@@ -759,8 +727,11 @@ const PractitionerDetail: React.FC = () => {
                             Created {new Date(application.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium border ${getStatusColor(application.status || '')}`}>
-                          {getStatusIcon(application.status || '')}
+                        <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium border ${getApplicationStatusColor(application.status || '')}`}>
+                          {(() => {
+                            const IconComponent = getApplicationStatusIcon(application.status || '');
+                            return <IconComponent className="w-4 h-4" />;
+                          })()}
                           <span>{application.status?.replace('_', ' ') || 'Unknown'}</span>
                         </span>
                       </div>

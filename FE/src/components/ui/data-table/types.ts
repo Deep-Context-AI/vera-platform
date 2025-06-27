@@ -88,6 +88,7 @@ export interface DataTableConfig<TData = any> {
   onRowClick?: (row: Row<TData>) => void;
   onRowDoubleClick?: (row: Row<TData>) => void;
   className?: string;
+  toolbarActions?: ReactNode;
 }
 
 // Search and filter state

@@ -4,21 +4,23 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { 
   Plus, 
   Upload, 
-  Users, 
-  Clock, 
-  FileText, 
-  CheckCircle, 
-  AlertTriangle, 
-  Shield,
-  AlertCircle,
   Download,
   Eye,
-  Edit
+  Edit,
+  MoreVertical,
+  AlertTriangle
 } from 'lucide-react';
 import { DataTable, ExtendedColumnDef } from '@/components/ui/data-table';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ApplicationsAPI } from '@/lib/api';
 import { ApplicationDetailsView } from '@/types/applications';
+import { getVerificationStatusColor, getVerificationStatusIcon } from '@/lib/utils';
 
 interface PaginationState {
   page: number;
@@ -30,6 +32,7 @@ interface PaginationState {
 const ProvidersPage: React.FC = () => {
   const [applications, setApplications] = useState<ApplicationDetailsView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isPaginating, setIsPaginating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
@@ -39,8 +42,12 @@ const ProvidersPage: React.FC = () => {
   });
 
   // Fetch applications from the view with pagination
-  const fetchApplications = useCallback(async (page: number = 1, pageSize: number = 25) => {
-    setLoading(true);
+  const fetchApplications = useCallback(async (page: number = 1, pageSize: number = 25, isPaginationRequest: boolean = false) => {
+    if (isPaginationRequest) {
+      setIsPaginating(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     
     try {
@@ -76,6 +83,7 @@ const ProvidersPage: React.FC = () => {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setLoading(false);
+      setIsPaginating(false);
     }
   }, []);
 
@@ -87,7 +95,7 @@ const ProvidersPage: React.FC = () => {
   // Handle page change
   const handlePageChange = useCallback((newPage: number) => {
     if (newPage >= 1 && newPage <= pagination.totalPages) {
-      fetchApplications(newPage, pagination.pageSize);
+      fetchApplications(newPage, pagination.pageSize, true); // true indicates this is a pagination request
     }
   }, [pagination.totalPages, pagination.pageSize, fetchApplications]);
 
@@ -96,107 +104,23 @@ const ProvidersPage: React.FC = () => {
     fetchApplications(1, newPageSize); // Reset to page 1 when changing page size
   }, [fetchApplications]);
 
-  // Calculate enhanced stats from the current page data
-  const stats = {
-    total: pagination.total,
-    verified: applications.filter(app => app.verification_status === 'VERIFIED').length,
-    npiMissing: applications.filter(app => app.verification_status === 'NPI_MISSING').length,
-    npiInactive: applications.filter(app => app.verification_status === 'NPI_INACTIVE').length,
-    submitted: applications.filter(app => app.status === 'SUBMITTED').length,
-    underReview: applications.filter(app => app.status === 'UNDER_REVIEW').length,
-    approved: applications.filter(app => app.status === 'APPROVED').length,
+  // Action handlers
+  const handleExport = () => {
+    console.log('Export data');
+    // TODO: Implement export functionality
   };
 
-  // Get verification status badge color
-  const getVerificationStatusColor = (status: string) => {
-    switch (status) {
-      case 'VERIFIED':
-        return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300';
-      case 'NPI_MISSING':
-        return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300';
-      case 'NPI_INACTIVE':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300';
-      case 'APPROVED':
-        return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300';
-      case 'UNDER_REVIEW':
-        return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300';
-    }
+  const handleImport = () => {
+    console.log('Import data');
+    // TODO: Implement import functionality
   };
 
-  // Get verification status icon
-  const getVerificationStatusIcon = (status: string) => {
-    switch (status) {
-      case 'VERIFIED':
-        return <Shield className="w-4 h-4 text-green-600" />;
-      case 'NPI_MISSING':
-        return <AlertTriangle className="w-4 h-4 text-red-600" />;
-      case 'NPI_INACTIVE':
-        return <AlertCircle className="w-4 h-4 text-yellow-600" />;
-      case 'APPROVED':
-        return <CheckCircle className="w-4 h-4 text-blue-600" />;
-      case 'UNDER_REVIEW':
-        return <Clock className="w-4 h-4 text-purple-600" />;
-      default:
-        return <FileText className="w-4 h-4 text-gray-600" />;
-    }
+  const handleAddApplication = () => {
+    console.log('Add new application');
+    // TODO: Implement add application functionality
   };
 
-  // Skeleton loading component for stats
-  const StatsCardSkeleton = () => (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center space-x-2">
-        <Skeleton className="h-5 w-5" />
-        <div>
-          <Skeleton className="h-4 w-16 mb-1" />
-          <Skeleton className="h-6 w-8" />
-        </div>
-      </div>
-    </div>
-  );
 
-  // Skeleton loading component for table rows
-  const TableRowSkeleton = () => (
-    <tr className="border-b border-gray-200 dark:border-gray-700">
-      <td className="px-6 py-4">
-        <Skeleton className="h-4 w-12" />
-      </td>
-      <td className="px-6 py-4">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-20" />
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        <Skeleton className="h-4 w-28" />
-      </td>
-      <td className="px-6 py-4">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-36" />
-          <Skeleton className="h-3 w-24" />
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        <Skeleton className="h-6 w-24 rounded-full" />
-      </td>
-      <td className="px-6 py-4">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-3 w-16" />
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        <Skeleton className="h-4 w-20" />
-      </td>
-      <td className="px-6 py-4">
-        <div className="flex items-center space-x-2">
-          <Skeleton className="h-4 w-4" />
-          <Skeleton className="h-4 w-4" />
-        </div>
-      </td>
-    </tr>
-  );
 
   // Define enhanced table columns using the view data
   const columns: ExtendedColumnDef<ApplicationDetailsView>[] = [
@@ -270,12 +194,15 @@ const ProvidersPage: React.FC = () => {
     {
       accessorKey: "verification_status",
       header: "Verification Status",
-      cellRenderer: ({ value }) => (
-        <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium border ${getVerificationStatusColor(value)}`}>
-          {getVerificationStatusIcon(value)}
-          <span>{value.replace('_', ' ')}</span>
-        </div>
-      ),
+      cellRenderer: ({ value }) => {
+        const IconComponent = getVerificationStatusIcon(value);
+        return (
+          <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium border ${getVerificationStatusColor(value)}`}>
+            <IconComponent className="w-4 h-4" />
+            <span>{value.replace('_', ' ')}</span>
+          </div>
+        );
+      },
       enableSorting: true,
       enableFiltering: true,
       filterType: "select",
@@ -351,7 +278,7 @@ const ProvidersPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -360,99 +287,6 @@ const ProvidersPage: React.FC = () => {
             Comprehensive provider applications with NPI verification and practitioner details
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <button className="flex items-center space-x-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <Download className="w-4 h-4" />
-            <span>Export</span>
-          </button>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <Upload className="w-4 h-4" />
-            <span>Import</span>
-          </button>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            <Plus className="w-4 h-4" />
-            <span>Add Application</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Enhanced Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-        {loading ? (
-          // Show skeleton loading for stats
-          <>
-            {Array.from({ length: 7 }).map((_, index) => (
-              <StatsCardSkeleton key={index} />
-            ))}
-          </>
-        ) : (
-          // Show actual stats
-          <>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <Users className="w-5 h-5 text-blue-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <Shield className="w-5 h-5 text-green-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Verified</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.verified}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">NPI Missing</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.npiMissing}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">NPI Inactive</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.npiInactive}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="w-5 h-5 text-blue-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Approved</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.approved}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <Clock className="w-5 h-5 text-purple-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Under Review</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.underReview}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <FileText className="w-5 h-5 text-orange-600" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Submitted</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.submitted}</p>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
       {/* Error State */}
@@ -475,81 +309,13 @@ const ProvidersPage: React.FC = () => {
       )}
 
       {/* Enhanced Applications Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Provider Applications with Verification Details
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Complete provider information with NPI verification status and practitioner details
-              </p>
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {((pagination.page - 1) * pagination.pageSize) + 1} to {Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total} results
-            </div>
-          </div>
-        </div>
-
+      <div className="bg-white dark:bg-gray-800">
         <div className="p-6">
-          {loading ? (
-            // Show skeleton loading for table
-            <div className="space-y-4">
-              {/* Search bar skeleton */}
-              <div className="flex items-center space-x-4 mb-6">
-                <Skeleton className="h-10 w-80" />
-                <Skeleton className="h-10 w-32" />
-                <Skeleton className="h-10 w-24" />
-              </div>
-              
-              {/* Table skeleton */}
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-8" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-24" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-28" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-32" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-24" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-16" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-20" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-16" /></th>
-                      <th className="px-6 py-3"><Skeleton className="h-4 w-16" /></th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {Array.from({ length: pagination.pageSize }).map((_, index) => (
-                      <TableRowSkeleton key={index} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Pagination skeleton */}
-              <div className="flex items-center justify-between px-2 py-4">
-                <div className="flex items-center space-x-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-8 w-16" />
-                </div>
-                <div className="flex items-center space-x-6">
-                  <Skeleton className="h-4 w-32" />
-                  <div className="flex items-center space-x-2">
-                    <Skeleton className="h-8 w-12" />
-                    <Skeleton className="h-8 w-16" />
-                    <Skeleton className="h-8 w-12" />
-                    <Skeleton className="h-8 w-12" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <DataTable
+          <DataTable
                 data={applications}
                 columns={columns}
-                isLoading={false}
+                isLoading={loading}
+                isPaginating={isPaginating}
                 enableSorting={true}
                 enableFiltering={true}
                 enableColumnVisibility={true}
@@ -557,9 +323,37 @@ const ProvidersPage: React.FC = () => {
                 enablePagination={false} // Disable internal pagination
                 searchable={true}
                 searchPlaceholder="Search by provider name, NPI, license, specialty, or taxonomy code..."
+                tableId="providers-table" // Unique ID for column preferences persistence
+                enableRowAnimation={true}
+                animationDelay={30} // Faster animation for better UX with many rows
                 onRowClick={(row) => {
                   window.location.href = `/providers/${row.original.provider_id || row.original.id}`;
                 }}
+                toolbarActions={
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <MoreVertical className="w-4 h-4" />
+                        <span>Actions</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem onClick={handleAddApplication}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Application
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleExport}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Data
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleImport}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Data
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                }
               />
               
               {/* Custom Server-Side Pagination */}
@@ -617,8 +411,6 @@ const ProvidersPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </>
-          )}
         </div>
       </div>
     </div>

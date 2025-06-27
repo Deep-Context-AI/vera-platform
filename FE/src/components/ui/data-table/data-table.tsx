@@ -4,14 +4,12 @@ import {
   ColumnDef,
   ColumnFiltersState,
   SortingState,
-  VisibilityState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-  GlobalFilterFn,
   Row,
 } from "@tanstack/react-table";
 import { useState, useMemo, useCallback } from "react";
@@ -21,7 +19,9 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Table,
@@ -31,14 +31,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ChevronDown, Search, Settings2, X } from "lucide-react";
+import { ChevronDown, Search, Settings2, X, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTableColumnHeader } from "./column-header";
-import { DataTableCell } from "./data-table-cell";
-import { DataTableConfig, ExtendedColumnDef } from "./types";
+import { DataTableCell } from "@/components/ui/data-table/data-table-cell";
+import { DataTableConfig } from "@/components/ui/data-table/types";
+import { useColumnPreferences } from "@/hooks/useColumnPreferences";
+import { TableRowFadeIn } from "@/components/ui/table-row-fade-in";
 
 // Global filter function for search
-const globalFilterFn: GlobalFilterFn<any> = (
+const globalFilterFn = (
   row: Row<any>,
   columnId: string,
   value: string
@@ -75,9 +77,16 @@ const globalFilterFn: GlobalFilterFn<any> = (
 
 interface DataTableProps<TData> extends DataTableConfig<TData> {
   isLoading?: boolean;
+  isPaginating?: boolean; // New prop for pagination-specific loading
   error?: string | null;
   onRefresh?: () => void;
+  tableId?: string; // Unique identifier for localStorage persistence
+  enableRowAnimation?: boolean; // Enable fade-in animation for rows
+  animationDelay?: number; // Delay between row animations in ms
 }
+
+// Stable empty object to prevent re-renders
+const EMPTY_VISIBILITY = {};
 
 export function DataTable<TData>({
   data,
@@ -94,14 +103,29 @@ export function DataTable<TData>({
   onRowDoubleClick,
   className,
   isLoading = false,
+  isPaginating = false,
   error = null,
   onRefresh,
+  toolbarActions,
+  tableId = "default-table",
+  enableRowAnimation = true,
+  animationDelay = 50,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
   const [globalFilter, setGlobalFilter] = useState("");
+
+  // Use the column preferences hook for persistent column visibility
+  const {
+    columnVisibility,
+    setColumnVisibility,
+    resetColumnPreferences,
+    isLoaded: preferencesLoaded,
+  } = useColumnPreferences({
+    tableId,
+    defaultVisibility: EMPTY_VISIBILITY,
+  });
 
   // Convert extended column definitions to TanStack Table format
   const columns = useMemo<ColumnDef<TData>[]>(() => {
@@ -164,6 +188,12 @@ export function DataTable<TData>({
       } : undefined,
     },
   });
+
+  // Show loading state while preferences are being loaded
+  const isTableLoading = isLoading || (enableColumnVisibility && !preferencesLoaded);
+  
+  // Determine if we should show full skeleton or just animate rows
+  const shouldShowSkeleton = isTableLoading && !isPaginating;
 
   const handleRowClick = useCallback((row: Row<TData>) => {
     if (onRowClick) {
@@ -241,14 +271,22 @@ export function DataTable<TData>({
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Row count */}
-          <div className="text-sm text-gray-700">
-            {table.getFilteredRowModel().rows.length} of {data.length} row(s)
-            {enableRowSelection && table.getFilteredSelectedRowModel().rows.length > 0 && (
-              <span className="ml-2">
-                ({table.getFilteredSelectedRowModel().rows.length} selected)
-              </span>
+          {/* Row count with pagination loading indicator */}
+          <div className="text-sm text-gray-700 flex items-center space-x-2">
+            {isPaginating && ( 
+              <div className="flex items-center space-x-1">
+                <div className="animate-spin rounded-full h-3 w-3 border border-blue-600 border-t-transparent"></div>
+                <span className="text-xs text-blue-600">Loading...</span>
+              </div>
             )}
+            <span>
+              {table.getFilteredRowModel().rows.length} of {data.length} row(s)
+              {enableRowSelection && table.getFilteredSelectedRowModel().rows.length > 0 && (
+                <span className="ml-2">
+                  ({table.getFilteredSelectedRowModel().rows.length} selected)
+                </span>
+              )}
+            </span>
           </div>
 
           {/* Column visibility */}
@@ -261,11 +299,15 @@ export function DataTable<TData>({
                   <ChevronDown className="ml-2 h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[150px]">
+              <DropdownMenuContent align="end" className="w-[180px]">
                 {table
                   .getAllColumns()
                   .filter((column) => column.getCanHide())
                   .map((column) => {
+                    // Get the original column definition for better display names
+                    const extendedCol = extendedColumns.find(col => col.accessorKey === column.id);
+                    const displayName = extendedCol?.header || column.id;
+                    
                     return (
                       <DropdownMenuCheckboxItem
                         key={column.id}
@@ -273,13 +315,24 @@ export function DataTable<TData>({
                         checked={column.getIsVisible()}
                         onCheckedChange={(value) => column.toggleVisibility(!!value)}
                       >
-                        {column.id}
+                        {displayName}
                       </DropdownMenuCheckboxItem>
                     );
                   })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={resetColumnPreferences}
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset to Default
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {/* Custom toolbar actions */}
+          {toolbarActions}
 
           {/* Refresh button */}
           {onRefresh && (
@@ -287,9 +340,9 @@ export function DataTable<TData>({
               variant="outline" 
               size="sm" 
               onClick={onRefresh}
-              disabled={isLoading}
+              disabled={isTableLoading}
             >
-              {isLoading ? "Loading..." : "Refresh"}
+              {isTableLoading ? "Loading..." : "Refresh"}
             </Button>
           )}
         </div>
@@ -312,7 +365,7 @@ export function DataTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {shouldShowSkeleton ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
                   <div className="flex items-center justify-center">
@@ -322,29 +375,57 @@ export function DataTable<TData>({
                 </TableCell>
               </TableRow>
             ) : table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                  className={cn(
-                    "cursor-pointer hover:bg-gray-50",
-                    onRowClick && "cursor-pointer",
-                    row.getIsSelected() && "bg-blue-50"
-                  )}
-                  onClick={() => handleRowClick(row)}
-                  onDoubleClick={() => handleRowDoubleClick(row)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell 
-                      key={cell.id} 
-                      style={{ width: cell.column.getSize() }}
-                      className="p-0"
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row, index) => {
+                return enableRowAnimation ? (
+                  <TableRowFadeIn
+                    key={row.id}
+                    index={index}
+                    delay={animationDelay}
+                    isVisible={!isPaginating}
+                    enableAnimation={true}
+                    data-state={row.getIsSelected() && "selected"}
+                    className={cn(
+                      "cursor-pointer hover:bg-gray-50",
+                      onRowClick && "cursor-pointer",
+                      row.getIsSelected() && "bg-blue-50"
+                    )}
+                    onClick={() => handleRowClick(row)}
+                    onDoubleClick={() => handleRowDoubleClick(row)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell 
+                        key={cell.id} 
+                        style={{ width: cell.column.getSize() }}
+                        className="p-0"
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRowFadeIn>
+                ) : (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                    className={cn(
+                      "cursor-pointer hover:bg-gray-50",
+                      onRowClick && "cursor-pointer",
+                      row.getIsSelected() && "bg-blue-50"
+                    )}
+                    onClick={() => handleRowClick(row)}
+                    onDoubleClick={() => handleRowDoubleClick(row)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell 
+                        key={cell.id} 
+                        style={{ width: cell.column.getSize() }}
+                        className="p-0"
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
