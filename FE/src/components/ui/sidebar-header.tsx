@@ -10,7 +10,9 @@ import {
   BarChart3, 
   Search,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Gavel,
+  Mail,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSidebar } from './sidebar';
@@ -23,15 +25,26 @@ const ICONS = {
   settings: <Settings className="h-5 w-5" />,
   barChart: <BarChart3 className="h-5 w-5" />,
   search: <Search className="h-5 w-5" />,
+  gavel: <Gavel className="h-5 w-5" />,
+  mail: <Mail className="h-5 w-5" />,
+  workflow: <Settings className="h-5 w-5" />,
 } as const;
 
 const getPageInfo = (pathname: string) => {
   if (pathname === '/' || pathname.startsWith('/dashboard')) {
     return { icon: ICONS.home, name: 'Dashboard' };
+  } else if (pathname.startsWith('/providers')) {
+    return { icon: ICONS.users, name: 'Providers' };
+  } else if (pathname.startsWith('/committee')) {
+    return { icon: ICONS.gavel, name: 'Committee' };
+  } else if (pathname.startsWith('/inbox')) {
+    return { icon: ICONS.mail, name: 'Inbox' };
   } else if (pathname.startsWith('/verification')) {
     return { icon: ICONS.fileCheck, name: 'Verification' };
   } else if (pathname.startsWith('/practitioners')) {
     return { icon: ICONS.users, name: 'Practitioners' };
+  } else if (pathname.startsWith('/workflows')) {
+    return { icon: ICONS.workflow, name: 'Workflows' };
   } else if (pathname.startsWith('/settings')) {
     return { icon: ICONS.settings, name: 'Settings' };
   } else if (pathname.startsWith('/analytics')) {

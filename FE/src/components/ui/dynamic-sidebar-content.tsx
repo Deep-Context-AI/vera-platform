@@ -63,8 +63,8 @@ const SIDEBAR_CONFIGS = {
   ],
   providers: [
     { label: 'Applications', href: '/providers', icon: ICONS.users },
-    { label: 'Batches', href: '/providers/batches', icon: ICONS.users },
-    { label: 'Reports', href: '/providers/reports', icon: ICONS.fileText },
+    { label: 'Batches', href: '/providers/batches', icon: ICONS.fileText },
+    { label: 'Reports', href: '/providers/reports', icon: ICONS.barChart },
   ],
   committee: [
     { label: 'All Cases', href: '/committee', icon: ICONS.gavel },
@@ -132,6 +132,40 @@ const getSidebarConfig = (pathname: string): readonly SidebarItem[] => {
   }
 };
 
+// Function to determine if a route is active
+const isRouteActive = (itemHref: string, currentPathname: string): boolean => {
+  // Exact match for root paths
+  if (itemHref === '/' && currentPathname === '/') {
+    return true;
+  }
+  
+  // For non-root paths
+  if (itemHref !== '/') {
+    // Exact match
+    if (currentPathname === itemHref) {
+      return true;
+    }
+    
+    // Don't mark anything as active for detail pages (paths with IDs)
+    // Check if current path looks like a detail page (e.g., /providers/123)
+    const pathSegments = currentPathname.split('/').filter(Boolean);
+    const itemSegments = itemHref.split('/').filter(Boolean);
+    
+    // If we're on a detail page (has more segments and the last segment looks like an ID)
+    if (pathSegments.length > itemSegments.length) {
+      const lastSegment = pathSegments[pathSegments.length - 1];
+      // Check if the last segment is numeric (likely an ID) or looks like a UUID
+      if (/^\d+$/.test(lastSegment) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lastSegment)) {
+        return false; // Don't highlight any sidebar item for detail pages
+      }
+    }
+    
+    return false;
+  }
+  
+  return false;
+};
+
 const DynamicSidebarContent: React.FC = React.memo(() => {
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
@@ -194,6 +228,7 @@ const DynamicSidebarContent: React.FC = React.memo(() => {
         >
           <SidebarLink
             link={item}
+            isActive={isRouteActive(item.href, pathname)}
             className="hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-md px-2"
           />
         </div>

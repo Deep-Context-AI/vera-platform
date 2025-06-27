@@ -155,7 +155,7 @@ export const DesktopSidebar = React.memo(({
   
   // Memoize animation config to prevent unnecessary re-renders
   const animationConfig = useMemo(() => ({
-    width: open ? "300px" : "60px",
+    width: open ? "225px" : "60px",
   }), [open]);
 
   // Memoize transition config - disable transition on initial render
@@ -242,10 +242,12 @@ MobileSidebar.displayName = "MobileSidebar";
 export const SidebarLink = React.memo(({
   link,
   className,
+  isActive = false,
   ...props
 }: {
   link: Links;
   className?: string;
+  isActive?: boolean;
   props?: LinkProps;
 }) => {
   const { open, animate } = useSidebar();
@@ -270,6 +272,7 @@ export const SidebarLink = React.memo(({
       href={link.href}
       className={cn(
         "flex items-center justify-start group/sidebar py-2",
+        isActive && "bg-neutral-200 dark:bg-neutral-700",
         className
       )}
       {...props}
@@ -280,7 +283,12 @@ export const SidebarLink = React.memo(({
       <motion.span
         animate={textAnimation}
         transition={textTransition}
-        className="text-neutral-700 dark:text-neutral-200 text-sm group-hover/sidebar:translate-x-1 whitespace-nowrap overflow-hidden"
+        className={cn(
+          "text-sm whitespace-nowrap overflow-hidden",
+          isActive 
+            ? "text-neutral-900 dark:text-neutral-100 font-medium" 
+            : "text-neutral-700 dark:text-neutral-200"
+        )}
       >
         {link.label}
       </motion.span>
