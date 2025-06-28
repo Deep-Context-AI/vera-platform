@@ -68,13 +68,13 @@ class DEAModel(BaseDBModel):
     number: Optional[str] = Field(None, description="DEA registration number (unique)")
     business_activity_code: Optional[str] = Field(None, description="Business activity code")
     registration_status: Optional[str] = Field(None, description="Registration status")
-    authorized_schedules: Optional[Dict[str, Any]] = Field(None, description="Authorized schedules as JSON")
+    authorized_schedules: Optional[List[str]] = Field(None, description="Authorized drug schedules")
     issue_date: Optional[date] = Field(None, description="Date when DEA was issued")
     expiration: Optional[date] = Field(None, description="DEA expiration date")
     state: Optional[str] = Field(None, description="State of registration")
     paid_status: Optional[str] = Field(None, description="Payment status")
     has_restrictions: Optional[bool] = Field(None, description="Whether there are restrictions")
-    restriction_details: Optional[Dict[str, Any]] = Field(None, description="Restriction details as JSON")
+    restriction_details: Optional[List[str]] = Field(None, description="Restriction details")
     practitioner_id: Optional[int] = Field(None, description="Foreign key to practitioners table")
 
 class HospitalPrivilegesModel(BaseDBModel):
@@ -88,6 +88,29 @@ class HospitalPrivilegesModel(BaseDBModel):
     hospital: Optional[str] = Field(None, description="Hospital name")
     specialty: Optional[str] = Field(None, description="Medical specialty")
 
+# Enhanced models for Medical JSONB fields
+class MedicalAddress(BaseModel):
+    """Pydantic model for medical address JSONB field"""
+    street: Optional[str] = Field(None, description="Street address")
+    city: Optional[str] = Field(None, description="City")
+    state: Optional[str] = Field(None, description="State")
+    zip: Optional[str] = Field(None, description="ZIP code")
+
+class ManagedCareData(BaseModel):
+    """Pydantic model for managed care JSONB field"""
+    address: Optional[MedicalAddress] = Field(None, description="Provider address")
+    last_updated: Optional[str] = Field(None, description="Last updated date")
+    match_status: Optional[str] = Field(None, description="Match status (verified, unverified, pending)")
+    effective_date: Optional[str] = Field(None, description="Effective date")
+    plan_participation: Optional[List[str]] = Field(None, description="List of participating plans")
+
+class ORPData(BaseModel):
+    """Pydantic model for ORP JSONB field"""
+    status: Optional[str] = Field(None, description="Provider status (Active, Inactive)")
+    last_updated: Optional[str] = Field(None, description="Last updated date")
+    match_status: Optional[str] = Field(None, description="Match status (verified, pending, not_found)")
+    enrollment_date: Optional[str] = Field(None, description="Enrollment date")
+
 class MedicalModel(BaseDBModel):
     """Pydantic model for the Medical table"""
     id: Optional[int] = Field(None, description="Auto-generated primary key")
@@ -97,6 +120,33 @@ class MedicalModel(BaseDBModel):
     orp: Optional[Dict[str, Any]] = Field(None, description="ORP (Other Recognized Provider) data as JSON")
     notes: Optional[str] = Field(None, description="Additional notes")
 
+class MedicalModelEnhanced(BaseDBModel):
+    """Enhanced Pydantic model for the Medical table with typed JSONB fields"""
+    id: Optional[int] = Field(None, description="Auto-generated primary key")
+    npi_number: Optional[str] = Field(None, description="National Provider Identifier")
+    practitioner_id: Optional[int] = Field(None, description="Foreign key to practitioners table")
+    managed_care: Optional[ManagedCareData] = Field(None, description="Managed care data")
+    orp: Optional[ORPData] = Field(None, description="ORP (Other Recognized Provider) data")
+    notes: Optional[str] = Field(None, description="Additional notes")
+
+# Enhanced models for Medicare JSONB fields
+class FFSProviderEnrollmentData(BaseModel):
+    """Pydantic model for FFS Provider Enrollment JSONB field"""
+    specialty: Optional[str] = Field(None, description="Provider specialty")
+    last_updated: Optional[str] = Field(None, description="Last updated date")
+    reassignment: Optional[str] = Field(None, description="Reassignment status (Yes/No)")
+    enrollment_type: Optional[str] = Field(None, description="Enrollment type (Individual/Group)")
+    enrollment_status: Optional[str] = Field(None, description="Enrollment status (Approved/Deactivated/etc.)")
+    practice_location: Optional[str] = Field(None, description="Practice location description")
+
+class OrderingReferringProviderData(BaseModel):
+    """Pydantic model for Ordering/Referring Provider JSONB field"""
+    found: Optional[bool] = Field(None, description="Whether provider was found in O&R dataset")
+    npi_number: Optional[str] = Field(None, description="NPI number from dataset")
+    last_updated: Optional[str] = Field(None, description="Last updated date")
+    practitioner_id: Optional[int] = Field(None, description="Practitioner ID")
+    eligible_to_order_or_refer: Optional[bool] = Field(None, description="Whether eligible to order or refer")
+
 class MedicareModel(BaseDBModel):
     """Pydantic model for the Medicare table"""
     id: Optional[int] = Field(None, description="Auto-generated primary key")
@@ -104,6 +154,14 @@ class MedicareModel(BaseDBModel):
     npi_number: Optional[str] = Field(None, description="National Provider Identifier")
     ffs_provider_enrollment: Optional[Dict[str, Any]] = Field(None, description="FFS Provider Enrollment data as JSON")
     ordering_referring_provider: Optional[Dict[str, Any]] = Field(None, description="Ordering/Referring Provider data as JSON")
+
+class MedicareModelEnhanced(BaseDBModel):
+    """Enhanced Pydantic model for the Medicare table with typed JSONB fields"""
+    id: Optional[int] = Field(None, description="Auto-generated primary key")
+    practitioner_id: int = Field(..., description="Foreign key to practitioners table")
+    npi_number: Optional[str] = Field(None, description="National Provider Identifier")
+    ffs_provider_enrollment: Optional[FFSProviderEnrollmentData] = Field(None, description="FFS Provider Enrollment data")
+    ordering_referring_provider: Optional[OrderingReferringProviderData] = Field(None, description="Ordering/Referring Provider data")
 
 class NPDBModel(BaseDBModel):
     """Pydantic model for the NPDB table"""

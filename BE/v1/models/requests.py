@@ -40,26 +40,11 @@ class NPIRequest(BaseRequest):
             raise ValueError('At least one search criterion must be provided: npi, first_name/last_name, or organization_name')
         return self
 
-class DEARequest(BaseRequest):
-    """Request model for DEA (Drug Enforcement Administration) lookup"""
-    dea_number: str = Field(..., description="DEA registration number", min_length=9, max_length=9)
-    
-    @field_validator('dea_number')
-    def validate_dea_number(cls, v):
-        # Basic DEA number format validation (2 letters + 7 digits)
-        if len(v) != 9 or not v[:2].isalpha() or not v[2:].isdigit():
-            raise ValueError('DEA number must be 2 letters followed by 7 digits')
-        return v.upper()
-
 class DEAVerificationRequest(BaseRequest):
-    """Request model for comprehensive DEA verification"""
+    """Request model for DEA verification - first_name, last_name, and dea_number required"""
     first_name: str = Field(..., description="First name of the practitioner", min_length=1, max_length=50)
     last_name: str = Field(..., description="Last name of the practitioner", min_length=1, max_length=50)
-    date_of_birth: str = Field(..., description="Date of birth (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
-    zip_code: str = Field(..., description="ZIP code from registered business location", min_length=5, max_length=10)
-    dea_number: str = Field(..., description="Unique DEA registration number", min_length=9, max_length=9)
-    last_four_ssn: str = Field(..., description="Last 4 digits of SSN", min_length=4, max_length=4, pattern=r"^\d{4}$")
-    expiration_date: str = Field(..., description="DEA expiration date (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    dea_number: str = Field(..., description="DEA registration number", min_length=9, max_length=9)
     
     @field_validator('dea_number')
     def validate_dea_number(cls, v):
@@ -191,29 +176,17 @@ class BatchNPIRequest(BaseRequest):
                 raise ValueError(f'Invalid NPI: {npi}. Must be 10 digits.')
         return v
 
-class BatchDEARequest(BaseRequest):
-    """Request model for batch DEA lookups"""
-    dea_numbers: List[str] = Field(..., description="List of DEA numbers to lookup", min_items=1, max_items=50)
-    
-    @field_validator('dea_numbers')
-    def validate_dea_numbers(cls, v):
-        for dea in v:
-            if len(dea) != 9 or not dea[:2].isalpha() or not dea[2:].isdigit():
-                raise ValueError(f'Invalid DEA number: {dea}. Must be 2 letters followed by 7 digits.')
-        return [dea.upper() for dea in v]
-
 class MedicalRequest(BaseRequest):
     """Request model for Medi-Cal Managed Care + ORP verification"""
-    request_id: str = Field(..., description="Unique request identifier", max_length=100)
     npi: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
     first_name: str = Field(..., description="Provider's first name", min_length=1, max_length=50)
     last_name: str = Field(..., description="Provider's last name", min_length=1, max_length=50)
-    license_type: str = Field(..., description="License type (e.g., MD, NP, DO)", max_length=10)
-    taxonomy_code: str = Field(..., description="Provider taxonomy code", max_length=20)
-    provider_type: str = Field(..., description="Provider type/specialty", max_length=100)
-    city: str = Field(..., description="Provider city", max_length=50)
-    state: str = Field(..., description="Provider state", min_length=2, max_length=2)
-    zip: str = Field(..., description="Provider ZIP code", max_length=10)
+    license_type: Optional[str] = Field(None, description="License type (e.g., MD, NP, DO)", max_length=10)
+    taxonomy_code: Optional[str] = Field(None, description="Provider taxonomy code", max_length=20)
+    provider_type: Optional[str] = Field(None, description="Provider type/specialty", max_length=100)
+    city: Optional[str] = Field(None, description="Provider city", max_length=50)
+    state: Optional[str] = Field(None, description="Provider state", min_length=2, max_length=2)
+    zip: Optional[str] = Field(None, description="Provider ZIP code", max_length=10)
     
     @field_validator('npi')
     def validate_npi(cls, v: str):

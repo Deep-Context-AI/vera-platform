@@ -2,12 +2,15 @@ import logging
 from typing import Optional, List
 import httpx
 from datetime import datetime
+from supabase import Client
 
-from v1.models.requests import DEARequest, DEAVerificationRequest, BatchDEARequest
+from v1.models.requests import DEAVerificationRequest
 from v1.models.responses import (
-    DEAResponse, DEAVerificationResponse, AddressOfRecord, BatchDEAResponse, ResponseStatus,
-    NewDEAVerificationResponse, Practitioner, RegisteredAddress
+    ResponseStatus, NewDEAVerificationResponse, Practitioner, RegisteredAddress
 )
+from v1.models.database import DEAModel, PractitionerEnhanced
+from v1.services.database import get_supabase_client
+from v1.services.practitioner_service import practitioner_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -16,129 +19,61 @@ class DEAService:
     """Service for DEA (Drug Enforcement Administration) lookups"""
     
     def __init__(self):
-        # Note: This is a placeholder URL - actual DEA API would require proper credentials
-        self.base_url = "https://api.dea.gov/v1"
-        self.timeout = 30.0
-        self.api_key = None  # Would be loaded from environment variables
+        # Database client for DEA data
+        self.db: Client = get_supabase_client()
     
-    async def lookup_dea(self, request: DEARequest) -> DEAResponse:
-        """
-        Lookup a single DEA registration
-        
-        Args:
-            request: DEARequest containing the DEA number to lookup
-            
-        Returns:
-            DEAResponse with the lookup results
-            
-        Raises:
-            NotFoundException: If DEA number is not found
-            ExternalServiceException: If external service fails
-        """
-        try:
-            logger.info(f"Looking up DEA: {request.dea_number}")
-            
-            # For demonstration purposes, we'll simulate the lookup
-            # In a real implementation, this would call the actual DEA API
-            
-            # Simulate API call delay
-            await self._simulate_api_call()
-            
-            # Mock response based on DEA number pattern
-            if request.dea_number.startswith("AB"):
-                return DEAResponse(
-                    status=ResponseStatus.SUCCESS,
-                    message="DEA lookup successful",
-                    dea_number=request.dea_number,
-                    registrant_name="Dr. John Smith",
-                    business_activity="Practitioner",
-                    registration_date=datetime(2020, 1, 15),
-                    expiration_date=datetime(2025, 1, 15),
-                    address={
-                        "address_1": "123 Medical Center Dr",
-                        "city": "Healthcare City",
-                        "state": "CA",
-                        "postal_code": "90210"
-                    },
-                    is_active=True
-                )
-            else:
-                logger.warning(f"DEA not found: {request.dea_number}")
-                return DEAResponse(
-                    status=ResponseStatus.NOT_FOUND,
-                    message=f"DEA number {request.dea_number} not found",
-                    dea_number=request.dea_number
-                )
-                
-        except Exception as e:
-            logger.error(f"Unexpected error during DEA lookup for {request.dea_number}: {e}")
-            raise ExternalServiceException(
-                detail="Unexpected error during DEA lookup",
-                service_name="DEA Registry"
-            )
+
     
     async def verify_dea_practitioner(self, request: DEAVerificationRequest) -> NewDEAVerificationResponse:
         """
-        Perform comprehensive DEA verification
+        Verify DEA practitioner using database lookup
         
         Args:
-            request: DEAVerificationRequest containing practitioner information
+            request: DEAVerificationRequest with first_name, last_name (required) and dea_number, other fields (optional)
             
         Returns:
-            NewDEAVerificationResponse with comprehensive verification results
+            NewDEAVerificationResponse with verification results
             
         Raises:
-            ExternalServiceException: If external service fails
+            NotFoundException: If DEA number is not found
+            ExternalServiceException: If database query fails
         """
         try:
-            logger.info(f"Verifying DEA practitioner: {request.first_name} {request.last_name}, DEA: {request.dea_number}")
+            logger.info(f"Starting DEA verification for: {request.first_name} {request.last_name}, DEA: {request.dea_number}")
             
-            # Validate required fields
-            required_fields = [
-                'first_name', 'last_name', 'date_of_birth', 'dea_number', 
-                'zip_code', 'last_four_ssn', 'expiration_date'
-            ]
-            
-            for field in required_fields:
-                if not getattr(request, field, None):
-                    raise ExternalServiceException(
-                        detail=f"Missing required field: {field}",
-                        service_name="DEA Registry"
-                    )
-            
-            # Simulate API call delay
-            await self._simulate_api_call()
-            
-            # Mock comprehensive verification response
-            # In a real implementation, this would call the actual DEA API
-            # with all the provided information
-            
-            return NewDEAVerificationResponse(
-                status=ResponseStatus.SUCCESS,
-                message="DEA verification successful",
-                number=request.dea_number,
-                Practitioner=Practitioner(
-                    First_name=request.first_name,
-                    Last_name=request.last_name,
-                    Middle_name=None,  # Not provided in request
-                    Title="MD"  # Default title, would be determined from actual API
-                ),
-                registeredAddress=RegisteredAddress(
-                    street="1234 Wellness Ave., Suite 400",
-                    city="Los Angeles",
-                    state="CA",
-                    zip=request.zip_code
-                ),
-                expiration=request.expiration_date,
-                paid_status="PAID",
-                drug_schedule_type="FULL",
-                drug_schedules=["2", "2-N", "3", "3-N", "4", "5"],
-                current_status="ACTIVE",
-                has_restrictions="NO",
-                restriction_details=[],
-                business_activity_code="C"
+            # Look up DEA in database
+            dea_response = (
+                self.db.schema("vera").table("dea")
+                .select("*")
+                .eq("number", request.dea_number)
+                .execute()
             )
+            
+            if not dea_response.data:
+                logger.info(f"DEA not found: {request.dea_number}")
+                raise NotFoundException(
+                    detail=f"DEA number {request.dea_number} not found in database"
+                )
+            
+            dea_data = DEAModel(**dea_response.data[0])
+            
+            # Get practitioner information if available
+            practitioner = None
+            if dea_data.practitioner_id:
+                try:
+                    practitioner = await practitioner_service.get_practitioner_by_id(dea_data.practitioner_id)
+                except Exception as e:
+                    logger.warning(f"Could not fetch practitioner for DEA {request.dea_number}: {e}")
+            
+            # Build verification response
+            response = self._build_verification_response_from_db_record(dea_data, practitioner, request)
+            
+            logger.info(f"DEA verification completed for: {request.dea_number}")
+            return response
                 
+        except NotFoundException:
+            # Re-raise NotFoundException as-is
+            raise
         except Exception as e:
             logger.error(f"Unexpected error during DEA verification for {request.dea_number}: {e}")
             raise ExternalServiceException(
@@ -146,51 +81,77 @@ class DEAService:
                 service_name="DEA Registry"
             )
     
-    async def batch_lookup_dea(self, request: BatchDEARequest) -> BatchDEAResponse:
+
+    
+    def _build_verification_response_from_db_record(self, dea_data: DEAModel, practitioner: Optional[PractitionerEnhanced], request: DEAVerificationRequest) -> NewDEAVerificationResponse:
         """
-        Lookup multiple DEA registrations
+        Build comprehensive DEA verification response from database record
         
         Args:
-            request: BatchDEARequest containing the DEA numbers to lookup
+            dea_data: DEAModel from database
+            practitioner: Optional practitioner information
+            request: Original verification request
             
         Returns:
-            BatchDEAResponse with all lookup results
+            NewDEAVerificationResponse object
         """
-        logger.info(f"Batch DEA lookup for {len(request.dea_numbers)} DEA numbers")
+        # Build practitioner info
+        first_name = practitioner.first_name if practitioner else request.first_name
+        last_name = practitioner.last_name if practitioner else request.last_name
+        middle_name = practitioner.middle_name if practitioner else None
         
-        results = []
-        found_count = 0
+        # Determine title from practitioner education or default
+        title = "MD"  # Default
+        if practitioner and practitioner.education and practitioner.education.degree:
+            title = practitioner.education.degree
         
-        for dea_number in request.dea_numbers:
-            try:
-                dea_request = DEARequest(dea_number=dea_number)
-                result = await self.lookup_dea(dea_request)
-                results.append(result)
-                
-                if result.status == ResponseStatus.SUCCESS:
-                    found_count += 1
-                    
-            except Exception as e:
-                logger.error(f"Error in batch lookup for DEA {dea_number}: {e}")
-                results.append(DEAResponse(
-                    status=ResponseStatus.ERROR,
-                    message=f"Error looking up DEA {dea_number}: {str(e)}",
-                    dea_number=dea_number
-                ))
+        # Build registered address
+        if practitioner and practitioner.mailing_address:
+            registered_address = RegisteredAddress(
+                street=practitioner.mailing_address.street or "Address Not Available",
+                city=practitioner.mailing_address.city or "Unknown City",
+                state=practitioner.mailing_address.state or dea_data.state or "Unknown State",
+                zip=practitioner.mailing_address.zip or request.zip_code or "00000"
+            )
+        else:
+            registered_address = RegisteredAddress(
+                street="Address Not Available",
+                city="Unknown City", 
+                state=dea_data.state or "Unknown State",
+                zip=request.zip_code or "00000"
+            )
         
-        return BatchDEAResponse(
+        # Map drug schedules
+        drug_schedules = dea_data.authorized_schedules or ["2", "2N", "3", "4", "5"]
+        drug_schedule_type = "FULL" if len(drug_schedules) >= 4 else "LIMITED"
+        
+        # Format expiration date
+        expiration_date = dea_data.expiration.isoformat() if dea_data.expiration else request.expiration_date
+        
+        # Determine restrictions
+        has_restrictions = "YES" if dea_data.has_restrictions else "NO"
+        restriction_details = dea_data.restriction_details or []
+        
+        return NewDEAVerificationResponse(
             status=ResponseStatus.SUCCESS,
-            message=f"Batch lookup completed: {found_count}/{len(request.dea_numbers)} found",
-            results=results,
-            total_requested=len(request.dea_numbers),
-            total_found=found_count,
-            total_not_found=len(request.dea_numbers) - found_count
+            message="DEA verification successful",
+            number=dea_data.number or request.dea_number,
+            practitioner=Practitioner(
+                First_name=first_name,
+                Last_name=last_name,
+                Middle_name=middle_name,
+                Title=title
+            ),
+            registeredAddress=registered_address,
+            expiration=expiration_date,
+            paid_status=dea_data.paid_status or "UNKNOWN",
+            drug_schedule_type=drug_schedule_type,
+            drug_schedules=drug_schedules,
+            current_status=dea_data.registration_status or "UNKNOWN",
+            has_restrictions=has_restrictions,
+            restriction_details=restriction_details,
+            business_activity_code=dea_data.business_activity_code or "C"
         )
-    
-    async def _simulate_api_call(self):
-        """Simulate API call delay for demonstration"""
-        import asyncio
-        await asyncio.sleep(0.1)  # Simulate network delay
 
 # Global service instance
 dea_service = DEAService()

@@ -1,0 +1,35 @@
+# MODAL TESTING RULES
+Endpoint for testing
+-  https://mikhailocampo--vera-platform-fastapi-app-dev.modal.run
+NOTE: Do NOT deploy the modal application. If the service endpoint is down because the initial request says the modal http endpoint is stopped, then use `modal serve main.py`
+
+
+## Instructions
+```
+Use the following commands to set environment variables
+set -a; source .env; set +a; python3 -c "
+from supabase import create_client, Client
+import os
+import json
+
+# Get Supabase credentials from environment
+url = os.getenv('SUPABASE_URL')
+key = os.getenv('SUPABASE_KEY')
+
+# Create client
+supabase: Client = create_client(url, key)
+
+# Get practitioner details for the medicare records
+practitioner_ids = [5524, 5525, 5526]
+npis = ['2151968710', '5204869081', '6899872551']
+
+try:
+    for i, pid in enumerate(practitioner_ids):
+        response = supabase.schema('vera').table('practitioners').select('id, first_name, last_name').eq('id', pid).execute()
+        if response.data:
+            practitioner = response.data[0]
+            print(f'NPI: {npis[i]}, ID: {pid}, Name: {practitioner[\"first_name\"]} {practitioner[\"last_name\"]}')
+except Exception as e:
+    print(f'Error: {e}')
+"
+```

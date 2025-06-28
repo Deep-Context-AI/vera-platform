@@ -4,14 +4,15 @@ from typing import Optional, List
 from datetime import datetime
 
 from v1.models.requests import (
-    NPIRequest, DEARequest, DEAVerificationRequest, ABMSRequest, NPDBRequest, 
-    SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest, BatchDEARequest,
+    NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
+    SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest,
     MedicalRequest, DCARequest, MedicareRequest, EducationRequest
 )
 from v1.models.responses import (
-    NPIResponse, DEAResponse, DEAVerificationResponse, ABMSResponse, NPDBResponse,
-    SANCTIONResponse, ComprehensiveSANCTIONResponse, LADMFResponse, BatchNPIResponse, BatchDEAResponse,
-    VerificationSummaryResponse, ResponseStatus, MedicalResponse, DCAResponse, MedicareResponse, EducationResponse
+    NPIResponse, ABMSResponse, NPDBResponse,
+    SANCTIONResponse, ComprehensiveSANCTIONResponse, LADMFResponse, BatchNPIResponse,
+    VerificationSummaryResponse, ResponseStatus, MedicalResponse, DCAResponse, MedicareResponse, EducationResponse,
+    NewDEAVerificationResponse
 )
 from v1.services.external.NPI import npi_service
 from v1.services.external.DEA import dea_service
@@ -96,44 +97,16 @@ async def get_batch_npi(
     return await npi_service.batch_lookup_npi(request)
 
 # DEA Endpoints
-@router.get(
-    "/dea/{dea_number}",
-    response_model=DEAResponse,
-    tags=["DEA"],
-    summary="Lookup DEA registration",
-    description="Retrieve DEA registration information by DEA number"
-)
-async def get_dea(
-    dea_number: str = Path(..., description="9-character DEA registration number", pattern=r"^[A-Z]{2}\d{7}$")
-) -> DEAResponse:
-    """Lookup a single DEA registration"""
-    request = DEARequest(dea_number=dea_number)
-    return await dea_service.lookup_dea(request)
-
 @router.post(
     "/dea/verify",
-    response_model=DEAVerificationResponse,
+    response_model=NewDEAVerificationResponse,
     tags=["DEA"],
-    summary="Comprehensive DEA verification",
-    description="Perform comprehensive DEA verification with detailed practitioner information"
+    summary="DEA verification",
+    description="Verify DEA practitioner with first name, last name, and DEA number (required), other fields optional"
 )
-async def verify_dea_practitioner(request: DEAVerificationRequest) -> DEAVerificationResponse:
-    """Verify DEA registration with comprehensive practitioner information"""
+async def verify_dea_practitioner(request: DEAVerificationRequest) -> NewDEAVerificationResponse:
+    """Verify DEA practitioner - requires first_name, last_name, and dea_number, other fields optional"""
     return await dea_service.verify_dea_practitioner(request)
-
-@router.get(
-    "/dea/batch",
-    response_model=BatchDEAResponse,
-    tags=["DEA"],
-    summary="Batch DEA lookup",
-    description="Lookup multiple DEA registrations in a single request"
-)
-async def get_batch_dea(
-    dea_numbers: List[str] = Query(..., description="List of DEA numbers to lookup (max 50)")
-) -> BatchDEAResponse:
-    """Batch lookup multiple DEA registrations"""
-    request = BatchDEARequest(dea_numbers=dea_numbers)
-    return await dea_service.batch_lookup_dea(request)
 
 # ABMS Endpoints
 @router.post(

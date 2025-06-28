@@ -278,13 +278,6 @@ class BatchNPIResponse(BaseResponse):
     total_found: int = Field(..., description="Total number of NPIs found")
     total_not_found: int = Field(..., description="Total number of NPIs not found")
 
-class BatchDEAResponse(BaseResponse):
-    """Response model for batch DEA lookups"""
-    results: List[DEAResponse] = Field(..., description="List of DEA lookup results")
-    total_requested: int = Field(..., description="Total number of DEA numbers requested")
-    total_found: int = Field(..., description="Total number of DEA numbers found")
-    total_not_found: int = Field(..., description="Total number of DEA numbers not found")
-
 # Comprehensive verification response
 class VerificationSummaryResponse(BaseResponse):
     """Comprehensive verification summary response"""
@@ -371,7 +364,6 @@ class MedicalVerifications(BaseModel):
 
 class MedicalResponse(BaseResponse):
     """Response model for Medi-Cal Managed Care + ORP verification"""
-    response_id: str = Field(..., description="Unique response identifier")
     npi: str = Field(..., description="National Provider Identifier")
     provider_name: str = Field(..., description="Provider name")
     verification_date: str = Field(..., description="Verification date (YYYY-MM-DD)")
