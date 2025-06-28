@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
-from datetime import datetime
 
 class BaseRequest(BaseModel):
     """Base request model with common fields"""
@@ -112,17 +111,6 @@ class NPDBRequest(BaseRequest):
             raise ValueError('DEA number must be 2 letters followed by 7 digits')
         return v.upper() if v else v
 
-class SANCTIONRequest(BaseRequest):
-    """Request model for sanctions/exclusions lookup"""
-    first_name: str = Field(..., description="First name", min_length=1, max_length=50)
-    last_name: str = Field(..., description="Last name", min_length=1, max_length=50)
-    state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
-    
-    @field_validator('state')
-    def validate_state(cls, v):
-        if v:
-            return v.upper()
-        return v
 
 class ComprehensiveSANCTIONRequest(BaseRequest):
     """Request model for comprehensive sanctions check"""

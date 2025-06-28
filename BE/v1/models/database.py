@@ -255,6 +255,29 @@ class PractitionerEnhanced(BaseDBModel):
             name_parts.append(self.suffix)
         return " ".join(name_parts)
 
+# Enhanced models for SanctionCheck JSONB fields
+class SanctionMatchData(BaseModel):
+    """Pydantic model for individual sanction match data"""
+    date: Optional[str] = Field(None, description="Date of sanction")
+    type: Optional[str] = Field(None, description="Type of sanction")
+    basis: Optional[str] = Field(None, description="Basis for sanction")
+    source: Optional[str] = Field(None, description="Source of sanction check")
+    status: Optional[str] = Field(None, description="Status of sanction")
+    matched: Optional[bool] = Field(None, description="Whether a match was found")
+    duration: Optional[str] = Field(None, description="Duration of sanction")
+    source_url: Optional[str] = Field(None, description="URL to source documentation")
+    description: Optional[str] = Field(None, description="Description of sanction")
+    document_link: Optional[str] = Field(None, description="Link to supporting documents")
+    exclusion_type: Optional[str] = Field(None, description="Type of exclusion")
+    reinstatement_date: Optional[str] = Field(None, description="Reinstatement date if applicable")
+
+class SanctionsData(BaseModel):
+    """Pydantic model for sanctions JSONB field"""
+    sanctions: Optional[List[SanctionMatchData]] = Field(None, description="List of sanction matches from various sources")
+    check_date: Optional[str] = Field(None, description="Date when sanctions check was performed")
+    high_risk_flags: Optional[List[str]] = Field(None, description="High risk flags identified")
+    total_sanctions_found: Optional[int] = Field(None, description="Total number of sanctions found")
+
 class SanctionCheckModel(BaseDBModel):
     """Pydantic model for the SanctionCheck table"""
     id: Optional[int] = Field(None, description="Auto-generated primary key")
@@ -262,6 +285,16 @@ class SanctionCheckModel(BaseDBModel):
     npi_number: Optional[str] = Field(None, description="National Provider Identifier")
     license_number: Optional[str] = Field(None, description="License number")
     sanctions: Optional[Dict[str, Any]] = Field(None, description="Sanctions data as JSON")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+class SanctionCheckModelEnhanced(BaseDBModel):
+    """Enhanced Pydantic model for the SanctionCheck table with typed JSONB fields"""
+    id: Optional[int] = Field(None, description="Auto-generated primary key")
+    practitioner_id: int = Field(..., description="Foreign key to practitioners table")
+    npi_number: Optional[str] = Field(None, description="National Provider Identifier")
+    license_number: Optional[str] = Field(None, description="License number")
+    sanctions: Optional[SanctionsData] = Field(None, description="Sanctions data")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 

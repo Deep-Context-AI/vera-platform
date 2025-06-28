@@ -249,7 +249,6 @@ class ComprehensiveSANCTIONResponse(BaseResponse):
     provider: ProviderInfo = Field(..., description="Provider information")
     checked_on: datetime = Field(default_factory=datetime.utcnow, description="Timestamp of the check")
     sanctions: List[SanctionMatch] = Field(..., description="List of sanction matches from various sources")
-    summary: SanctionSummary = Field(..., description="Summary of the sanctions check")
 
 class LADMFMatchedRecord(BaseModel):
     """Matched death record from LADMF"""

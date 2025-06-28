@@ -318,15 +318,15 @@ def _generate_dialogue_transcript(
     
     Format the response as a JSON object with a "dialogue" key containing an array where each element has:
     - "speaker": either "registrar" or "verification_officer"
-    - "text": the dialogue text with appropriate audio events like [typing], [paper rustling], [phone ringing], punctuation for pauses, etc.
+    - "text": the dialogue text
     
     Make it sound natural and include realistic audio events and emotional cues. Use ellipses (...) for trailing sentences and interruptions where appropriate.
     
     Example format:
     {{
         "dialogue": [
-            {{"speaker": "registrar", "text": "[phone ringing] Hello, this is the Registrar's Office at {institution}, how may I help you?"}},
-            {{"speaker": "verification_officer", "text": "[clearing throat] Good morning, I'm calling to verify the educational credentials for {first_name} {last_name}..."}}
+            {{"speaker": "registrar", "text": "Hello, this is the Registrar's Office at {institution}, how may I help you?"}},
+            {{"speaker": "verification_officer", "text": "Good morning, I'm calling to verify the educational credentials for {first_name} {last_name}..."}}
         ]
     }}
     """

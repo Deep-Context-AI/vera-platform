@@ -5,7 +5,7 @@ from datetime import datetime
 
 from v1.models.requests import (
     NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
-    SANCTIONRequest, ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest,
+    ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest,
     MedicalRequest, DCARequest, MedicareRequest, EducationRequest
 )
 from v1.models.responses import (
@@ -133,22 +133,6 @@ async def verify_npdb_practitioner(request: NPDBRequest) -> NPDBResponse:
     return await npdb_service.verify_practitioner(request)
 
 # Sanctions Endpoints
-@router.get(
-    "/sanctions/exclusions",
-    response_model=SANCTIONResponse,
-    tags=["Sanctions"],
-    summary="Lookup sanctions and exclusions",
-    description="Check for sanctions and exclusions from federal healthcare programs"
-)
-async def get_sanctions(
-    first_name: str = Query(..., description="First name of the practitioner"),
-    last_name: str = Query(..., description="Last name of the practitioner"),
-    state: Optional[str] = Query(None, description="State abbreviation (optional)")
-) -> SANCTIONResponse:
-    """Lookup sanctions and exclusions"""
-    request = SANCTIONRequest(first_name=first_name, last_name=last_name, state=state)
-    return await sanction_service.lookup_sanctions(request)
-
 @router.post(
     "/sanctioncheck",
     response_model=ComprehensiveSANCTIONResponse,
