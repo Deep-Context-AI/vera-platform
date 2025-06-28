@@ -168,6 +168,8 @@ export interface ApplicationDetailsView {
   attestation_id: number | null;
   previous_approval_date: string | null;
   status: string | null;
+  due_date: string | null;
+  application_type: string | null;
   
   // Practitioner fields
   practitioner_first_name: string | null;
