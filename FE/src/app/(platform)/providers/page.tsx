@@ -153,44 +153,19 @@ const ProvidersPage: React.FC = () => {
       width: 200,
     },
     {
-      accessorKey: "npi_number_verified",
+      accessorKey: "npi_number",
       header: "NPI Number",
-      cellRenderer: ({ row }) => {
-        const app = row.original;
-        return (
-          <div className="font-medium text-gray-900 dark:text-gray-100">
-            {app.npi_number_verified || app.npi_number || 'No NPI'}
-          </div>
-        );
-      },
+      cellRenderer: ({ value }) => (
+        <div className="font-medium text-gray-900 dark:text-gray-100">
+          {value || 'No NPI'}
+        </div>
+      ),
       enableSorting: true,
       enableFiltering: true,
       filterType: "text",
       width: 120,
     },
-    {
-      accessorKey: "npi_description",
-      header: "Specialty/Description",
-      cellRenderer: ({ value, row }) => {
-        const app = row.original;
-        return (
-          <div>
-            {value && (
-              <div className="text-sm text-gray-900 dark:text-gray-100 mb-1">
-                {value}
-              </div>
-            )}
-            {app.npi_taxonomy_code && (
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Code: {app.npi_taxonomy_code}
-              </div>
-            )}
-          </div>
-        );
-      },
-      enableSorting: false,
-      width: 200,
-    },
+
     {
       accessorKey: "verification_status",
       header: "Verification Status",
@@ -207,13 +182,12 @@ const ProvidersPage: React.FC = () => {
       enableFiltering: true,
       filterType: "select",
       filterOptions: [
-        { label: "Verified", value: "VERIFIED" },
-        { label: "NPI Missing", value: "NPI_MISSING" },
-        { label: "NPI Inactive", value: "NPI_INACTIVE" },
-        { label: "Approved", value: "APPROVED" },
-        { label: "Under Review", value: "UNDER_REVIEW" },
         { label: "Submitted", value: "SUBMITTED" },
+        { label: "Under Review", value: "UNDER_REVIEW" },
+        { label: "Approved", value: "APPROVED" },
+        { label: "Rejected", value: "REJECTED" },
         { label: "Pending", value: "PENDING" },
+        { label: "Unknown", value: "UNKNOWN" },
       ],
       width: 150,
     },
@@ -284,7 +258,7 @@ const ProvidersPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Provider Verification Dashboard</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Comprehensive provider applications with NPI verification and practitioner details
+            Comprehensive provider applications and practitioner verification details
           </p>
         </div>
       </div>
@@ -322,7 +296,7 @@ const ProvidersPage: React.FC = () => {
                 enableRowSelection={false}
                 enablePagination={false} // Disable internal pagination
                 searchable={true}
-                searchPlaceholder="Search by provider name, NPI, license, specialty, or taxonomy code..."
+                searchPlaceholder="Search by provider name, NPI, license number, or DEA number..."
                 tableId="providers-table" // Unique ID for column preferences persistence
                 enableRowAnimation={true}
                 animationDelay={30} // Faster animation for better UX with many rows

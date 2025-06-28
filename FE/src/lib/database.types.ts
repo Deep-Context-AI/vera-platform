@@ -162,6 +162,159 @@ export type Database = {
       [_ in never]: never
     }
   }
+  vera: {
+    Tables: {
+      applications: {
+        Row: {
+          id: number
+          created_at: string
+          provider_id: number | null
+          npi_number: string | null
+          medicare_id: number | null
+          medicaid_id: number | null
+          ecfmg: Json | null
+          license_number: string | null
+          dea_number: string | null
+          work_history: Json | null
+          hospital_privileges_id: number | null
+          malpractice_insurance: Json | null
+          attestation_id: number | null
+          previous_approval_date: string | null
+          status: string | null
+        }
+        Insert: {
+          id?: number
+          created_at?: string
+          provider_id?: number | null
+          npi_number?: string | null
+          medicare_id?: number | null
+          medicaid_id?: number | null
+          ecfmg?: Json | null
+          license_number?: string | null
+          dea_number?: string | null
+          work_history?: Json | null
+          hospital_privileges_id?: number | null
+          malpractice_insurance?: Json | null
+          attestation_id?: number | null
+          previous_approval_date?: string | null
+          status?: string | null
+        }
+        Update: {
+          id?: number
+          created_at?: string
+          provider_id?: number | null
+          npi_number?: string | null
+          medicare_id?: number | null
+          medicaid_id?: number | null
+          ecfmg?: Json | null
+          license_number?: string | null
+          dea_number?: string | null
+          work_history?: Json | null
+          hospital_privileges_id?: number | null
+          malpractice_insurance?: Json | null
+          attestation_id?: number | null
+          previous_approval_date?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      practitioners: {
+        Row: {
+          id: number
+          first_name: string | null
+          last_name: string | null
+          middle_name: string | null
+          suffix: string | null
+          education: Json | null
+          other_names: string | null
+          home_address: Json | null
+          mailing_address: Json | null
+          ssn: string | null
+          demographics: Json | null
+          languages: Json | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          first_name?: string | null
+          last_name?: string | null
+          middle_name?: string | null
+          suffix?: string | null
+          education?: Json | null
+          other_names?: string | null
+          home_address?: Json | null
+          mailing_address?: Json | null
+          ssn?: string | null
+          demographics?: Json | null
+          languages?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: number
+          first_name?: string | null
+          last_name?: string | null
+          middle_name?: string | null
+          suffix?: string | null
+          education?: Json | null
+          other_names?: string | null
+          home_address?: Json | null
+          mailing_address?: Json | null
+          ssn?: string | null
+          demographics?: Json | null
+          languages?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      application_details: {
+        Row: {
+          id: number
+          created_at: string
+          provider_id: number | null
+          npi_number: string | null
+          medicare_id: number | null
+          medicaid_id: number | null
+          ecfmg: Json | null
+          license_number: string | null
+          dea_number: string | null
+          work_history: Json | null
+          hospital_privileges_id: number | null
+          malpractice_insurance: Json | null
+          attestation_id: number | null
+          previous_approval_date: string | null
+          status: string | null
+          practitioner_first_name: string | null
+          practitioner_last_name: string | null
+          practitioner_middle_name: string | null
+          practitioner_suffix: string | null
+          practitioner_education: Json | null
+          practitioner_other_names: string | null
+          practitioner_home_address: Json | null
+          practitioner_mailing_address: Json | null
+          practitioner_ssn: string | null
+          practitioner_demographics: Json | null
+          practitioner_languages: Json | null
+          full_name: string | null
+          verification_status: string
+          primary_address: Json | null
+        }
+      }
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
 
 type PublicSchema = Database[Extract<keyof Database, "public">]

@@ -14,6 +14,27 @@ export interface MalpracticeInsurance {
   coverage_start: string;
 }
 
+// Structured interfaces for JSON fields
+export interface PractitionerEducation {
+  degree: string;
+  medical_school: string;
+  graduation_year: number;
+}
+
+export interface Address {
+  zip: string;
+  city: string;
+  state: string;
+  street: string;
+}
+
+export interface PractitionerDemographics {
+  race: string;
+  gender: string;
+  ethnicity: string;
+  birth_date: string;
+}
+
 // Attestation response structure
 export interface AttestationResponse {
   response: boolean;
@@ -153,27 +174,18 @@ export interface ApplicationDetailsView {
   practitioner_last_name: string | null;
   practitioner_middle_name: string | null;
   practitioner_suffix: string | null;
-  practitioner_education: any | null;
+  practitioner_education: PractitionerEducation | null;
   practitioner_other_names: string | null;
-  practitioner_home_address: any | null;
-  practitioner_mailing_address: any | null;
+  practitioner_home_address: Address | null;
+  practitioner_mailing_address: Address | null;
   practitioner_ssn: string | null;
-  practitioner_demographics: any | null;
-  practitioner_languages: any | null;
-  
-  // NPI fields
-  npi_id: number | null;
-  npi_number_verified: string | null;
-  npi_type: string | null;
-  npi_status: string | null;
-  npi_taxonomy_code: string | null;
-  npi_description: string | null;
+  practitioner_demographics: PractitionerDemographics | null;
+  practitioner_languages: string[] | null;
   
   // Computed fields
   full_name: string | null;
-  verification_status: 'VERIFIED' | 'NPI_MISSING' | 'NPI_INACTIVE' | string;
-  npi_number_matches: boolean;
-  primary_address: any | null;
+  verification_status: string;
+  primary_address: Address | null;
 }
 
 export type ApplicationStatus = 
@@ -184,14 +196,12 @@ export type ApplicationStatus =
   | 'PENDING';
 
 export type VerificationStatus = 
-  | 'VERIFIED'
-  | 'NPI_MISSING'
-  | 'NPI_INACTIVE'
   | 'SUBMITTED'
   | 'UNDER_REVIEW'
   | 'APPROVED'
   | 'REJECTED'
-  | 'PENDING';
+  | 'PENDING'
+  | 'UNKNOWN';
 
 export interface CreateApplicationRequest {
   provider_id?: number;

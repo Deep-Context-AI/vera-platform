@@ -329,7 +329,6 @@ export class ApplicationsAPI {
     status?: ApplicationStatus;
     verification_status?: VerificationStatus;
     practitioner_name?: string;
-    npi_taxonomy_code?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ data: ApplicationDetailsView[] | null; error: any }> {
@@ -339,7 +338,7 @@ export class ApplicationsAPI {
         .schema('vera')
         .from('application_details')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
 
       // Apply filters
       if (options?.status) {
@@ -356,10 +355,6 @@ export class ApplicationsAPI {
           practitioner_last_name.ilike.%${options.practitioner_name}%,
           full_name.ilike.%${options.practitioner_name}%
         `);
-      }
-      
-      if (options?.npi_taxonomy_code) {
-        query = query.eq('npi_taxonomy_code', options.npi_taxonomy_code);
       }
 
       // Apply pagination
@@ -397,9 +392,7 @@ export class ApplicationsAPI {
           dea_number.ilike.%${searchTerm}%,
           practitioner_first_name.ilike.%${searchTerm}%,
           practitioner_last_name.ilike.%${searchTerm}%,
-          full_name.ilike.%${searchTerm}%,
-          npi_taxonomy_code.ilike.%${searchTerm}%,
-          npi_description.ilike.%${searchTerm}%
+          full_name.ilike.%${searchTerm}%
         `)
         .order('created_at', { ascending: false });
 
@@ -425,30 +418,15 @@ export class ApplicationsAPI {
 
       if (statusError) return { data: null, error: statusError };
 
-      // Get counts by NPI type
-      const { data: typeData, error: typeError } = await client
-        .schema('vera')
-        .from('application_details')
-        .select('npi_type')
-        .not('npi_type', 'is', null);
-
-      if (typeError) return { data: null, error: typeError };
-
       // Process the data
       const verificationStats = (statusData as { verification_status: string }[]).reduce((acc, item) => {
         acc[item.verification_status] = (acc[item.verification_status] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
 
-      const npiTypeStats = (typeData as { npi_type: string }[]).reduce((acc, item) => {
-        acc[item.npi_type] = (acc[item.npi_type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
       return { 
         data: {
           verificationStatus: verificationStats,
-          npiTypes: npiTypeStats,
           totalApplications: statusData.length
         }, 
         error: null 
