@@ -10,6 +10,7 @@ app = modal.App(
     image=modal_image,
     secrets=[
         modal.Secret.from_name("openai"),
-        modal.Secret.from_name("elevenlabs")
+        modal.Secret.from_name("elevenlabs"),
+        modal.Secret.from_name("supabase")
     ]
 ) 

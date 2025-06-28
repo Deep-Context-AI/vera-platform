@@ -1,6 +1,6 @@
+import httpx
 import logging
 from typing import Optional, List, Dict, Any
-import httpx
 from datetime import datetime
 
 from v1.models.requests import NPIRequest, BatchNPIRequest

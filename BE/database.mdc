@@ -1,0 +1,70 @@
+---
+description: Helpful for anything related to the database
+globs: 
+alwaysApply: false
+---
+We're utilizing the supabase SDK for anything database related. Please use the supabase client initialized as so,
+```py
+import os
+from supabase import create_client, Client
+
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
+```
+
+## Data API
+select() can be combined with Filters
+select() can be combined with Modifiers
+apikey is a reserved keyword if you're using the Supabase Platform and should be avoided as a column name.
+
+Normal retrieval
+```py
+response = (
+    supabase.table("planets")
+    .select("*")
+    .execute()
+)
+```
+
+Query referenced tables through a join
+```py
+response = (
+    supabase.table("users")
+    .select("name, teams(name)")
+    .execute()
+)
+```
+
+Querying JSON data
+```py
+response = (
+    supabase.table("users")
+    .select("id, name, address->city")
+    .execute()
+)
+```
+
+Data Insertions
+```py
+response = (
+    supabase.table("planets")
+    .insert({"id": 1, "name": "Pluto"})
+    .execute()
+)
+```
+
+Data Upserts
+```py
+response = (
+    supabase.table("instruments")
+    .upsert({"id": 1, "name": "piano"})
+    .execute()
+)
+```
+
+### Docs for Filtering
+https://supabase.com/docs/reference/python/using-filters
+
+### Docs for Order
+https://supabase.com/docs/reference/python/order
