@@ -56,6 +56,10 @@ class CaliforniaBoardModel(BaseDBModel):
     primary_status: Optional[str] = Field(None, description="Primary status of the license")
     has_805_reports: Optional[bool] = Field(None, description="Whether there are 805 reports")
     has_public_record_actions: Optional[bool] = Field(None, description="Whether there are public record actions")
+    # New fields for DCA integration
+    board_code: Optional[str] = Field(None, description="DCA board code (e.g., '800' for Medical Board)")
+    license_type_rank: Optional[str] = Field(None, description="License type rank (e.g., 'A', 'G', 'C')")
+    secondary_status_code: Optional[List[str]] = Field(None, description="Secondary status codes for disciplinary actions")
 
 class DEAModel(BaseDBModel):
     """Pydantic model for the DEA table"""

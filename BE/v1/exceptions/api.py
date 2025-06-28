@@ -20,9 +20,9 @@ class NotFoundException(HTTPException):
 
 class ExternalServiceException(HTTPException):
     """Custom exception for external service errors"""
-    def __init__(self, detail: str = "External service error", service_name: str = None):
+    def __init__(self, detail: str = "External service error", service_name: str = None, status_code: int = 500):
         self.service_name = service_name
-        super().__init__(status_code=502, detail=detail)
+        super().__init__(status_code=status_code, detail=detail)
 
 class RateLimitException(HTTPException):
     """Custom exception for rate limiting"""
