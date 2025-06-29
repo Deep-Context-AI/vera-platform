@@ -824,6 +824,7 @@ const PractitionerDetail: React.FC = () => {
             applicationId={applications.length > 0 ? applications[0].id : undefined}
             auditSteps={auditSteps}
             onAuditStepsUpdate={(updatedSteps: AuditTrailEntry[]) => setAuditSteps(updatedSteps)}
+            auditLoading={auditLoading}
           />
           <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <div className="text-center py-8">

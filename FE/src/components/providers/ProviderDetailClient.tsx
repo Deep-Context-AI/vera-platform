@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AgentOverlay } from '@/components/agent/AgentOverlay';
 import { VerificationDemoContainers } from '@/components/agent/VerificationDemoContainers';
 import { Accordion } from '@/components/ui/accordion';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
 import { auditTrailService, mapVerificationStatus, type AuditTrailEntry } from '@/lib/audit';
 import VerificationStep, { 
@@ -76,13 +77,15 @@ export function VerificationTabContent({
   applicationId: propApplicationId,
   auditSteps = [],
   onAuditStepsUpdate,
-  workflowTemplate = 'standard' // New prop to select workflow template
+  workflowTemplate = 'standard', // New prop to select workflow template
+  auditLoading = false
 }: { 
   practitionerId?: number;
   applicationId?: number;
   auditSteps?: AuditTrailEntry[];
   onAuditStepsUpdate?: (steps: AuditTrailEntry[]) => void;
   workflowTemplate?: 'basic' | 'standard' | 'comprehensive' | 'express';
+  auditLoading?: boolean; // Add explicit loading prop
 }) {
   const auditDebug = useAuditTrailDebug();
   const { user } = useAuth();
@@ -115,8 +118,8 @@ export function VerificationTabContent({
         reasoning: existingAudit?.notes || '',
         files: [],
         licenses: existingData?.licenses || [],
-        startedAt: existingAudit?.created_at ? new Date(existingAudit.created_at) : undefined,
-        completedAt: existingAudit?.status === 'completed' && existingAudit.created_at ? new Date(existingAudit.created_at) : undefined,
+        startedAt: existingAudit?.timestamp ? new Date(existingAudit.timestamp) : undefined,
+        completedAt: existingAudit?.status === 'completed' && existingAudit.timestamp ? new Date(existingAudit.timestamp) : undefined,
         examiner: existingAudit?.changed_by || user?.email || 'Unknown'
       };
     });
@@ -153,7 +156,17 @@ export function VerificationTabContent({
     setStepErrors(prev => ({ ...prev, [stepId]: '' }));
 
     try {
-      // Update local state
+      // Record in audit trail first - only update local state after success
+      await auditTrailService.recordChange({
+        application_id: applicationId,
+        step_key: stepId,
+        status: 'in_progress',
+        notes: `Started ${step.name} verification`,
+        changed_by: user?.email || 'system',
+        data: {}
+      });
+
+      // Update local state only after successful API call
       setVerificationState(prev => ({
         ...prev,
         [stepId]: {
@@ -163,16 +176,6 @@ export function VerificationTabContent({
           examiner: user?.email || 'Unknown'
         }
       }));
-
-      // Record in audit trail
-      await auditTrailService.recordChange({
-        application_id: applicationId,
-        step_key: stepId,
-        status: 'in_progress',
-        notes: `Started ${step.name} verification`,
-        changed_by: user?.email || 'system',
-        data: {}
-      });
 
       // Open the accordion for this step
       setOpenAccordions(prev => [...prev, stepId]);
@@ -228,7 +231,7 @@ export function VerificationTabContent({
 
       // Refresh audit trail
       if (onAuditStepsUpdate) {
-        const updatedSteps = await auditTrailService.getTrail(applicationId);
+        const updatedSteps = await auditTrailService.getApplicationAuditTrail(applicationId);
         onAuditStepsUpdate(updatedSteps);
       }
 
@@ -403,79 +406,115 @@ export function VerificationTabContent({
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-4 text-sm">
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-gray-600 dark:text-gray-400">
-                {workflowStats.completed} Completed
-              </span>
+          {auditLoading ? (
+            <div className="flex items-center space-x-4">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-20" />
             </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span className="text-gray-600 dark:text-gray-400">
-                {workflowStats.inProgress} In Progress
-              </span>
+          ) : (
+            <div className="flex items-center space-x-4 text-sm">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {workflowStats.completed} Completed
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {workflowStats.inProgress} In Progress
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {workflowStats.pending} Pending
+                </span>
+              </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-              <span className="text-gray-600 dark:text-gray-400">
-                {workflowStats.pending} Pending
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Verification Steps using modular components */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-        <Accordion 
-          type="multiple" 
-          value={openAccordions} 
-          onValueChange={setOpenAccordions}
-          className="w-full"
-        >
-          {workflow.map((step) => {
-            const stepState = verificationState[step.id];
-            const canStart = canStartStep(step);
-            const isLoading = loadingSteps.has(step.id);
-            const stepError = stepErrors[step.id];
-
-            // Skip rendering if stepState is not initialized yet
-            if (!stepState) {
-              return null;
-            }
-
-            return (
-              <VerificationStep
-                key={step.id}
-                step={step}
-                stepState={stepState}
-                canStart={canStart}
-                isLoading={isLoading}
-                error={stepError}
-                onStart={() => handleStartVerification(step.id)}
-                onSave={() => handleSaveProgress(step.id)}
-                onUpdateStatus={(status) => handleUpdateStatus(step.id, status)}
-                onUpdateReasoning={(reasoning) => handleUpdateReasoning(step.id, reasoning)}
-                onFileUpload={(files) => handleFileUpload(step.id, files)}
-                onRemoveFile={(index) => handleRemoveFile(step.id, index)}
-              >
-                {/* Special form components rendered as children */}
-                {step.hasSpecialForm && step.formType === 'licenses' && (
-                  <div className="mt-4">
-                    <LicenseForm
-                      licenses={stepState.licenses}
-                      onAddLicense={(license) => handleAddLicense(step.id, license)}
-                      onRemoveLicense={(licenseId) => handleRemoveLicense(step.id, licenseId)}
-                      onUpdateLicense={(licenseId, updatedLicense) => handleUpdateLicense(step.id, licenseId, updatedLicense)}
-                      isEditable={true}
-                    />
+        {auditLoading ? (
+          // Skeleton loading state
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {workflow.map((step) => (
+              <div key={step.id} className="px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-3">
+                      <Skeleton className="w-8 h-8 rounded-full" />
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-5 w-20 rounded-full" />
+                        </div>
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                    </div>
                   </div>
-                )}
-              </VerificationStep>
-            );
-          })}
-        </Accordion>
+                  <div className="flex items-center space-x-4">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-5 w-12 rounded-full" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Accordion 
+            type="multiple" 
+            value={openAccordions} 
+            onValueChange={setOpenAccordions}
+            className="w-full"
+          >
+            {workflow.map((step) => {
+              const stepState = verificationState[step.id];
+              const canStart = canStartStep(step);
+              const isLoading = loadingSteps.has(step.id);
+              const stepError = stepErrors[step.id];
+
+              // Skip rendering if stepState is not initialized yet
+              if (!stepState) {
+                return null;
+              }
+
+              return (
+                <VerificationStep
+                  key={step.id}
+                  step={step}
+                  stepState={stepState}
+                  canStart={canStart}
+                  isLoading={isLoading}
+                  error={stepError}
+                  onStart={() => handleStartVerification(step.id)}
+                  onSave={() => handleSaveProgress(step.id)}
+                  onUpdateStatus={(status) => handleUpdateStatus(step.id, status)}
+                  onUpdateReasoning={(reasoning) => handleUpdateReasoning(step.id, reasoning)}
+                  onFileUpload={(files) => handleFileUpload(step.id, files)}
+                  onRemoveFile={(index) => handleRemoveFile(step.id, index)}
+                >
+                  {/* Special form components rendered as children */}
+                  {step.hasSpecialForm && step.formType === 'licenses' && (
+                    <div className="mt-4">
+                      <LicenseForm
+                        licenses={stepState.licenses}
+                        onAddLicense={(license) => handleAddLicense(step.id, license)}
+                        onRemoveLicense={(licenseId) => handleRemoveLicense(step.id, licenseId)}
+                        onUpdateLicense={(licenseId, updatedLicense) => handleUpdateLicense(step.id, licenseId, updatedLicense)}
+                        isEditable={true}
+                      />
+                    </div>
+                  )}
+                </VerificationStep>
+              );
+            })}
+          </Accordion>
+        )}
       </div>
 
       {/* Agent demo containers - for development/testing */}
