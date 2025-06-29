@@ -772,7 +772,10 @@ const PractitionerDetail: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="verifications" className="mt-0" data-tab="verifications">
-          <VerificationTabContent />
+          <VerificationTabContent 
+            practitionerId={providerId} 
+            applicationId={applications.length > 0 ? applications[0].id : undefined}
+          />
           <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <div className="text-center py-8">
               <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAgentRunner } from '@/hooks/useAgentRunner';
+import { useAuditTrail, useAuditTrailDebug } from '@/hooks/useAuditTrail';
+import { useAuth } from '@/hooks/useAuth';
 import { AgentOverlay } from '@/components/agent/AgentOverlay';
 import { VerificationDemoContainers } from '@/components/agent/VerificationDemoContainers';
 import { 
@@ -46,7 +48,7 @@ interface ProviderDetailClientProps {
   children: React.ReactNode;
 }
 
-export function ProviderDetailClient({ providerId: _providerId, children }: ProviderDetailClientProps) {
+export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProps, 'providerId'>) {
   const agentRunner = useAgentRunner();
 
   // Set up event listeners for agent demo controls
@@ -217,10 +219,34 @@ const VERIFICATION_STEPS: VerificationStep[] = [
 ];
 
 // Enhanced verification tab content with comprehensive verification system
-export function VerificationTabContent() {
+export function VerificationTabContent({ 
+  practitionerId, 
+  applicationId: propApplicationId 
+}: { 
+  practitionerId?: number;
+  applicationId?: number;
+}) {
   const [verificationState, setVerificationState] = useState<VerificationState>({});
   const [openAccordions, setOpenAccordions] = useState<string[]>([]);
   const [uploadDialogOpen, setUploadDialogOpen] = useState<string | null>(null);
+  const [loadingSteps, setLoadingSteps] = useState<Set<string>>(new Set());
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
+  
+  // Get authenticated user
+  const { user } = useAuth();
+  
+  // Use the actual application ID from props, fallback to practitioner ID for backward compatibility
+  const applicationId = propApplicationId || practitionerId || 12345; // Multiple fallbacks for safety
+  
+  // Initialize audit trail integration
+  const auditTrail = useAuditTrail({ 
+    applicationId,
+    autoSync: false, // Manual sync for better control
+    pollInterval: 30000 
+  });
+
+  // Debug info for development
+  const auditDebug = useAuditTrailDebug();
 
   // Initialize verification state
   useEffect(() => {
@@ -272,16 +298,70 @@ export function VerificationTabContent() {
   };
 
   // Start verification
-  const startVerification = (stepId: string) => {
-    setVerificationState(prev => ({
-      ...prev,
-      [stepId]: {
-        ...prev[stepId],
-        status: 'in_progress',
-        startedAt: new Date(),
-        examiner: 'Current User', // TODO: Get from auth context
+  const startVerification = async (stepId: string) => {
+    const step = VERIFICATION_STEPS.find(s => s.id === stepId);
+    if (!step) return;
+
+    // Set loading state
+    setLoadingSteps(prev => new Set(prev).add(stepId));
+    setStepErrors(prev => ({ ...prev, [stepId]: '' }));
+
+    try {
+      // Start audit trail step
+      await auditTrail.startStep(stepId, {
+        reasoning: `Starting ${step.name} verification process`,
+        processedBy: user?.email || 'anonymous_user',
+        priority: step.priority as 'low' | 'medium' | 'high',
+        stepType: 'manual_review',
+        requestData: {
+          step_name: step.name,
+          description: step.description,
+          estimated_duration: step.estimatedDuration,
+          dependencies: step.dependsOn || [],
+          practitioner_id: applicationId
+        }
+      });
+
+      // Update local state
+      setVerificationState(prev => ({
+        ...prev,
+        [stepId]: {
+          ...prev[stepId],
+          status: 'in_progress',
+          startedAt: new Date(),
+          examiner: user?.email || 'anonymous_user',
+        }
+      }));
+    } catch (error) {
+      console.error('Failed to start verification step:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start verification';
+      
+      // Check if this is a foreign key constraint violation (application doesn't exist)
+      const isForeignKeyError = errorMessage.includes('violates foreign key constraint') || 
+                               errorMessage.includes('steps_application_id_fkey') ||
+                               errorMessage.includes('not present in table');
+      
+      if (isForeignKeyError) {
+        // Don't update verification state, just show error and keep button available
+        setStepErrors(prev => ({ 
+          ...prev, 
+          [stepId]: `Application ID ${applicationId} not found in the audit trail system. ${propApplicationId ? 'This application may not exist in the database.' : 'No application found for this practitioner. They may need to submit an application first.'}` 
+        }));
+      } else {
+        // For other errors, don't update verification state either - keep in null state with error
+        setStepErrors(prev => ({ ...prev, [stepId]: errorMessage }));
       }
-    }));
+      
+      // Don't update verification state on any error - keep it in 'not_started' state
+      // so user can retry and see the error message
+    } finally {
+      // Remove loading state
+      setLoadingSteps(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(stepId);
+        return newSet;
+      });
+    }
   };
 
   // Update verification status
@@ -333,16 +413,86 @@ export function VerificationTabContent() {
   };
 
   // Save verification step
-  const saveVerificationStep = (stepId: string) => {
+  const saveVerificationStep = async (stepId: string) => {
     const stepData = verificationState[stepId];
-    
-    // TODO: Call API to save verification step to audit_trail table
-    console.log('Saving verification step:', {
-      stepId,
-      ...stepData,
-    });
+    if (!stepData) return;
 
-    // For now, just mark as completed if status was in_progress
+    const step = VERIFICATION_STEPS.find(s => s.id === stepId);
+    if (!step) return;
+
+    // Set loading state
+    setLoadingSteps(prev => new Set(prev).add(stepId));
+    setStepErrors(prev => ({ ...prev, [stepId]: '' }));
+
+    try {
+      // Determine verification result based on status
+      let verificationResult: 'verified' | 'not_verified' | 'partial' | 'error' = 'verified';
+      if (stepData.status === 'failed') {
+        verificationResult = 'error';
+      } else if (stepData.status === 'requires_review') {
+        verificationResult = 'partial';
+      }
+
+      // Calculate processing duration
+      const processingDuration = stepData.startedAt 
+        ? Date.now() - stepData.startedAt.getTime()
+        : undefined;
+
+      // Complete audit trail step
+      await auditTrail.completeStep(stepId, {
+        status: stepData.status === 'completed' ? 'completed' :
+               stepData.status === 'failed' ? 'failed' :
+               stepData.status === 'requires_review' ? 'requires_review' : 'completed',
+        reasoning: stepData.reasoning || `${step.name} verification completed`,
+        responseData: {
+          step_name: step.name,
+          examiner: stepData.examiner || user?.email || 'anonymous_user',
+          files_uploaded: stepData.files.length,
+          completion_time: new Date().toISOString(),
+          practitioner_id: applicationId
+        },
+        verificationResult,
+        confidenceScore: stepData.status === 'completed' ? 95 : 
+                        stepData.status === 'requires_review' ? 70 : 30,
+        processingDurationMs: processingDuration,
+        riskFlags: stepData.status === 'failed' ? ['verification_failed'] : [],
+        complianceChecks: [`${stepId}_completed`]
+      });
+
+      console.log('Verification step saved to audit trail:', {
+        stepId,
+        status: stepData.status,
+        reasoning: stepData.reasoning
+      });
+
+    } catch (error) {
+      console.error('Failed to save verification step to audit trail:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save verification';
+      
+      // Check if this is a foreign key constraint violation
+      const isForeignKeyError = errorMessage.includes('violates foreign key constraint') || 
+                               errorMessage.includes('steps_application_id_fkey') ||
+                               errorMessage.includes('not present in table');
+      
+      if (isForeignKeyError) {
+        setStepErrors(prev => ({ 
+          ...prev, 
+          [stepId]: `Application ID ${applicationId} not found in the audit trail system. Cannot save verification results to audit trail.` 
+        }));
+      } else {
+        setStepErrors(prev => ({ ...prev, [stepId]: errorMessage }));
+      }
+      // Continue with local operations even if audit trail fails
+    } finally {
+      // Remove loading state
+      setLoadingSteps(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(stepId);
+        return newSet;
+      });
+    }
+
+    // Update local state - mark as completed if status was in_progress
     if (stepData.status === 'in_progress') {
       updateVerificationStatus(stepId, 'completed');
     }
@@ -358,8 +508,26 @@ export function VerificationTabContent() {
     });
   };
 
+  // Show warning if no application ID is available
+  const showApplicationWarning = !propApplicationId && auditDebug.isDev;
+
   return (
     <div className="space-y-6">
+      {/* Application Warning */}
+      {showApplicationWarning && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-5 h-5 text-yellow-600" />
+            <div>
+              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">No Application Found</h3>
+              <p className="text-sm text-yellow-600 dark:text-yellow-300 mt-1">
+                No application data available for this practitioner. Audit trail integration will use fallback ID ({applicationId}).
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Verification Overview */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -370,6 +538,14 @@ export function VerificationTabContent() {
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Complete all verification steps to approve this provider application
             </p>
+            {auditDebug.isDev && (
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 space-y-1">
+                <p>API: {auditDebug.currentEndpoint}</p>
+                <p>Practitioner ID: {practitionerId || 'N/A'}</p>
+                <p>Application ID: {applicationId} {propApplicationId ? '(from app)' : '(fallback)'}</p>
+                <p>User: {user?.email || 'Not authenticated'}</p>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-4 text-sm">
                          <div className="flex items-center space-x-2">
@@ -408,6 +584,8 @@ export function VerificationTabContent() {
             const StatusIcon = statusInfo.icon;
             const StepIcon = step.icon;
             const canStart = canStartStep(step);
+            const isLoading = loadingSteps.has(step.id);
+            const stepError = stepErrors[step.id];
 
             // Skip rendering if stepState is not initialized yet
             if (!stepState) {
@@ -484,16 +662,30 @@ export function VerificationTabContent() {
                       )}
                       <Button 
                         onClick={() => startVerification(step.id)}
-                        disabled={!canStart}
+                        disabled={!canStart || isLoading}
                         className="bg-blue-600 hover:bg-blue-700"
                       >
                         <Shield className="w-4 h-4 mr-2" />
-                        Start Verification
+                        {isLoading ? 'Starting...' : 'Start Verification'}
                       </Button>
                       {!canStart && (
                         <p className="text-sm text-red-600 dark:text-red-400 mt-2">
                           Complete required dependencies first
                         </p>
+                      )}
+                      {stepError && (
+                        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                          <p className="text-sm text-red-600 dark:text-red-400">
+                            <AlertTriangle className="w-4 h-4 inline mr-1" />
+                            {stepError}
+                          </p>
+                          <button
+                            onClick={() => setStepErrors(prev => ({ ...prev, [step.id]: '' }))}
+                            className="mt-2 text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 underline"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -636,14 +828,25 @@ export function VerificationTabContent() {
                           </Dialog>
                         </div>
 
+                        {/* Error display */}
+                        {stepError && (
+                          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                            <p className="text-sm text-red-600 dark:text-red-400">
+                              <AlertTriangle className="w-4 h-4 inline mr-1" />
+                              {stepError}
+                            </p>
+                          </div>
+                        )}
+
                         {/* Save button */}
                         <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
                           <Button 
                             onClick={() => saveVerificationStep(step.id)}
+                            disabled={isLoading}
                             className="bg-green-600 hover:bg-green-700"
                           >
                             <CheckCircle className="w-4 h-4 mr-2" />
-                            Save Verification
+                            {isLoading ? 'Saving...' : 'Save Verification'}
                           </Button>
                         </div>
                       </div>
