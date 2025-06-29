@@ -15,6 +15,7 @@ import { ApplicationsAPI } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { ProviderDetailClient, VerificationTabContent } from '@/components/providers/ProviderDetailClient';
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import type { 
@@ -378,9 +379,10 @@ const PractitionerDetail: React.FC = () => {
   }
 
   return (
-    <div>
-      {/* Updated header structure to match UI screenshot */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg px-6">
+    <ProviderDetailClient providerId={id || '0'}>
+      <div>
+        {/* Updated header structure to match UI screenshot */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg px-6">
         
         {/* Main header content */}
         <div className="px-6 pb-6 border-b border-gray-200 dark:border-gray-700">
@@ -769,12 +771,13 @@ const PractitionerDetail: React.FC = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="verifications" className="mt-0">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        <TabsContent value="verifications" className="mt-0" data-tab="verifications">
+          <VerificationTabContent />
+          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <div className="text-center py-8">
               <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Verifications</h3>
-              <p className="text-gray-500 dark:text-gray-400">Verification details will be displayed here.</p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Attestations</h3>
+              <p className="text-gray-500 dark:text-gray-400">Provider attestation details.</p>
               <button
                 onClick={handleShowAttestations}
                 className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
@@ -921,7 +924,8 @@ const PractitionerDetail: React.FC = () => {
                </div>
              </DialogContent>
          </Dialog>
-    </div>
+      </div>
+    </ProviderDetailClient>
   );
 };
 

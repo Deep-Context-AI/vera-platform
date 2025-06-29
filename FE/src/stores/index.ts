@@ -1,5 +1,6 @@
 // Store composition and utilities
 export { useApplicationsStore } from './applicationsStore';
+export * from './agentStore';
 
 // Future stores can be added here:
 // export { usePractitionersStore } from './practitionersStore';
