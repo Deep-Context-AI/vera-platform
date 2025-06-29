@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { 
   User, 
@@ -9,13 +9,16 @@ import {
   AlertTriangle, 
   ChevronDown,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Activity
 } from 'lucide-react';
 import { ApplicationsAPI } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { ProviderDetailClient, VerificationTabContent } from '@/components/providers/ProviderDetailClient';
+import { auditTrailService, type AuditTrailEntry } from '@/lib/audit';
+import { AuditTrailTimeline } from '@/components/ui/audit-trail-timeline';
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import type { 
@@ -43,6 +46,20 @@ const PractitionerDetail: React.FC = () => {
   const [showAttestationsDialog, setShowAttestationsDialog] = useState(false);
   const [expandedAttestationSections, setExpandedAttestationSections] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Get the application ID for audit trail (memoized to prevent unnecessary re-renders)
+  const applicationId = useMemo(() => 
+    applications.length > 0 ? applications[0].id : undefined,
+    [applications]
+  );
+
+  // Audit trail state (managed locally instead of using the hook to avoid infinite loops)
+  const [auditSteps, setAuditSteps] = useState<AuditTrailEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  // Track if we've fetched audit trail for current application
+  const lastFetchedAppId = useRef<number | undefined>(undefined);
 
   // Fetch practitioner and applications data
   const fetchData = useCallback(async () => {
@@ -142,6 +159,36 @@ const PractitionerDetail: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Create stable callback for fetching audit trail
+  const fetchAuditTrail = useCallback(async () => {
+    if (!applicationId || applicationId <= 0) return;
+
+    setAuditLoading(true);
+    setAuditError(null);
+
+    try {
+      const steps = await auditTrailService.getApplicationAuditTrail(applicationId);
+      setAuditSteps(steps);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch audit trail';
+      setAuditError(errorMessage);
+      console.error('Error fetching audit trail:', err);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [applicationId]);
+
+  // Fetch audit trail data when tab is activated
+  useEffect(() => {
+    if (activeTab === 'audit-trail' || activeTab === 'verifications') {
+      // Only fetch if we haven't fetched for this application yet
+      if (lastFetchedAppId.current !== applicationId) {
+        lastFetchedAppId.current = applicationId;
+        fetchAuditTrail();
+      }
+    }
+  }, [activeTab, applicationId, fetchAuditTrail]);
 
   // Handle attestations dialog
   const handleShowAttestations = () => {
@@ -379,7 +426,7 @@ const PractitionerDetail: React.FC = () => {
   }
 
   return (
-    <ProviderDetailClient providerId={id || '0'}>
+    <ProviderDetailClient>
       <div>
         {/* Updated header structure to match UI screenshot */}
         <div className="bg-white dark:bg-gray-800 rounded-lg px-6">
@@ -775,6 +822,8 @@ const PractitionerDetail: React.FC = () => {
           <VerificationTabContent 
             practitionerId={providerId} 
             applicationId={applications.length > 0 ? applications[0].id : undefined}
+            auditSteps={auditSteps}
+            onAuditStepsUpdate={(updatedSteps: AuditTrailEntry[]) => setAuditSteps(updatedSteps)}
           />
           <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <div className="text-center py-8">
@@ -802,11 +851,58 @@ const PractitionerDetail: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="audit-trail" className="mt-0">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <div className="text-center py-8">
-              <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Audit Trail</h3>
-              <p className="text-gray-500 dark:text-gray-400">Audit trail information will be displayed here.</p>
+          <div className="space-y-6">
+            {/* Audit Trail Timeline */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Verification Timeline
+                </h2>
+                <button
+                  onClick={() => {
+                    if (applicationId && applicationId > 0) {
+                      fetchAuditTrail();
+                    }
+                  }}
+                  disabled={auditLoading}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {auditLoading ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
+
+              {auditError && (
+                <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <div>
+                      <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                        Error Loading Audit Trail
+                      </h3>
+                      <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+                        {auditError}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!applicationId || applicationId === 0 ? (
+                <div className="text-center py-8">
+                  <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    No Application Found
+                  </h3>
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Unable to load audit trail. No application data available for this provider.
+                  </p>
+                </div>
+              ) : (
+                <AuditTrailTimeline 
+                  steps={auditSteps}
+                  loading={auditLoading}
+                />
+              )}
             </div>
           </div>
         </TabsContent>

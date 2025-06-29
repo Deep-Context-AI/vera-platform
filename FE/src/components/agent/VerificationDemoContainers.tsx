@@ -1,11 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Shield, CheckCircle, Clock, AlertTriangle, Upload, FileText, X } from 'lucide-react';
+import { Shield, CheckCircle, Clock, AlertTriangle, Upload, FileText, X, Eye } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { DocumentPreview, createDocumentFromData, type DocumentType } from '@/components/ui/document-preview';
+import { DocumentPreviewDemo } from './DocumentPreviewDemo';
 
 export function VerificationDemoContainers() {
   return (
@@ -78,6 +80,9 @@ export function VerificationDemoContainers() {
 
       {/* File Upload Demo Section */}
       <FileUploadDemoSection />
+
+      {/* Document Preview Demo Section */}
+      <DocumentPreviewDemo />
 
       {/* Agent Control Panel */}
       <AgentControlPanel />
@@ -287,16 +292,22 @@ function FileUploadDemoSection() {
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [previewDocument, setPreviewDocument] = React.useState<any>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
 
   const handleFileUpload = (files: FileList | null) => {
     if (files && files.length > 0) {
       const file = files[0];
       setIsUploading(true);
       
-      // Simulate upload processing
+      // Simulate upload processing and document parsing
       setTimeout(() => {
         setUploadedFile(file);
         setIsUploading(false);
+        
+        // Simulate creating a structured document from the uploaded file
+        const mockDocument = createMockDocumentFromFile(file);
+        setPreviewDocument(mockDocument);
       }, 1500);
     }
   };
@@ -320,6 +331,95 @@ function FileUploadDemoSection() {
     setIsDialogOpen(false);
     setUploadedFile(null);
     setIsUploading(false);
+    setPreviewDocument(null);
+  };
+
+  const handlePreviewClick = () => {
+    if (previewDocument) {
+      setIsPreviewOpen(true);
+    }
+  };
+
+  // Mock function to simulate parsing uploaded files into structured documents
+  const createMockDocumentFromFile = (file: File) => {
+    const fileName = file.name.toLowerCase();
+    let documentType: DocumentType = 'generic';
+    let mockApiData: any = {};
+
+    // Determine document type based on filename patterns
+    if (fileName.includes('dea') || fileName.includes('drug')) {
+      documentType = 'dea';
+      mockApiData = {
+        id: `dea_${Date.now()}`,
+        deaNumber: 'BD1234567',
+        practitionerName: 'Dr. Sarah Johnson',
+        businessActivity: ['Practitioner', 'Researcher'],
+        schedules: ['Schedule II', 'Schedule III', 'Schedule IV', 'Schedule V'],
+        expirationDate: new Date('2025-12-31'),
+        issueDate: new Date('2022-01-01'),
+        address: {
+          street: '123 Medical Center Dr',
+          city: 'Healthcare City',
+          state: 'CA',
+          zipCode: '90210'
+        },
+        status: 'verified'
+      };
+    } else if (fileName.includes('npdb') || fileName.includes('malpractice')) {
+      documentType = 'npdb';
+      mockApiData = {
+        id: `npdb_${Date.now()}`,
+        practitionerName: 'Dr. Sarah Johnson',
+        licenseNumber: 'MD123456',
+        reportDate: new Date('2023-06-15'),
+        reportType: 'malpractice',
+        description: 'Medical malpractice settlement related to surgical procedure complications. Patient alleged improper post-operative care resulting in extended recovery time.',
+        amount: 150000,
+        state: 'California',
+        specialty: 'General Surgery',
+        status: 'verified'
+      };
+    } else if (fileName.includes('oig') || fileName.includes('exclusion')) {
+      documentType = 'oig';
+      mockApiData = {
+        id: `oig_${Date.now()}`,
+        practitionerName: 'Dr. Sarah Johnson',
+        exclusionType: 'Conviction of a program-related crime',
+        exclusionDate: new Date('2020-03-15'),
+        waiverDate: new Date('2023-03-15'),
+        specialty: 'Internal Medicine',
+        excludingAgency: 'OIG-HHS',
+        reason: 'Conviction for healthcare fraud involving false billing practices',
+        status: 'verified'
+      };
+    } else if (fileName.includes('license') || fileName.includes('medical')) {
+      documentType = 'license';
+      mockApiData = {
+        id: `license_${Date.now()}`,
+        licenseNumber: 'MD789123',
+        practitionerName: 'Dr. Sarah Johnson',
+        licenseType: 'Physician and Surgeon',
+        issueDate: new Date('2015-07-01'),
+        expirationDate: new Date('2025-07-31'),
+        state: 'California',
+        specialty: 'Internal Medicine',
+        restrictions: [],
+        status: 'verified'
+      };
+    } else {
+      // Generic document
+      mockApiData = {
+        id: `generic_${Date.now()}`,
+        content: 'This is a simulated document preview. In a real implementation, this would contain the parsed content from the uploaded file.',
+        metadata: {
+          uploadedBy: 'Agent Demo',
+          processingTime: '1.5s',
+          fileType: file.type || 'unknown'
+        }
+      };
+    }
+
+    return createDocumentFromData(documentType, file.name, mockApiData, file.size);
   };
 
   return (
@@ -401,13 +501,33 @@ function FileUploadDemoSection() {
                       <p className="text-xs text-green-600 dark:text-green-400">
                         {(uploadedFile.size / 1024).toFixed(1)} KB • {uploadedFile.type || 'Unknown type'}
                       </p>
+                      {previewDocument && (
+                        <p className="text-xs text-green-500 dark:text-green-300 mt-1">
+                          Parsed as {previewDocument.type.toUpperCase()} document
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => setUploadedFile(null)}
-                      className="text-green-600 hover:text-green-700"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {previewDocument && (
+                        <button
+                          onClick={handlePreviewClick}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                          title="Preview document"
+                        >
+                          <Eye className="w-3 h-3" />
+                          Preview
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setUploadedFile(null);
+                          setPreviewDocument(null);
+                        }}
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -437,8 +557,20 @@ function FileUploadDemoSection() {
         <div className="text-xs text-gray-500 dark:text-gray-400">
           <p>📋 Demo supports: PDF, DOC, DOCX, JPG, PNG files</p>
           <p>🤖 Agent will simulate file upload and click Accept automatically</p>
+          <p>👁️ Click "Preview" to see structured document templates</p>
         </div>
       </div>
+
+      {/* Document Preview Dialog */}
+      <DocumentPreview
+        document={previewDocument}
+        open={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+        onDownload={(doc) => {
+          console.log('Download document:', doc);
+          // In a real implementation, this would trigger a download
+        }}
+      />
     </div>
   );
 }

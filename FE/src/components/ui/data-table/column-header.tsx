@@ -46,7 +46,7 @@ export function DataTableColumnHeader<TData, TValue>({
   if (columnDef?.headerRenderer) {
     const context: ColumnHeaderContext<TData> = {
       column,
-      table: column.getTable(),
+      table: (column as any).getTable?.() || null,
       title,
       canSort,
       canFilter,

@@ -10,130 +10,53 @@ const API_ENDPOINTS = {
   }
 };
 
-// Types for audit trail data based on the universal schema
-export interface AuditTrailData {
-  // Core fields
-  step_type: string;
-  reasoning?: string;
+// Valid status values for the new simplified API
+export type AuditTrailStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'requires_review';
 
-  // Request/Response data
-  request_data?: object;
-  response_data?: object;
-
-  // Verification results
-  verification_result?: 'verified' | 'not_verified' | 'partial' | 'error';
-  match_found?: boolean;
-  confidence_score?: number;
-
-  // External service details
-  external_service?: string;
-  external_service_response_time_ms?: number;
-  external_service_status?: string;
-
-  // Data quality and validation
-  data_quality_score?: number;
-  validation_errors?: string[];
-  data_completeness?: number;
-
-  // Risk assessment
-  risk_flags?: string[];
-  risk_score?: number;
-  requires_manual_review?: boolean;
-
-  // Processing details
-  processing_method?: 'database' | 'external_api' | 'ai_generated' | 'manual';
-  processing_duration_ms?: number;
-  retry_count?: number;
-
-  // Agent information
-  processed_by?: string;
-  agent_id?: string;
-  agent_version?: string;
-
-  // Compliance and audit
-  compliance_checks?: string[];
-  audit_notes?: string;
-
-  // Error handling
-  error_code?: string;
-  error_message?: string;
-  error_stack_trace?: string;
-
-  // Dependencies
-  depends_on_steps?: string[];
-  blocking_steps?: string[];
-
-  // Metadata
-  tags?: string[];
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  estimated_duration_ms?: number;
-
-  // Step-specific data
-  step_specific_data?: object;
+// NEW: Simplified request type for recording audit trail changes
+export interface AuditTrailRecordRequest {
+  application_id: number;
+  step_key: string; // Changed from step_name to step_key
+  status: AuditTrailStatus; // REQUIRED
+  data: any; // Dynamic data structure - can be any JSON object
+  changed_by?: string; // Changed from processed_by to changed_by
+  notes?: string; // Simplified from reasoning/audit_notes
 }
 
-// Request types for API calls
-export interface StartAuditTrailRequest {
+// Updated response types to match new simplified API structure
+export interface AuditTrailEntry {
   application_id: number;
-  step_name: string;
-  step_type: string;
-  reasoning?: string;
-  request_data?: object;
-  processed_by?: string;
-  agent_id?: string;
-  priority?: string;
-  estimated_duration_ms?: number;
-  depends_on_steps?: string[];
-  tags?: string[];
-  [key: string]: any; // Allow additional fields from AuditTrailData
+  step_key: string; // Changed from step_name to step_key
+  status: AuditTrailStatus;
+  data: any; // Dynamic data structure
+  notes?: string;
+  changed_by: string;
+  timestamp: string;
+  previous_status?: AuditTrailStatus | null;
+  previous_data?: any; // Previous data state
 }
 
-export interface CompleteAuditTrailRequest {
+export interface AuditTrailResponse {
   application_id: number;
-  step_name: string;
-  status: 'completed' | 'failed' | 'cancelled' | 'requires_review';
-  reasoning?: string;
-  response_data?: object;
-  verification_result?: string;
-  match_found?: boolean;
-  confidence_score?: number;
-  external_service?: string;
-  external_service_response_time_ms?: number;
-  external_service_status?: string;
-  data_quality_score?: number;
-  validation_errors?: string[];
-  risk_flags?: string[];
-  risk_score?: number;
-  requires_manual_review?: boolean;
-  processing_method?: string;
-  processing_duration_ms?: number;
-  retry_count?: number;
-  compliance_checks?: string[];
-  audit_notes?: string;
-  error_code?: string;
-  error_message?: string;
-  [key: string]: any; // Allow additional fields from AuditTrailData
-}
-
-// Response types
-export interface AuditTrailStep {
-  application_id: number;
-  step_name: string;
-  status: string;
-  data: AuditTrailData;
-  started_at: string;
-  finished_at?: string;
+  entries: AuditTrailEntry[];
+  total_entries: number;
+  unique_steps: number;
+  latest_activity: string;
 }
 
 export interface AuditTrailSummary {
   application_id: number;
-  total_steps: number;
-  completed_steps: number;
-  failed_steps: number;
-  in_progress_steps: number;
-  pending_steps: number;
+  total_entries: number;
+  unique_steps: number;
+  latest_activity: string;
+  current_step_statuses: Record<string, AuditTrailStatus>;
   overall_status: string;
-  last_updated: string;
+}
+
+// Query parameters for enhanced endpoints
+export interface AuditTrailQueryParams {
+  step_key?: string; // Changed from step_name to step_key
+  limit?: number;
 }
 
 // Utility class for audit trail operations
@@ -145,14 +68,14 @@ export class AuditTrailService {
   }
 
   /**
-   * Start a new audit trail step
+   * Record a new audit trail change (simplified API)
    */
-  async startStep(request: StartAuditTrailRequest): Promise<AuditTrailStep> {
-    const url = `${this.baseUrl}/start`;
+  async recordChange(request: AuditTrailRecordRequest): Promise<AuditTrailEntry> {
+    const url = `${this.baseUrl}/record`;
     
     // Debug logging in development only
     if (process.env.NODE_ENV === 'development') {
-      console.log('Starting audit trail step:', { url, request });
+      console.log('Recording audit trail change:', { url, request });
     }
     
     const response = await fetch(url, {
@@ -165,15 +88,15 @@ export class AuditTrailService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Audit trail start failed:', { status: response.status, statusText: response.statusText, errorText });
-      throw new Error(`Failed to start audit trail step: ${response.statusText} - ${errorText}`);
+      console.error('Audit trail record failed:', { status: response.status, statusText: response.statusText, errorText });
+      throw new Error(`Failed to record audit trail change: ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
     
     // Debug logging in development only
     if (process.env.NODE_ENV === 'development') {
-      console.log('Audit trail step started successfully:', data);
+      console.log('Audit trail change recorded successfully:', data);
     }
     
     // Backend returns wrapped response with { status, message, entry }
@@ -181,32 +104,94 @@ export class AuditTrailService {
   }
 
   /**
-   * Complete an audit trail step
+   * Convenience method: Log step started
    */
-  async completeStep(request: CompleteAuditTrailRequest): Promise<AuditTrailStep> {
-    const response = await fetch(`${this.baseUrl}/complete`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
+  async logStepStarted(
+    applicationId: number,
+    stepKey: string,
+    options: Partial<AuditTrailRecordRequest> = {}
+  ): Promise<AuditTrailEntry> {
+    return this.recordChange({
+      application_id: applicationId,
+      step_key: stepKey,
+      status: 'in_progress',
+      data: options.data || {},
+      changed_by: options.changed_by || 'frontend_user',
+      notes: options.notes || `Started ${stepKey} verification`,
+      ...options
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to complete audit trail step: ${response.statusText} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    // Backend returns wrapped response with { status, message, entry }
-    return data.entry;
   }
 
   /**
-   * Get all audit trail steps for an application
+   * Convenience method: Log step completed
    */
-  async getApplicationAuditTrail(applicationId: number): Promise<AuditTrailStep[]> {
-    const response = await fetch(`${this.baseUrl}/${applicationId}`);
+  async logStepCompleted(
+    applicationId: number,
+    stepKey: string,
+    options: Partial<AuditTrailRecordRequest> = {}
+  ): Promise<AuditTrailEntry> {
+    return this.recordChange({
+      application_id: applicationId,
+      step_key: stepKey,
+      status: 'completed',
+      data: options.data || {},
+      changed_by: options.changed_by || 'frontend_user',
+      notes: options.notes || `Completed ${stepKey} verification`,
+      ...options
+    });
+  }
+
+  /**
+   * Convenience method: Log step failed
+   */
+  async logStepFailed(
+    applicationId: number,
+    stepKey: string,
+    options: Partial<AuditTrailRecordRequest> = {}
+  ): Promise<AuditTrailEntry> {
+    return this.recordChange({
+      application_id: applicationId,
+      step_key: stepKey,
+      status: 'failed',
+      data: options.data || {},
+      changed_by: options.changed_by || 'frontend_user',
+      notes: options.notes || `Failed ${stepKey} verification`,
+      ...options
+    });
+  }
+
+  /**
+   * Convenience method: Log step requires review
+   */
+  async logStepRequiresReview(
+    applicationId: number,
+    stepKey: string,
+    options: Partial<AuditTrailRecordRequest> = {}
+  ): Promise<AuditTrailEntry> {
+    return this.recordChange({
+      application_id: applicationId,
+      step_key: stepKey,
+      status: 'requires_review',
+      data: options.data || {},
+      changed_by: options.changed_by || 'frontend_user',
+      notes: options.notes || `${stepKey} requires manual review`,
+      ...options
+    });
+  }
+
+  /**
+   * Get all audit trail entries for an application with optional filtering
+   */
+  async getApplicationAuditTrail(
+    applicationId: number,
+    params: AuditTrailQueryParams = {}
+  ): Promise<AuditTrailEntry[]> {
+    const queryString = new URLSearchParams();
+    if (params.step_key) queryString.append('step_key', params.step_key);
+    if (params.limit) queryString.append('limit', params.limit.toString());
+
+    const url = `${this.baseUrl}/${applicationId}${queryString.toString() ? '?' + queryString.toString() : ''}`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -219,36 +204,59 @@ export class AuditTrailService {
   }
 
   /**
-   * Get audit trail summary for an application
+   * Get full audit trail response with metadata
    */
-  async getAuditTrailSummary(applicationId: number): Promise<AuditTrailSummary> {
-    const response = await fetch(`${this.baseUrl}/${applicationId}/summary`);
+  async getApplicationAuditTrailWithMetadata(
+    applicationId: number,
+    params: AuditTrailQueryParams = {}
+  ): Promise<AuditTrailResponse> {
+    const queryString = new URLSearchParams();
+    if (params.step_key) queryString.append('step_key', params.step_key);
+    if (params.limit) queryString.append('limit', params.limit.toString());
+
+    const url = `${this.baseUrl}/${applicationId}${queryString.toString() ? '?' + queryString.toString() : ''}`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to fetch audit trail summary: ${response.statusText} - ${errorText}`);
+      throw new Error(`Failed to fetch audit trail: ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
-    // Backend returns wrapped response, extract the summary data
     return {
       application_id: data.application_id,
-      total_steps: data.total_steps,
-      completed_steps: data.completed_steps,
-      failed_steps: data.failed_steps,
-      in_progress_steps: data.in_progress_steps,
-      pending_steps: data.pending_steps,
-      overall_status: data.overall_progress > 90 ? 'completed' : 
-                     data.failed_steps > 0 ? 'failed' : 'in_progress',
-      last_updated: data.last_activity || new Date().toISOString()
+      entries: data.entries || [],
+      total_entries: data.total_entries || 0,
+      unique_steps: data.unique_steps || 0,
+      latest_activity: data.latest_activity || new Date().toISOString()
     };
   }
 
   /**
-   * Get specific step status
+   * Get step history (all changes for a specific step)
    */
-  async getStepStatus(applicationId: number, stepName: string): Promise<AuditTrailStep | null> {
-    const response = await fetch(`${this.baseUrl}/${applicationId}/step/${stepName}`);
+  async getStepHistory(applicationId: number, stepKey: string): Promise<AuditTrailEntry[]> {
+    const response = await fetch(`${this.baseUrl}/${applicationId}/step/${stepKey}`);
+
+    if (response.status === 404) {
+      return []; // Step not found, return empty array
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch step history: ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    // Backend returns wrapped response with { status, message, entries }
+    return data.entries || [];
+  }
+
+  /**
+   * Get latest status of a specific step
+   */
+  async getLatestStepStatus(applicationId: number, stepKey: string): Promise<AuditTrailEntry | null> {
+    const response = await fetch(`${this.baseUrl}/${applicationId}/step/${stepKey}/latest`);
 
     if (response.status === 404) {
       return null; // Step not found
@@ -256,12 +264,42 @@ export class AuditTrailService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to fetch step status: ${response.statusText} - ${errorText}`);
+      throw new Error(`Failed to fetch latest step status: ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
     // Backend returns wrapped response with { status, message, entry }
     return data.entry;
+  }
+
+  /**
+   * Get current status of all steps for an application
+   */
+  async getCurrentStepStatuses(applicationId: number): Promise<Record<string, AuditTrailStatus>> {
+    const entries = await this.getApplicationAuditTrail(applicationId);
+    
+    // Build a map of latest status for each step
+    const stepStatuses: Record<string, AuditTrailStatus> = {};
+    
+    // Group entries by step_key and find the latest one for each
+    const stepGroups: Record<string, AuditTrailEntry[]> = {};
+    entries.forEach(entry => {
+      if (!stepGroups[entry.step_key]) {
+        stepGroups[entry.step_key] = [];
+      }
+      stepGroups[entry.step_key].push(entry);
+    });
+    
+    // Get the latest status for each step
+    Object.entries(stepGroups).forEach(([stepKey, stepEntries]) => {
+      // Sort by timestamp descending and take the first (latest)
+      const latestEntry = stepEntries.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )[0];
+      stepStatuses[stepKey] = latestEntry.status;
+    });
+    
+    return stepStatuses;
   }
 }
 
@@ -273,34 +311,27 @@ export const auditTrailService = new AuditTrailService();
  */
 export async function startVerificationStep(
   applicationId: number,
-  stepName: string,
+  stepKey: string,
   options: {
-    reasoning?: string;
-    requestData?: object;
-    processedBy?: string;
-    priority?: 'low' | 'medium' | 'high' | 'critical';
-    stepType?: string;
+    notes?: string;
+    data?: any;
+    changedBy?: string;
   } = {}
-): Promise<AuditTrailStep> {
+): Promise<AuditTrailEntry> {
   const {
-    reasoning,
-    requestData,
-    processedBy = 'frontend_user',
-    priority = 'medium',
-    stepType = 'manual_review'
+    notes,
+    data = {},
+    changedBy = 'frontend_user'
   } = options;
 
-  return auditTrailService.startStep({
-    application_id: applicationId,
-    step_name: stepName,
-    step_type: stepType,
-    reasoning,
-    request_data: requestData,
-    processed_by: processedBy,
-    agent_id: 'frontend-agent-001',
-    priority,
-    estimated_duration_ms: 300000, // 5 minutes default
-    tags: [stepName, 'frontend', 'verification']
+  return auditTrailService.logStepStarted(applicationId, stepKey, {
+    notes: notes || `Starting ${stepKey} verification process`,
+    data: {
+      started_at: new Date().toISOString(),
+      initiated_by: changedBy,
+      ...data
+    },
+    changed_by: changedBy
   });
 }
 
@@ -309,43 +340,32 @@ export async function startVerificationStep(
  */
 export async function completeVerificationStep(
   applicationId: number,
-  stepName: string,
+  stepKey: string,
   options: {
-    status: 'completed' | 'failed' | 'cancelled' | 'requires_review';
-    reasoning?: string;
-    responseData?: object;
-    verificationResult?: 'verified' | 'not_verified' | 'partial' | 'error';
-    confidenceScore?: number;
-    processingDurationMs?: number;
-    riskFlags?: string[];
-    complianceChecks?: string[];
-  }
-): Promise<AuditTrailStep> {
+    status?: 'completed' | 'failed' | 'cancelled' | 'requires_review';
+    notes?: string;
+    data?: any;
+    changedBy?: string;
+  } = {}
+): Promise<AuditTrailEntry> {
   const {
-    status,
-    reasoning,
-    responseData,
-    verificationResult,
-    confidenceScore,
-    processingDurationMs,
-    riskFlags,
-    complianceChecks
+    status = 'completed',
+    notes,
+    data = {},
+    changedBy = 'frontend_user'
   } = options;
 
-  return auditTrailService.completeStep({
+  return auditTrailService.recordChange({
     application_id: applicationId,
-    step_name: stepName,
+    step_key: stepKey,
     status,
-    reasoning,
-    response_data: responseData,
-    verification_result: verificationResult,
-    match_found: verificationResult === 'verified',
-    confidence_score: confidenceScore,
-    processing_method: 'manual',
-    processing_duration_ms: processingDurationMs,
-    risk_flags: riskFlags,
-    compliance_checks: complianceChecks,
-    audit_notes: reasoning
+    notes: notes || `${stepKey} verification ${status}`,
+    data: {
+      completed_at: new Date().toISOString(),
+      processed_by: changedBy,
+      ...data
+    },
+    changed_by: changedBy
   });
 }
 
@@ -354,8 +374,12 @@ export async function completeVerificationStep(
  */
 export function mapVerificationStatus(
   frontendStatus: 'not_started' | 'in_progress' | 'completed' | 'failed' | 'requires_review'
-): 'completed' | 'failed' | 'cancelled' | 'requires_review' {
+): AuditTrailStatus {
   switch (frontendStatus) {
+    case 'not_started':
+      return 'pending';
+    case 'in_progress':
+      return 'in_progress';
     case 'completed':
       return 'completed';
     case 'failed':
@@ -363,9 +387,48 @@ export function mapVerificationStatus(
     case 'requires_review':
       return 'requires_review';
     default:
-      return 'completed'; // Default fallback
+      return 'pending'; // Default fallback
   }
 }
 
 // Export API endpoints for direct use
-export { API_ENDPOINTS }; 
+export { API_ENDPOINTS };
+
+// DEPRECATED TYPES - Kept for backward compatibility
+/**
+ * @deprecated Use AuditTrailRecordRequest instead
+ */
+export interface StartAuditTrailRequest {
+  application_id: number;
+  step_key: string;
+  status: AuditTrailStatus;
+  data: any;
+  changed_by?: string;
+  notes?: string;
+}
+
+/**
+ * @deprecated Use AuditTrailRecordRequest instead
+ */
+export interface CompleteAuditTrailRequest {
+  application_id: number;
+  step_key: string;
+  status: AuditTrailStatus;
+  data: any;
+  changed_by?: string;
+  notes?: string;
+}
+
+/**
+ * @deprecated Use AuditTrailEntry instead - kept for backward compatibility
+ */
+export interface AuditTrailStep extends AuditTrailEntry {
+  step_name?: string; // For backward compatibility with old step_name field
+  started_at?: string; // For backward compatibility
+  finished_at?: string; // For backward compatibility
+}
+
+// Legacy data structure - kept for backward compatibility
+export interface AuditTrailData {
+  [key: string]: any; // Now just a generic object since data is dynamic
+} 
