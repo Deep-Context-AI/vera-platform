@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 class BaseRequest(BaseModel):
     """Base request model with common fields"""
@@ -272,67 +272,21 @@ class HospitalPrivilegesRequest(BaseRequest):
             pass
         return v.title()  # Capitalize properly
 
-class AuditTrailStartRequest(BaseRequest):
-    """Request model for starting an audit trail step"""
+class AuditTrailRecordRequest(BaseRequest):
+    """Simplified request model for recording an audit trail change"""
     application_id: int = Field(..., description="Application ID", gt=0)
-    step_name: str = Field(..., description="Name of the verification step", min_length=1, max_length=100)
-    step_type: str = Field(..., description="Type of verification step", min_length=1, max_length=100)
-    reasoning: Optional[str] = Field(None, description="Reasoning for starting this step", max_length=1000)
-    request_data: Optional[dict] = Field(None, description="Input data for the verification")
-    processed_by: Optional[str] = Field("system", description="Who/what is processing this step", max_length=100)
-    agent_id: Optional[str] = Field(None, description="Unique identifier for the processing agent", max_length=100)
-    priority: Optional[str] = Field("medium", description="Priority level", max_length=20)
-    estimated_duration_ms: Optional[int] = Field(None, description="Estimated processing duration", gt=0)
-    depends_on_steps: Optional[List[str]] = Field(None, description="List of step names this step depends on")
-    tags: Optional[List[str]] = Field(None, description="Tags for categorization")
-    
-    @field_validator('priority')
-    def validate_priority(cls, v):
-        if v and v not in ['low', 'medium', 'high', 'critical']:
-            raise ValueError('Priority must be one of: low, medium, high, critical')
-        return v
-
-class AuditTrailCompleteRequest(BaseRequest):
-    """Request model for completing an audit trail step"""
-    application_id: int = Field(..., description="Application ID", gt=0)
-    step_name: str = Field(..., description="Name of the verification step", min_length=1, max_length=100)
-    status: str = Field(..., description="Final status of the step", min_length=1, max_length=50)
-    reasoning: Optional[str] = Field(None, description="Reasoning for the completion/decision", max_length=1000)
-    response_data: Optional[dict] = Field(None, description="Response data from the verification")
-    verification_result: Optional[str] = Field(None, description="Overall result", max_length=50)
-    match_found: Optional[bool] = Field(None, description="Whether a match was found")
-    confidence_score: Optional[float] = Field(None, description="Confidence score (0-100)", ge=0, le=100)
-    external_service: Optional[str] = Field(None, description="Name of external service used", max_length=100)
-    external_service_response_time_ms: Optional[int] = Field(None, description="External service response time", gt=0)
-    external_service_status: Optional[str] = Field(None, description="External service response status", max_length=50)
-    data_quality_score: Optional[float] = Field(None, description="Data quality score (0-100)", ge=0, le=100)
-    validation_errors: Optional[List[str]] = Field(None, description="List of validation errors")
-    risk_flags: Optional[List[str]] = Field(None, description="List of risk flags identified")
-    risk_score: Optional[float] = Field(None, description="Risk score (0-100)", ge=0, le=100)
-    requires_manual_review: Optional[bool] = Field(None, description="Whether manual review is required")
-    processing_method: Optional[str] = Field(None, description="Method used", max_length=50)
-    processing_duration_ms: Optional[int] = Field(None, description="Total processing time", gt=0)
-    retry_count: Optional[int] = Field(None, description="Number of retries attempted", ge=0)
-    compliance_checks: Optional[List[str]] = Field(None, description="List of compliance checks performed")
-    audit_notes: Optional[str] = Field(None, description="Additional audit notes", max_length=2000)
-    error_code: Optional[str] = Field(None, description="Error code if step failed", max_length=50)
-    error_message: Optional[str] = Field(None, description="Detailed error message", max_length=1000)
+    step_key: str = Field(..., description="Step-unique-key per external service (e.g., 'dea', 'npi', 'abms')", min_length=1, max_length=100)
+    status: str = Field(..., description="Current status of the step", min_length=1, max_length=50)
+    data: Dict[str, Any] = Field(..., description="What changed - dynamic dictionary with any keys/values")
+    notes: Optional[str] = Field(None, description="Additional notes about this change", max_length=2000)
+    changed_by: str = Field(..., description="Who made the change (user_id, agent_id, system)", min_length=1, max_length=100)
     
     @field_validator('status')
     def validate_status(cls, v):
-        allowed_statuses = ['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'requires_review']
+        allowed_statuses = [
+            "pending", "in_progress", "completed", "failed", 
+            "cancelled", "requires_review"
+        ]
         if v not in allowed_statuses:
             raise ValueError(f'Status must be one of: {", ".join(allowed_statuses)}')
-        return v
-    
-    @field_validator('verification_result')
-    def validate_verification_result(cls, v):
-        if v and v not in ['verified', 'not_verified', 'partial', 'error']:
-            raise ValueError('Verification result must be one of: verified, not_verified, partial, error')
-        return v
-    
-    @field_validator('processing_method')
-    def validate_processing_method(cls, v):
-        if v and v not in ['database', 'external_api', 'ai_generated', 'manual']:
-            raise ValueError('Processing method must be one of: database, external_api, ai_generated, manual')
         return v

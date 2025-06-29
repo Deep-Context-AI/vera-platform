@@ -7,7 +7,7 @@ in the audit trail. These can be easily integrated into existing verification se
 
 import logging
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 from functools import wraps
 
@@ -16,277 +16,10 @@ from v1.models.database import AuditTrailStatus
 
 logger = logging.getLogger(__name__)
 
-async def track_verification_step(
-    application_id: int,
-    step_name: str,
-    step_type: str,
-    func,
-    *args,
-    reasoning: Optional[str] = None,
-    request_data: Optional[Dict[str, Any]] = None,
-    processed_by: Optional[str] = "system",
-    **kwargs
-):
-    """
-    Track a verification step with automatic start/complete handling
-    
-    Args:
-        application_id: Application ID
-        step_name: Name of the verification step
-        step_type: Type of verification step
-        func: Function to execute for the verification
-        *args: Arguments to pass to the function
-        reasoning: Reasoning for the verification
-        request_data: Input data for the verification
-        processed_by: Who/what is processing this step
-        **kwargs: Additional keyword arguments for the function
-        
-    Returns:
-        Result of the function execution
-    """
-    start_time = time.time()
-    
-    try:
-        # Start the audit trail step
-        await audit_trail_service.start_step(
-            application_id=application_id,
-            step_name=step_name,
-            step_type=step_type,
-            reasoning=reasoning,
-            request_data=request_data,
-            processed_by=processed_by
-        )
-        
-        # Execute the verification function
-        result = await func(*args, **kwargs) if callable(func) else func
-        
-        # Calculate processing time
-        processing_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Determine verification result and other metrics
-        verification_result = "completed"
-        match_found = None
-        confidence_score = None
-        external_service = None
-        
-        # Try to extract information from the result if it's a response object
-        if hasattr(result, 'status'):
-            verification_result = "verified" if result.status == "success" else "error"
-            
-        if hasattr(result, 'message'):
-            reasoning = f"{reasoning or ''} - {result.message}".strip(' -')
-        
-        # Complete the audit trail step
-        await audit_trail_service.complete_step(
-            application_id=application_id,
-            step_name=step_name,
-            status=AuditTrailStatus.COMPLETED,
-            reasoning=reasoning,
-            response_data=result.dict() if hasattr(result, 'dict') else str(result),
-            verification_result=verification_result,
-            match_found=match_found,
-            processing_duration_ms=processing_time_ms,
-            processing_method="external_api" if "external" in step_type.lower() else "database"
-        )
-        
-        return result
-        
-    except Exception as e:
-        # Calculate processing time even for errors
-        processing_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Complete the audit trail step with error
-        await audit_trail_service.complete_step(
-            application_id=application_id,
-            step_name=step_name,
-            status=AuditTrailStatus.FAILED,
-            reasoning=f"{reasoning or ''} - Error: {str(e)}".strip(' -'),
-            verification_result="error",
-            processing_duration_ms=processing_time_ms,
-            error_message=str(e),
-            error_code=type(e).__name__
-        )
-        
-        # Re-raise the exception
-        raise
-
-def audit_trail_tracked(
-    step_name: str,
-    step_type: str,
-    application_id_param: str = "application_id",
-    reasoning: Optional[str] = None,
-    processed_by: Optional[str] = "system"
-):
-    """
-    Decorator to automatically track verification steps in audit trail
-    
-    Args:
-        step_name: Name of the verification step
-        step_type: Type of verification step
-        application_id_param: Name of the parameter containing application_id
-        reasoning: Reasoning for the verification
-        processed_by: Who/what is processing this step
-        
-    Example:
-        @audit_trail_tracked("npi_verification", "external_api")
-        async def verify_npi(application_id: int, npi_request: NPIRequest):
-            # Your verification logic here
-            return npi_response
-    """
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            # Extract application_id from function parameters
-            application_id = None
-            
-            # Try to get application_id from kwargs first
-            if application_id_param in kwargs:
-                application_id = kwargs[application_id_param]
-            else:
-                # Try to get from function signature inspection
-                import inspect
-                sig = inspect.signature(func)
-                param_names = list(sig.parameters.keys())
-                
-                if application_id_param in param_names:
-                    param_index = param_names.index(application_id_param)
-                    if param_index < len(args):
-                        application_id = args[param_index]
-            
-            if application_id is None:
-                logger.warning(f"Could not find application_id parameter for audit trail tracking in {func.__name__}")
-                # Execute without tracking if we can't find application_id
-                return await func(*args, **kwargs)
-            
-            # Extract request data for audit trail
-            request_data = {}
-            if args:
-                request_data["args"] = [str(arg) for arg in args]
-            if kwargs:
-                request_data["kwargs"] = {k: str(v) for k, v in kwargs.items()}
-            
-            return await track_verification_step(
-                application_id=application_id,
-                step_name=step_name,
-                step_type=step_type,
-                func=func,
-                *args,
-                reasoning=reasoning,
-                request_data=request_data,
-                processed_by=processed_by,
-                **kwargs
-            )
-        
-        return wrapper
-    return decorator
-
-async def log_verification_start(
-    application_id: int,
-    step_name: str,
-    step_type: str,
-    reasoning: Optional[str] = None,
-    request_data: Optional[Dict[str, Any]] = None,
-    **additional_data
-):
-    """
-    Simple function to log the start of a verification step
-    
-    Args:
-        application_id: Application ID
-        step_name: Name of the verification step
-        step_type: Type of verification step
-        reasoning: Reasoning for starting this step
-        request_data: Input data for the verification
-        **additional_data: Additional step-specific data
-    """
-    try:
-        await audit_trail_service.start_step(
-            application_id=application_id,
-            step_name=step_name,
-            step_type=step_type,
-            reasoning=reasoning,
-            request_data=request_data,
-            **additional_data
-        )
-    except Exception as e:
-        logger.error(f"Failed to log verification start for {step_name}: {e}")
-
-async def log_verification_complete(
-    application_id: int,
-    step_name: str,
-    status: str = "completed",
-    reasoning: Optional[str] = None,
-    response_data: Optional[Dict[str, Any]] = None,
-    verification_result: Optional[str] = None,
-    processing_duration_ms: Optional[int] = None,
-    **additional_data
-):
-    """
-    Simple function to log the completion of a verification step
-    
-    Args:
-        application_id: Application ID
-        step_name: Name of the verification step
-        status: Final status of the step
-        reasoning: Reasoning for the completion
-        response_data: Response data from the verification
-        verification_result: Overall result (verified, not_verified, partial, error)
-        processing_duration_ms: Total processing time
-        **additional_data: Additional step-specific data
-    """
-    try:
-        await audit_trail_service.complete_step(
-            application_id=application_id,
-            step_name=step_name,
-            status=AuditTrailStatus(status),
-            reasoning=reasoning,
-            response_data=response_data,
-            verification_result=verification_result,
-            processing_duration_ms=processing_duration_ms,
-            **additional_data
-        )
-    except Exception as e:
-        logger.error(f"Failed to log verification completion for {step_name}: {e}")
-
-async def log_verification_error(
-    application_id: int,
-    step_name: str,
-    error: Exception,
-    reasoning: Optional[str] = None,
-    processing_duration_ms: Optional[int] = None,
-    **additional_data
-):
-    """
-    Simple function to log a verification step error
-    
-    Args:
-        application_id: Application ID
-        step_name: Name of the verification step
-        error: Exception that occurred
-        reasoning: Reasoning for the error
-        processing_duration_ms: Total processing time before error
-        **additional_data: Additional step-specific data
-    """
-    try:
-        await audit_trail_service.complete_step(
-            application_id=application_id,
-            step_name=step_name,
-            status=AuditTrailStatus.FAILED,
-            reasoning=f"{reasoning or ''} - Error: {str(error)}".strip(' -'),
-            verification_result="error",
-            processing_duration_ms=processing_duration_ms,
-            error_message=str(error),
-            error_code=type(error).__name__,
-            **additional_data
-        )
-    except Exception as e:
-        logger.error(f"Failed to log verification error for {step_name}: {e}")
-
-# Pre-defined step types for common verification steps
 class VerificationSteps:
-    """Pre-defined verification step names and types"""
+    """Predefined verification step names and types"""
     
-    # Step names
+    # Step names (matching AuditTrailStepName enum)
     NPI_VERIFICATION = "npi_verification"
     DEA_VERIFICATION = "dea_verification"
     ABMS_CERTIFICATION = "abms_certification"
@@ -298,13 +31,441 @@ class VerificationSteps:
     MEDICAL_VERIFICATION = "medical_verification"
     EDUCATION_VERIFICATION = "education_verification"
     HOSPITAL_PRIVILEGES = "hospital_privileges"
+    FINAL_REVIEW = "final_review"
+    APPLICATION_SUBMITTED = "application_submitted"
+    APPLICATION_APPROVED = "application_approved"
+    APPLICATION_REJECTED = "application_rejected"
     
-    # Step types
-    EXTERNAL_API = "external_api"
-    DATABASE_LOOKUP = "database_lookup"
-    AI_GENERATED = "ai_generated"
-    MANUAL_REVIEW = "manual_review"
-    COMPLIANCE_CHECK = "compliance_check"
+    # Step types (for categorization)
+    TYPES = {
+        NPI_VERIFICATION: "external_database_lookup",
+        DEA_VERIFICATION: "external_database_lookup", 
+        ABMS_CERTIFICATION: "external_database_lookup",
+        DCA_LICENSE: "external_database_lookup",
+        MEDICARE_ENROLLMENT: "external_database_lookup",
+        NPDB_CHECK: "external_database_lookup",
+        SANCTIONS_CHECK: "external_database_lookup",
+        LADMF_CHECK: "external_database_lookup",
+        MEDICAL_VERIFICATION: "external_database_lookup",
+        EDUCATION_VERIFICATION: "ai_generated_verification",
+        HOSPITAL_PRIVILEGES: "ai_generated_verification",
+        FINAL_REVIEW: "manual_review",
+        APPLICATION_SUBMITTED: "workflow_step",
+        APPLICATION_APPROVED: "workflow_step",
+        APPLICATION_REJECTED: "workflow_step"
+    }
+    
+    @classmethod
+    def get_step_type(cls, step_name: str) -> str:
+        """Get the step type for a given step name"""
+        return cls.TYPES.get(step_name, "unknown")
+
+# Convenience functions for common verification patterns
+async def log_verification_started(
+    application_id: int,
+    step_name: str,
+    reasoning: Optional[str] = None,
+    request_data: Optional[Dict[str, Any]] = None,
+    processed_by: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    **kwargs
+) -> None:
+    """Log that a verification step has started"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        await audit_trail_service.log_step_started(
+            application_id=application_id,
+            step_name=step_name,
+            step_type=step_type,
+            reasoning=reasoning,
+            request_data=request_data,
+            processed_by=processed_by,
+            agent_id=agent_id,
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to log verification start for {step_name}: {e}")
+
+async def log_verification_completed(
+    application_id: int,
+    step_name: str,
+    verification_result: str,
+    reasoning: Optional[str] = None,
+    response_data: Optional[Dict[str, Any]] = None,
+    match_found: Optional[bool] = None,
+    confidence_score: Optional[float] = None,
+    **kwargs
+) -> None:
+    """Log that a verification step has completed successfully"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        await audit_trail_service.log_step_completed(
+            application_id=application_id,
+            step_name=step_name,
+            step_type=step_type,
+            verification_result=verification_result,
+            reasoning=reasoning,
+            response_data=response_data,
+            match_found=match_found,
+            confidence_score=confidence_score,
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to log verification completion for {step_name}: {e}")
+
+async def log_verification_failed(
+    application_id: int,
+    step_name: str,
+    error_code: str,
+    error_message: str,
+    reasoning: Optional[str] = None,
+    error_stack_trace: Optional[str] = None,
+    **kwargs
+) -> None:
+    """Log that a verification step has failed"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        await audit_trail_service.log_step_failed(
+            application_id=application_id,
+            step_name=step_name,
+            step_type=step_type,
+            error_code=error_code,
+            error_message=error_message,
+            reasoning=reasoning,
+            error_stack_trace=error_stack_trace,
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to log verification failure for {step_name}: {e}")
+
+async def log_verification_updated(
+    application_id: int,
+    step_name: str,
+    reasoning: Optional[str] = None,
+    **kwargs
+) -> None:
+    """Log an update to a verification step"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        await audit_trail_service.log_step_updated(
+            application_id=application_id,
+            step_name=step_name,
+            step_type=step_type,
+            reasoning=reasoning,
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to log verification update for {step_name}: {e}")
+
+async def log_verification_requires_review(
+    application_id: int,
+    step_name: str,
+    reasoning: str,
+    risk_flags: Optional[List[str]] = None,
+    risk_score: Optional[float] = None,
+    **kwargs
+) -> None:
+    """Log that a verification step requires manual review"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        await audit_trail_service.log_step_requires_review(
+            application_id=application_id,
+            step_name=step_name,
+            step_type=step_type,
+            reasoning=reasoning,
+            risk_flags=risk_flags,
+            risk_score=risk_score,
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to log verification review requirement for {step_name}: {e}")
+
+# Wrapper function for automatic tracking
+async def track_verification_step(
+    application_id: int,
+    step_name: str,
+    verification_func: Callable,
+    *args,
+    processed_by: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    **kwargs
+) -> Any:
+    """
+    Wrapper function to automatically track a verification step
+    
+    Args:
+        application_id: Application ID
+        step_name: Name of the verification step
+        verification_func: Function to execute for verification
+        *args: Arguments to pass to verification_func
+        processed_by: Who/what is processing this step
+        agent_id: Unique identifier for the processing agent
+        **kwargs: Additional keyword arguments
+        
+    Returns:
+        Result of verification_func
+    """
+    start_time = datetime.utcnow()
+    
+    # Log step started
+    await log_verification_started(
+        application_id=application_id,
+        step_name=step_name,
+        reasoning=f"Starting {step_name} verification",
+        processed_by=processed_by,
+        agent_id=agent_id,
+        estimated_duration_ms=kwargs.get('estimated_duration_ms')
+    )
+    
+    try:
+        # Execute the verification function
+        result = await verification_func(*args, **kwargs)
+        
+        # Calculate processing duration
+        end_time = datetime.utcnow()
+        processing_duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        # Determine verification result
+        if hasattr(result, 'status') and result.status == 'success':
+            verification_result = "verified"
+        elif hasattr(result, 'verification_result'):
+            verification_result = result.verification_result
+        else:
+            verification_result = "completed"
+        
+        # Log step completed
+        await log_verification_completed(
+            application_id=application_id,
+            step_name=step_name,
+            verification_result=verification_result,
+            reasoning=f"Completed {step_name} verification successfully",
+            response_data=result.__dict__ if hasattr(result, '__dict__') else {"result": str(result)},
+            processing_duration_ms=processing_duration_ms,
+            processed_by=processed_by,
+            agent_id=agent_id
+        )
+        
+        return result
+        
+    except Exception as e:
+        # Calculate processing duration
+        end_time = datetime.utcnow()
+        processing_duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        # Log step failed
+        await log_verification_failed(
+            application_id=application_id,
+            step_name=step_name,
+            error_code=type(e).__name__,
+            error_message=str(e),
+            reasoning=f"Failed {step_name} verification due to error",
+            processing_duration_ms=processing_duration_ms,
+            processed_by=processed_by,
+            agent_id=agent_id
+        )
+        
+        # Re-raise the exception
+        raise
+
+# Decorator for automatic tracking
+def audit_trail_tracked(
+    step_name: str,
+    application_id_param: str = "application_id",
+    processed_by: Optional[str] = None,
+    agent_id: Optional[str] = None
+):
+    """
+    Decorator to automatically track verification steps
+    
+    Args:
+        step_name: Name of the verification step
+        application_id_param: Name of the parameter that contains the application ID
+        processed_by: Who/what is processing this step
+        agent_id: Unique identifier for the processing agent
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Extract application_id from function parameters
+            application_id = None
+            
+            # Try to get from kwargs first
+            if application_id_param in kwargs:
+                application_id = kwargs[application_id_param]
+            else:
+                # Try to get from function signature
+                import inspect
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters.keys())
+                if application_id_param in param_names:
+                    param_index = param_names.index(application_id_param)
+                    if param_index < len(args):
+                        application_id = args[param_index]
+            
+            if application_id is None:
+                logger.warning(f"Could not find application_id parameter for audit tracking in {func.__name__}")
+                return await func(*args, **kwargs)
+            
+            # Use the track_verification_step wrapper
+            return await track_verification_step(
+                application_id=application_id,
+                step_name=step_name,
+                verification_func=func,
+                *args,
+                processed_by=processed_by,
+                agent_id=agent_id,
+                **kwargs
+            )
+        
+        return wrapper
+    return decorator
+
+# Helper functions for common patterns
+async def record_external_service_call(
+    application_id: int,
+    step_name: str,
+    service_name: str,
+    request_data: Dict[str, Any],
+    response_data: Dict[str, Any],
+    response_time_ms: int,
+    success: bool,
+    **kwargs
+) -> None:
+    """Record an external service call as part of verification"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        
+        if success:
+            await audit_trail_service.record_change(
+                application_id=application_id,
+                step_name=step_name,
+                status=AuditTrailStatus.COMPLETED,
+                change_type="external_service_call",
+                step_type=step_type,
+                reasoning=f"Successfully called {service_name}",
+                request_data=request_data,
+                response_data=response_data,
+                external_service=service_name,
+                external_service_response_time_ms=response_time_ms,
+                external_service_status="success",
+                processing_method="external_api",
+                **kwargs
+            )
+        else:
+            await audit_trail_service.record_change(
+                application_id=application_id,
+                step_name=step_name,
+                status=AuditTrailStatus.FAILED,
+                change_type="external_service_call",
+                step_type=step_type,
+                reasoning=f"Failed to call {service_name}",
+                request_data=request_data,
+                response_data=response_data,
+                external_service=service_name,
+                external_service_response_time_ms=response_time_ms,
+                external_service_status="failed",
+                processing_method="external_api",
+                **kwargs
+            )
+    except Exception as e:
+        logger.error(f"Failed to record external service call for {step_name}: {e}")
+
+async def record_ai_generation(
+    application_id: int,
+    step_name: str,
+    prompt_data: Dict[str, Any],
+    generated_content: Dict[str, Any],
+    model_info: Dict[str, Any],
+    processing_time_ms: int,
+    **kwargs
+) -> None:
+    """Record AI content generation as part of verification"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        
+        await audit_trail_service.record_change(
+            application_id=application_id,
+            step_name=step_name,
+            status=AuditTrailStatus.COMPLETED,
+            change_type="ai_generation",
+            step_type=step_type,
+            reasoning=f"Generated content using AI for {step_name}",
+            request_data=prompt_data,
+            response_data=generated_content,
+            processing_method="ai_generated",
+            processing_duration_ms=processing_time_ms,
+            agent_id=model_info.get("model_name"),
+            agent_version=model_info.get("model_version"),
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to record AI generation for {step_name}: {e}")
+
+async def record_manual_review(
+    application_id: int,
+    step_name: str,
+    reviewer_id: str,
+    review_decision: str,
+    review_notes: str,
+    **kwargs
+) -> None:
+    """Record manual review as part of verification"""
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        
+        status = AuditTrailStatus.COMPLETED if review_decision in ["approved", "verified"] else AuditTrailStatus.FAILED
+        
+        await audit_trail_service.record_change(
+            application_id=application_id,
+            step_name=step_name,
+            status=status,
+            change_type="manual_review",
+            step_type=step_type,
+            reasoning=f"Manual review completed by {reviewer_id}",
+            response_data={"review_decision": review_decision, "review_notes": review_notes},
+            verification_result=review_decision,
+            processing_method="manual",
+            processed_by=reviewer_id,
+            audit_notes=review_notes,
+            **kwargs
+        )
+    except Exception as e:
+        logger.error(f"Failed to record manual review for {step_name}: {e}")
+
+# Workflow helpers
+async def start_application_workflow(
+    application_id: int,
+    initiated_by: str,
+    **kwargs
+) -> None:
+    """Start the application verification workflow"""
+    await log_verification_started(
+        application_id=application_id,
+        step_name=VerificationSteps.APPLICATION_SUBMITTED,
+        reasoning="Application submitted for verification",
+        processed_by=initiated_by,
+        **kwargs
+    )
+
+async def complete_application_workflow(
+    application_id: int,
+    decision: str,  # "approved" or "rejected"
+    decision_reason: str,
+    decided_by: str,
+    **kwargs
+) -> None:
+    """Complete the application verification workflow"""
+    step_name = VerificationSteps.APPLICATION_APPROVED if decision == "approved" else VerificationSteps.APPLICATION_REJECTED
+    
+    await log_verification_completed(
+        application_id=application_id,
+        step_name=step_name,
+        verification_result=decision,
+        reasoning=decision_reason,
+        response_data={"decision": decision, "reason": decision_reason},
+        processed_by=decided_by,
+        **kwargs
+    )
 
 # Example usage functions for common verification patterns
 async def track_npi_verification(application_id: int, npi_request, npi_service_func):

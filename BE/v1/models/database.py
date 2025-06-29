@@ -453,94 +453,17 @@ class AuditTrailStatus(str, Enum):
     CANCELLED = "cancelled"
     REQUIRES_REVIEW = "requires_review"
 
-class AuditTrailStepName(str, Enum):
-    """Enumeration for verification step names"""
-    NPI_VERIFICATION = "npi_verification"
-    DEA_VERIFICATION = "dea_verification"
-    ABMS_CERTIFICATION = "abms_certification"
-    DCA_LICENSE = "dca_license"
-    MEDICARE_ENROLLMENT = "medicare_enrollment"
-    NPDB_CHECK = "npdb_check"
-    SANCTIONS_CHECK = "sanctions_check"
-    LADMF_CHECK = "ladmf_check"
-    MEDICAL_VERIFICATION = "medical_verification"
-    EDUCATION_VERIFICATION = "education_verification"
-    HOSPITAL_PRIVILEGES = "hospital_privileges"
-    FINAL_REVIEW = "final_review"
-    APPLICATION_SUBMITTED = "application_submitted"
-    APPLICATION_APPROVED = "application_approved"
-    APPLICATION_REJECTED = "application_rejected"
-
-class AuditTrailData(BaseModel):
-    """Universal audit trail data structure"""
-    
-    # Core fields
-    step_type: str = Field(..., description="Type of verification step")
-    reasoning: Optional[str] = Field(None, description="AI agent or human reasoning for the decision")
-    
-    # Request/Response data
-    request_data: Optional[Dict[str, Any]] = Field(None, description="Input data for the verification")
-    response_data: Optional[Dict[str, Any]] = Field(None, description="Response data from the verification")
-    
-    # Verification results
-    verification_result: Optional[str] = Field(None, description="Overall result (verified, not_verified, partial, error)")
-    match_found: Optional[bool] = Field(None, description="Whether a match was found in the source system")
-    confidence_score: Optional[float] = Field(None, description="Confidence score (0-100)")
-    
-    # External service details
-    external_service: Optional[str] = Field(None, description="Name of external service used")
-    external_service_response_time_ms: Optional[int] = Field(None, description="External service response time")
-    external_service_status: Optional[str] = Field(None, description="External service response status")
-    
-    # Data quality and validation
-    data_quality_score: Optional[float] = Field(None, description="Data quality score (0-100)")
-    validation_errors: Optional[List[str]] = Field(None, description="List of validation errors")
-    data_completeness: Optional[float] = Field(None, description="Data completeness percentage")
-    
-    # Risk assessment
-    risk_flags: Optional[List[str]] = Field(None, description="List of risk flags identified")
-    risk_score: Optional[float] = Field(None, description="Risk score (0-100)")
-    requires_manual_review: Optional[bool] = Field(None, description="Whether manual review is required")
-    
-    # Processing details
-    processing_method: Optional[str] = Field(None, description="Method used (database, external_api, ai_generated)")
-    processing_duration_ms: Optional[int] = Field(None, description="Total processing time in milliseconds")
-    retry_count: Optional[int] = Field(None, description="Number of retries attempted")
-    
-    # Agent information
-    processed_by: Optional[str] = Field(None, description="Who/what processed this step (ai_agent, human_agent, system)")
-    agent_id: Optional[str] = Field(None, description="Unique identifier for the processing agent")
-    agent_version: Optional[str] = Field(None, description="Version of the processing agent")
-    
-    # Compliance and audit
-    compliance_checks: Optional[List[str]] = Field(None, description="List of compliance checks performed")
-    audit_notes: Optional[str] = Field(None, description="Additional audit notes")
-    
-    # Error handling
-    error_code: Optional[str] = Field(None, description="Error code if step failed")
-    error_message: Optional[str] = Field(None, description="Detailed error message")
-    error_stack_trace: Optional[str] = Field(None, description="Stack trace for debugging")
-    
-    # Dependencies
-    depends_on_steps: Optional[List[str]] = Field(None, description="List of step names this step depends on")
-    blocking_steps: Optional[List[str]] = Field(None, description="List of step names that are blocked by this step")
-    
-    # Metadata
-    tags: Optional[List[str]] = Field(None, description="Tags for categorization")
-    priority: Optional[str] = Field(None, description="Priority level (low, medium, high, critical)")
-    estimated_duration_ms: Optional[int] = Field(None, description="Estimated processing duration")
-    
-    # Step-specific data (flexible for different verification types)
-    step_specific_data: Optional[Dict[str, Any]] = Field(None, description="Additional data specific to the verification type")
-
 class AuditTrailEntry(BaseModel):
-    """Complete audit trail entry model"""
+    """Simplified audit trail entry model - immutable record of a single state change"""
     application_id: int = Field(..., description="Application ID")
-    step_name: str = Field(..., description="Step name")
-    status: AuditTrailStatus = Field(..., description="Current status of the step")
-    data: AuditTrailData = Field(..., description="Step data")
-    started_at: datetime = Field(..., description="When the step started")
-    finished_at: Optional[datetime] = Field(None, description="When the step finished")
-    
+    step_key: str = Field(..., description="Step-unique-key per external service")
+    status: str = Field(..., description="Status at this point in time")
+    data: Dict[str, Any] = Field(..., description="What changed - dynamic dictionary")
+    notes: Optional[str] = Field(None, description="Notes about this change")
+    changed_by: str = Field(..., description="Who made the change")
+    timestamp: datetime = Field(..., description="When this audit entry was created")
+    previous_status: Optional[str] = Field(None, description="Previous status before this change")
+    previous_data: Optional[Dict[str, Any]] = Field(None, description="Previous data before this change")
+
     class Config:
         use_enum_values = True
