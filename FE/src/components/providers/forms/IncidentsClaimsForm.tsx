@@ -202,6 +202,7 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                     </div>
                     <div className="flex justify-end space-x-2">
                       <Button
+                        key="cancel"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -211,6 +212,7 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                         Cancel
                       </Button>
                       <Button
+                        key="save"
                         type="button"
                         size="sm"
                         onClick={handleSaveEdit}
@@ -254,6 +256,7 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                     {isEditable && (
                       <div className="flex space-x-1">
                         <Button
+                          key="edit"
                           type="button"
                           variant="ghost"
                           size="sm"
@@ -263,6 +266,7 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                           <Edit2 className="w-3 h-3" />
                         </Button>
                         <Button
+                          key="remove"
                           type="button"
                           variant="ghost"
                           size="sm"
@@ -334,6 +338,7 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
           </div>
           <div className="flex justify-end space-x-2 mt-4">
             <Button
+              key="cancel-add"
               type="button"
               variant="outline"
               size="sm"
@@ -342,6 +347,7 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
               Cancel
             </Button>
             <Button
+              key="add-incident"
               type="button"
               size="sm"
               onClick={handleAddIncident}

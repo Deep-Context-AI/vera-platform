@@ -2,14 +2,20 @@
 
 import { 
   Shield,
-  FileText,
   CheckCircle,
   Users,
   Building,
   Award,
   Database,
   Phone,
-  Globe
+  Globe,
+  Building2,
+  CreditCard,
+  Heart,
+  GraduationCap,
+  Stethoscope,
+  Hash,
+  Search
 } from 'lucide-react';
 import { VerificationStepConfig } from './VerificationStep';
 
@@ -25,6 +31,132 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     hasSpecialForm: false
   },
   
+  ca_license_verification: {
+    id: 'ca_license_verification',
+    name: 'CA License Verification',
+    description: 'Verify California medical license and professional certifications',
+    icon: Award,
+    priority: 'high',
+    estimatedDuration: '10-15 min',
+    dependsOn: ['identity_verification'],
+    hasSpecialForm: true,
+    formType: 'licenses'
+  },
+  
+  abms_verification: {
+    id: 'abms_verification',
+    name: 'ABMS Verification',
+    description: 'Verify American Board of Medical Specialties certification',
+    icon: Stethoscope,
+    priority: 'high',
+    estimatedDuration: '15-20 min',
+    dependsOn: ['ca_license_verification'],
+    hasSpecialForm: false
+  },
+  
+  npdb_verification: {
+    id: 'npdb_verification',
+    name: 'NPDB Check',
+    description: 'National Practitioner Data Bank background check',
+    icon: Database,
+    priority: 'high',
+    estimatedDuration: '10-15 min',
+    dependsOn: ['identity_verification'],
+    hasSpecialForm: true,
+    formType: 'incidents_claims'
+  },
+  
+  dea_verification: {
+    id: 'dea_verification',
+    name: 'DEA Verification',
+    description: 'Drug Enforcement Administration registration verification',
+    icon: Shield,
+    priority: 'high',
+    estimatedDuration: '10-15 min',
+    dependsOn: ['ca_license_verification'],
+    hasSpecialForm: false
+  },
+  
+  npi_verification: {
+    id: 'npi_verification',
+    name: 'NPI Verification',
+    description: 'National Provider Identifier verification',
+    icon: Hash,
+    priority: 'high',
+    estimatedDuration: '5-10 min',
+    dependsOn: ['identity_verification'],
+    hasSpecialForm: false
+  },
+  
+  ladmf_verification: {
+    id: 'ladmf_verification',
+    name: 'LADMF Verification',
+    description: 'Los Angeles Department of Medical and Forensic verification',
+    icon: Building2,
+    priority: 'medium',
+    estimatedDuration: '15-20 min',
+    dependsOn: ['ca_license_verification'],
+    hasSpecialForm: false
+  },
+  
+  sanction_check: {
+    id: 'sanction_check',
+    name: 'Sanction Check',
+    description: 'OIG and GSA sanctions list verification',
+    icon: Search,
+    priority: 'high',
+    estimatedDuration: '10-15 min',
+    dependsOn: ['identity_verification'],
+    hasSpecialForm: true,
+    formType: 'incidents_claims'
+  },
+  
+  medicare_verification: {
+    id: 'medicare_verification',
+    name: 'Medicare Verification',
+    description: 'Medicare provider enrollment and participation verification',
+    icon: CreditCard,
+    priority: 'medium',
+    estimatedDuration: '10-15 min',
+    dependsOn: ['npi_verification'],
+    hasSpecialForm: false
+  },
+  
+  medical_verification: {
+    id: 'medical_verification',
+    name: 'Medi-Cal Verification',
+    description: 'California Medicaid provider enrollment verification',
+    icon: Heart,
+    priority: 'medium',
+    estimatedDuration: '10-15 min',
+    dependsOn: ['ca_license_verification'],
+    hasSpecialForm: false
+  },
+  
+  hospital_privileges: {
+    id: 'hospital_privileges',
+    name: 'Hospital Privileges',
+    description: 'Verify hospital privileges and admitting rights',
+    icon: Building2,
+    priority: 'medium',
+    estimatedDuration: '15-20 min',
+    dependsOn: ['ca_license_verification'],
+    hasSpecialForm: true,
+    formType: 'hospital_privileges'
+  },
+  
+  education_verification: {
+    id: 'education_verification',
+    name: 'Education Verification',
+    description: 'Verify educational background and medical school degrees',
+    icon: GraduationCap,
+    priority: 'medium',
+    estimatedDuration: '15-20 min',
+    dependsOn: ['identity_verification'],
+    hasSpecialForm: false
+  },
+  
+  // Legacy steps for backward compatibility
   license_verification: {
     id: 'license_verification',
     name: 'License Verification',
@@ -35,16 +167,6 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     dependsOn: ['identity_verification'],
     hasSpecialForm: true,
     formType: 'licenses'
-  },
-  
-  education_verification: {
-    id: 'education_verification',
-    name: 'Education Verification',
-    description: 'Verify educational background and degrees',
-    icon: FileText,
-    priority: 'medium',
-    estimatedDuration: '15-20 min',
-    dependsOn: ['identity_verification']
   },
   
   employment_verification: {
@@ -273,18 +395,23 @@ export const WORKFLOW_TEMPLATES = {
     .addSteps([
       'identity_verification',
       'contact_verification',
-      'license_verification'
+      'ca_license_verification'
     ]),
   
-  // Standard verification for most healthcare providers
+  // Standard verification for most healthcare providers (updated with new steps)
   standard: () => new VerificationWorkflowBuilder()
     .addSteps([
       'identity_verification',
-      'contact_verification',
-      'license_verification',
+      'npi_verification',
+      'ca_license_verification',
+      'abms_verification',
+      'dea_verification',
+      'npdb_verification',
+      'sanction_check',
       'education_verification',
-      'employment_verification',
-      'insurance_verification'
+      'hospital_privileges',
+      'medicare_verification',
+      'medical_verification'
     ]),
   
   // Comprehensive verification for high-risk or specialized providers
@@ -292,13 +419,22 @@ export const WORKFLOW_TEMPLATES = {
     .addSteps([
       'identity_verification',
       'contact_verification',
-      'license_verification',
+      'npi_verification',
+      'ca_license_verification',
+      'abms_verification',
+      'dea_verification',
+      'ladmf_verification',
+      'npdb_verification',
+      'sanction_check',
       'education_verification',
       'employment_verification',
       'reference_verification',
       'background_check',
       'specialty_certification',
+      'hospital_privileges',
       'insurance_verification',
+      'medicare_verification',
+      'medical_verification',
       'website_social_verification'
     ]),
   
@@ -306,8 +442,27 @@ export const WORKFLOW_TEMPLATES = {
   express: () => new VerificationWorkflowBuilder()
     .addSteps([
       'identity_verification',
-      'license_verification',
-      'contact_verification'
+      'npi_verification',
+      'ca_license_verification',
+      'npdb_verification',
+      'sanction_check'
+    ]),
+
+  // California-specific workflow (new template)
+  california: () => new VerificationWorkflowBuilder()
+    .addSteps([
+      'identity_verification',
+      'npi_verification',
+      'ca_license_verification',
+      'abms_verification',
+      'dea_verification',
+      'ladmf_verification',
+      'npdb_verification',
+      'sanction_check',
+      'education_verification',
+      'hospital_privileges',
+      'medicare_verification',
+      'medical_verification'
     ])
 };
 

@@ -38,7 +38,7 @@ export interface VerificationStepConfig {
   estimatedDuration: string;
   dependsOn?: string[];
   hasSpecialForm?: boolean;
-  formType?: 'licenses' | 'certifications' | 'registrations';
+  formType?: 'licenses' | 'certifications' | 'registrations' | 'incidents_claims' | 'hospital_privileges';
 }
 
 export interface VerificationStepState {
@@ -51,6 +51,22 @@ export interface VerificationStepState {
     state: string;
     issued: string;
     expiration: string;
+  }>;
+  incidents: Array<{
+    id: string;
+    incidentType: string;
+    details: string;
+    date: string;
+  }>;
+  hospitalPrivileges: Array<{
+    id: string;
+    hospitalName: string;
+    address?: string;
+    phone?: string;
+    department: string;
+    issued: string;
+    expiration: string;
+    status: 'Active' | 'Inactive' | 'Suspended' | 'Pending';
   }>;
   startedAt?: Date;
   completedAt?: Date;

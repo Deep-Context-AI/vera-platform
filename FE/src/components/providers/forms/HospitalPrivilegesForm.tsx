@@ -250,6 +250,7 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
                   </div>
                   <div className="flex justify-end space-x-2">
                     <Button
+                      key="cancel"
                       type="button"
                       variant="outline"
                       size="sm"
@@ -259,6 +260,7 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
                       Cancel
                     </Button>
                     <Button
+                      key="save"
                       type="button"
                       size="sm"
                       onClick={handleSaveEdit}
@@ -283,12 +285,12 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
                           {privilege.status}
                         </Badge>
                         {isExpired(privilege.expiration) && (
-                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                          <Badge key="expired" className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
                             Expired
                           </Badge>
                         )}
                         {isExpiringSoon(privilege.expiration) && !isExpired(privilege.expiration) && (
-                          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
+                          <Badge key="expires-soon" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
                             Expires Soon
                           </Badge>
                         )}
@@ -323,6 +325,7 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
                   {isEditable && (
                     <div className="flex space-x-1">
                       <Button
+                        key="edit"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -332,6 +335,7 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
                         <Edit2 className="w-3 h-3" />
                       </Button>
                       <Button
+                        key="remove"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -448,6 +452,7 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
           </div>
           <div className="flex justify-end space-x-2 mt-4">
             <Button
+              key="cancel-add"
               type="button"
               variant="outline"
               size="sm"
@@ -456,6 +461,7 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
               Cancel
             </Button>
             <Button
+              key="add-privilege"
               type="button"
               size="sm"
               onClick={handleAddPrivilege}

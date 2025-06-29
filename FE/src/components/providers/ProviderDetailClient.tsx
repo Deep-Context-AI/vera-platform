@@ -15,6 +15,8 @@ import VerificationStep, {
   type VerificationStepState 
 } from './VerificationStep';
 import LicenseForm, { type License } from './forms/LicenseForm';
+import { IncidentsClaimsForm, type IncidentClaim } from './forms/IncidentsClaimsForm';
+import { HospitalPrivilegesForm, type HospitalPrivilege } from './forms/HospitalPrivilegesForm';
 import { 
   WORKFLOW_TEMPLATES, 
   canStartStep as builderCanStartStep
@@ -84,7 +86,7 @@ export function VerificationTabContent({
   applicationId?: number;
   auditSteps?: AuditTrailEntry[];
   onAuditStepsUpdate?: (steps: AuditTrailEntry[]) => void;
-  workflowTemplate?: 'basic' | 'standard' | 'comprehensive' | 'express';
+  workflowTemplate?: 'basic' | 'standard' | 'comprehensive' | 'express' | 'california';
   auditLoading?: boolean; // Add explicit loading prop
 }) {
   const auditDebug = useAuditTrailDebug();
@@ -118,6 +120,8 @@ export function VerificationTabContent({
         reasoning: existingAudit?.notes || '',
         files: [],
         licenses: existingData?.licenses || [],
+        incidents: existingData?.incidents || [],
+        hospitalPrivileges: existingData?.hospitalPrivileges || [],
         startedAt: existingAudit?.timestamp ? new Date(existingAudit.timestamp) : undefined,
         completedAt: existingAudit?.status === 'completed' && existingAudit.timestamp ? new Date(existingAudit.timestamp) : undefined,
         examiner: existingAudit?.changed_by || user?.email || 'Unknown'
@@ -266,6 +270,26 @@ export function VerificationTabContent({
             expiration: license.expiration
           }))
         };
+      case 'incidents_claims':
+        return {
+          incidents: stepState.incidents.map(incident => ({
+            incidentType: incident.incidentType,
+            details: incident.details,
+            date: incident.date
+          }))
+        };
+      case 'hospital_privileges':
+        return {
+          hospitalPrivileges: stepState.hospitalPrivileges.map(privilege => ({
+            hospitalName: privilege.hospitalName,
+            address: privilege.address,
+            phone: privilege.phone,
+            department: privilege.department,
+            issued: privilege.issued,
+            expiration: privilege.expiration,
+            status: privilege.status
+          }))
+        };
       case 'certifications':
         // Future implementation for certifications
         return {};
@@ -305,6 +329,72 @@ export function VerificationTabContent({
         ...prev[stepId],
         licenses: (prev[stepId]?.licenses || []).map(license =>
           license.id === licenseId ? { ...license, ...updatedLicense } : license
+        )
+      }
+    }));
+  };
+
+  // Incident management handlers
+  const handleAddIncident = (stepId: string, incident: Omit<IncidentClaim, 'id'>) => {
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        incidents: [...(prev[stepId]?.incidents || []), { ...incident, id: Date.now().toString() }]
+      }
+    }));
+  };
+
+  const handleRemoveIncident = (stepId: string, incidentId: string) => {
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        incidents: (prev[stepId]?.incidents || []).filter(incident => incident.id !== incidentId)
+      }
+    }));
+  };
+
+  const handleUpdateIncident = (stepId: string, incidentId: string, updatedIncident: Partial<IncidentClaim>) => {
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        incidents: (prev[stepId]?.incidents || []).map(incident =>
+          incident.id === incidentId ? { ...incident, ...updatedIncident } : incident
+        )
+      }
+    }));
+  };
+
+  // Hospital privilege management handlers
+  const handleAddHospitalPrivilege = (stepId: string, privilege: Omit<HospitalPrivilege, 'id'>) => {
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        hospitalPrivileges: [...(prev[stepId]?.hospitalPrivileges || []), { ...privilege, id: Date.now().toString() }]
+      }
+    }));
+  };
+
+  const handleRemoveHospitalPrivilege = (stepId: string, privilegeId: string) => {
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        hospitalPrivileges: (prev[stepId]?.hospitalPrivileges || []).filter(privilege => privilege.id !== privilegeId)
+      }
+    }));
+  };
+
+  const handleUpdateHospitalPrivilege = (stepId: string, privilegeId: string, updatedPrivilege: Partial<HospitalPrivilege>) => {
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        hospitalPrivileges: (prev[stepId]?.hospitalPrivileges || []).map(privilege =>
+          privilege.id === privilegeId ? { ...privilege, ...updatedPrivilege } : privilege
         )
       }
     }));
@@ -506,6 +596,28 @@ export function VerificationTabContent({
                         onAddLicense={(license) => handleAddLicense(step.id, license)}
                         onRemoveLicense={(licenseId) => handleRemoveLicense(step.id, licenseId)}
                         onUpdateLicense={(licenseId, updatedLicense) => handleUpdateLicense(step.id, licenseId, updatedLicense)}
+                        isEditable={true}
+                      />
+                    </div>
+                  )}
+                  {step.hasSpecialForm && step.formType === 'incidents_claims' && (
+                    <div className="mt-4">
+                      <IncidentsClaimsForm
+                        incidents={stepState.incidents}
+                        onAddIncident={(incident) => handleAddIncident(step.id, incident)}
+                        onRemoveIncident={(incidentId) => handleRemoveIncident(step.id, incidentId)}
+                        onUpdateIncident={(incidentId, updatedIncident) => handleUpdateIncident(step.id, incidentId, updatedIncident)}
+                        isEditable={true}
+                      />
+                    </div>
+                  )}
+                  {step.hasSpecialForm && step.formType === 'hospital_privileges' && (
+                    <div className="mt-4">
+                      <HospitalPrivilegesForm
+                        privileges={stepState.hospitalPrivileges}
+                        onAddPrivilege={(privilege) => handleAddHospitalPrivilege(step.id, privilege)}
+                        onRemovePrivilege={(privilegeId) => handleRemoveHospitalPrivilege(step.id, privilegeId)}
+                        onUpdatePrivilege={(privilegeId, updatedPrivilege) => handleUpdateHospitalPrivilege(step.id, privilegeId, updatedPrivilege)}
                         isEditable={true}
                       />
                     </div>
