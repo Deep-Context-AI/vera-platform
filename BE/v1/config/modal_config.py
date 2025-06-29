@@ -11,6 +11,7 @@ app = modal.App(
     secrets=[
         modal.Secret.from_name("openai"),
         modal.Secret.from_name("elevenlabs"),
-        modal.Secret.from_name("supabase")
+        modal.Secret.from_name("supabase"),
+        modal.Secret.from_name("gemini")
     ]
 ) 

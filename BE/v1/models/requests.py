@@ -111,7 +111,6 @@ class NPDBRequest(BaseRequest):
             raise ValueError('DEA number must be 2 letters followed by 7 digits')
         return v.upper() if v else v
 
-
 class ComprehensiveSANCTIONRequest(BaseRequest):
     """Request model for comprehensive sanctions check"""
     first_name: str = Field(..., description="First name", min_length=1, max_length=50)
@@ -150,18 +149,6 @@ class LADMFRequest(BaseRequest):
     def validate_ssn(cls, v):
         if not v.isdigit():
             raise ValueError('Social Security Number must contain only digits')
-        return v
-
-# Batch request models
-class BatchNPIRequest(BaseRequest):
-    """Request model for batch NPI lookups"""
-    npis: List[str] = Field(..., description="List of NPIs to lookup", min_items=1, max_items=100)
-    
-    @field_validator('npis')
-    def validate_npis(cls, v):
-        for npi in v:
-            if not npi.isdigit() or len(npi) != 10:
-                raise ValueError(f'Invalid NPI: {npi}. Must be 10 digits.')
         return v
 
 class MedicalRequest(BaseRequest):
@@ -249,3 +236,38 @@ class EducationRequest(BaseRequest):
         if not any(v.lower() == degree.lower() for degree in allowed_degrees):
             raise ValueError(f'degree_type must be one of: {", ".join(allowed_degrees)}')
         return v
+
+class HospitalPrivilegesRequest(BaseRequest):
+    """Request model for hospital privileges verification with transcript generation and audio conversion"""
+    first_name: str = Field(..., description="First name of the practitioner", min_length=1, max_length=50)
+    last_name: str = Field(..., description="Last name of the practitioner", min_length=1, max_length=50)
+    npi_number: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
+    hospital_name: str = Field(..., description="Hospital name where privileges are being verified", min_length=2, max_length=200)
+    specialty: str = Field(..., description="Medical specialty for privileges", min_length=2, max_length=100)
+    verification_type: str = Field(..., description="Type of verification requested (e.g., 'current_privileges', 'historical_privileges')", max_length=50)
+    
+    @field_validator('npi_number')
+    def validate_npi_number(cls, v: str):
+        if not v.isdigit():
+            raise ValueError('NPI number must contain only digits')
+        return v
+    
+    @field_validator('verification_type')
+    def validate_verification_type(cls, v: str):
+        allowed_types = ['current_privileges', 'historical_privileges', 'privileges_status', 'general_inquiry']
+        if v.lower() not in allowed_types:
+            raise ValueError(f'Verification type must be one of: {", ".join(allowed_types)}')
+        return v.lower()
+    
+    @field_validator('specialty')
+    def validate_specialty(cls, v: str):
+        # Common medical specialties - can be expanded
+        common_specialties = [
+            'internal medicine', 'family medicine', 'pediatrics', 'emergency medicine',
+            'surgery', 'cardiology', 'orthopedics', 'neurology', 'psychiatry',
+            'radiology', 'anesthesiology', 'pathology', 'dermatology', 'oncology'
+        ]
+        if v.lower() not in common_specialties:
+            # Allow custom specialties but log a warning
+            pass
+        return v.title()  # Capitalize properly

@@ -1,11 +1,12 @@
 import httpx
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from datetime import datetime
 
-from v1.models.requests import NPIRequest, BatchNPIRequest
-from v1.models.responses import NPIResponse, BatchNPIResponse, ResponseStatus
-from v1.exceptions.api import ExternalServiceException, NotFoundException
+from v1.models.requests import NPIRequest
+from v1.models.responses import NPIResponse, ResponseStatus
+from v1.exceptions.api import ExternalServiceException
+from v1.services.database import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,123 @@ class NPIService:
         self.base_url = "https://npiregistry.cms.hhs.gov/api"
         self.timeout = 30.0
     
-    async def lookup_npi(self, request: NPIRequest) -> NPIResponse:
+    async def lookup_npi_from_db(self, npi_number: str, practitioner_id: Optional[int] = None) -> Optional[NPIResponse]:
         """
-        Lookup NPI using various search criteria
+        Lookup NPI from database
+        
+        Args:
+            npi_number: NPI number to lookup
+            practitioner_id: Optional practitioner ID to filter by
+            
+        Returns:
+            NPIResponse if found, None otherwise
+        """
+        try:
+            supabase = get_supabase_client()
+            
+            # Build query
+            query = supabase.schema('vera').table('npi').select('*').eq('number', npi_number)
+            
+            if practitioner_id:
+                query = query.eq('practitioner_id', practitioner_id)
+            
+            response = query.execute()
+            
+            if not response.data:
+                logger.info(f"NPI {npi_number} not found in database")
+                return None
+            
+            # Get the first result (should be unique by NPI number)
+            npi_data = response.data[0]
+            logger.info(f"Found NPI {npi_number} in database for practitioner {npi_data.get('practitioner_id')}")
+            
+            # Convert database record to NPIResponse
+            return self._convert_db_to_response(npi_data)
+            
+        except Exception as e:
+            logger.error(f"Database error during NPI lookup: {e}")
+            return None
+    
+    def _convert_db_to_response(self, npi_data: Dict[str, Any]) -> NPIResponse:
+        """
+        Convert database NPI record to NPIResponse
+        
+        Args:
+            npi_data: NPI data from database
+            
+        Returns:
+            NPIResponse object
+        """
+        # Get practitioner name if available
+        provider_name = f"Provider {npi_data.get('number')}"
+        if npi_data.get('practitioner_id'):
+            try:
+                supabase = get_supabase_client()
+                practitioner_response = supabase.schema('vera').table('practitioners').select('first_name, last_name').eq('id', npi_data.get('practitioner_id')).execute()
+                
+                if practitioner_response.data:
+                    practitioner = practitioner_response.data[0]
+                    first_name = practitioner.get('first_name', '')
+                    last_name = practitioner.get('last_name', '')
+                    if first_name or last_name:
+                        provider_name = f"{first_name} {last_name}".strip()
+            except Exception as e:
+                logger.warning(f"Could not fetch practitioner name for ID {npi_data.get('practitioner_id')}: {e}")
+        
+        return NPIResponse(
+            status=ResponseStatus.SUCCESS,
+            message="NPI found in database",
+            npi=npi_data.get('number'),
+            provider_name=provider_name,
+            provider_type=npi_data.get('type'),
+            primary_taxonomy=npi_data.get('taxonomy_code'),
+            specialty=npi_data.get('description'),
+            is_active=npi_data.get('status') == 'Active',
+            # Database doesn't have all the detailed fields from external API
+            practice_address=None,
+            mailing_address=None,
+            phone=None,
+            fax=None,
+            license_state=None,
+            license_number=None,
+            secondary_taxonomies=None,
+            enumeration_date=None,
+            last_update_date=None,
+            sole_proprietor=None,
+            authorized_official=None,
+            gender=None,
+            credential=None,
+            address=None
+        )
+    
+    async def comprehensive_npi_lookup(self, request: NPIRequest) -> NPIResponse:
+        """
+        Comprehensive NPI lookup that checks database first, then external API
+        
+        Args:
+            request: NPIRequest containing search criteria
+            
+        Returns:
+            NPIResponse with the lookup results
+            
+        Raises:
+            NotFoundException: If NPI is not found
+            ExternalServiceException: If external service fails
+        """
+        # First, try to get from database if we have an NPI number
+        if request.npi:
+            db_result = await self.lookup_npi_from_db(request.npi)
+            if db_result:
+                logger.info(f"NPI {request.npi} found in database")
+                return db_result
+        
+        # If not found in database, try external API
+        logger.info(f"NPI {request.npi} not found in database, trying external API")
+        return await self.lookup_npi_external(request)
+    
+    async def lookup_npi_external(self, request: NPIRequest) -> NPIResponse:
+        """
+        Lookup NPI using external API
         
         Args:
             request: NPIRequest containing search criteria
@@ -73,6 +188,23 @@ class NPIService:
                 detail="Unexpected error during NPI lookup",
                 service_name="NPI Registry"
             )
+    
+    # Keep the original method for backward compatibility, but make it use comprehensive lookup
+    async def lookup_npi(self, request: NPIRequest) -> NPIResponse:
+        """
+        Lookup NPI using comprehensive approach (database first, then external API)
+        
+        Args:
+            request: NPIRequest containing search criteria
+            
+        Returns:
+            NPIResponse with the lookup results
+            
+        Raises:
+            NotFoundException: If NPI is not found
+            ExternalServiceException: If external service fails
+        """
+        return await self.comprehensive_npi_lookup(request)
     
     def _build_search_params(self, request: NPIRequest) -> Dict[str, str]:
         """Build search parameters for the NPI API"""
@@ -252,47 +384,6 @@ class NPIService:
             credential=credential,
             # Legacy field for backward compatibility
             address=practice_address
-        )
-    
-    async def batch_lookup_npi(self, request: BatchNPIRequest) -> BatchNPIResponse:
-        """
-        Lookup multiple NPIs
-        
-        Args:
-            request: BatchNPIRequest containing the NPIs to lookup
-            
-        Returns:
-            BatchNPIResponse with all lookup results
-        """
-        logger.info(f"Batch NPI lookup for {len(request.npis)} NPIs")
-        
-        results = []
-        found_count = 0
-        
-        for npi in request.npis:
-            try:
-                npi_request = NPIRequest(npi=npi)
-                result = await self.lookup_npi(npi_request)
-                results.append(result)
-                
-                if result.status == ResponseStatus.SUCCESS:
-                    found_count += 1
-                    
-            except Exception as e:
-                logger.error(f"Error in batch lookup for NPI {npi}: {e}")
-                results.append(NPIResponse(
-                    status=ResponseStatus.ERROR,
-                    message=f"Error looking up NPI {npi}: {str(e)}",
-                    npi=npi
-                ))
-        
-        return BatchNPIResponse(
-            status=ResponseStatus.SUCCESS,
-            message=f"Batch lookup completed: {found_count}/{len(request.npis)} found",
-            results=results,
-            total_requested=len(request.npis),
-            total_found=found_count,
-            total_not_found=len(request.npis) - found_count
         )
 
 # Global service instance

@@ -19,20 +19,20 @@ class DialogueInput:
     text: str
     voice_id: str
 
-from v1.models.requests import EducationRequest
-from v1.models.responses import EducationResponse, ResponseStatus
+from v1.models.requests import HospitalPrivilegesRequest
+from v1.models.responses import HospitalPrivilegesResponse, ResponseStatus
 from v1.exceptions.api import ExternalServiceException
 
 # Import Modal app from config
 from v1.config.modal_config import app, modal_image
 
 # Create or reference the audio storage volume
-audio_volume = modal.Volume.from_name("education-audio-storage", create_if_missing=True)
+audio_volume = modal.Volume.from_name("hospital-privileges-audio-storage", create_if_missing=True)
 
 logger = logging.getLogger(__name__)
 
-def _lookup_student_context(first_name: str, last_name: str, institution: str, graduation_year: int) -> Dict[str, Any]:
-    """Lookup student/practitioner information in database for context"""
+def _lookup_practitioner_context(npi_number: str, first_name: str, last_name: str) -> Dict[str, Any]:
+    """Lookup practitioner information in database for context"""
     try:
         import os
         from supabase import create_client, Client
@@ -47,11 +47,17 @@ def _lookup_student_context(first_name: str, last_name: str, institution: str, g
         
         supabase: Client = create_client(supabase_url, supabase_key)
         
-        # Search by name first, then cross-reference with education details
+        # Search by NPI first, then by name
         practitioner = None
         
-        # Try name lookup
-        if first_name and last_name:
+        # Try NPI lookup first
+        if npi_number:
+            response = supabase.schema('vera').table('practitioners').select('*').eq('npi', npi_number).execute()
+            if response.data:
+                practitioner = response.data[0]
+        
+        # If not found by NPI, try name lookup
+        if not practitioner and first_name and last_name:
             response = supabase.schema('vera').table('practitioners').select('*').eq('first_name', first_name).eq('last_name', last_name).execute()
             if response.data:
                 practitioner = response.data[0]
@@ -68,20 +74,19 @@ def _lookup_student_context(first_name: str, last_name: str, institution: str, g
                 "specialty": practitioner.get('specialty'),
                 "status": "active",
                 "license_state": practitioner.get('license_state'),
-                "license_number": practitioner.get('license_number'),
-                "education_verified": True
+                "license_number": practitioner.get('license_number')
             }
         else:
-            logger.info(f"Student/practitioner not found in database: {first_name} {last_name} from {institution}")
+            logger.info(f"Practitioner not found in database: {first_name} {last_name}, NPI: {npi_number}")
             return {
                 "exists": False,
                 "verified": False,
                 "status": "not_found",
-                "note": "This student/practitioner is not in our verification database"
+                "note": "This practitioner is not in our verification database"
             }
             
     except Exception as e:
-        logger.error(f"Error looking up student context: {e}")
+        logger.error(f"Error looking up practitioner context: {e}")
         return {"exists": False, "verified": False, "status": "lookup_error", "error": str(e)}
 
 @app.function(
@@ -89,25 +94,25 @@ def _lookup_student_context(first_name: str, last_name: str, institution: str, g
     timeout=300,  # 5 minutes timeout
     volumes={"/audio_storage": audio_volume}
 )
-def process_education_verification(
+def process_hospital_privileges_verification(
     first_name: str,
     last_name: str,
-    institution: str,
-    degree_type: str,
-    graduation_year: int,
+    npi_number: str,
+    hospital_name: str,
+    specialty: str,
     verification_type: str
 ) -> Dict[str, Any]:
     """
-    Modal function to process education verification
+    Modal function to process hospital privileges verification
     
     This function:
     1. Uses Gemini to generate a dialogue transcript
-    2. Uses ElevenLabs text-to-dialogue to convert transcript to audio
+    2. Uses ElevenLabs text-to-speech to convert transcript to audio
     3. Generates and stores a simulated email response
     4. Returns the audio file information and email details
     """    
     try:
-        logger.info(f"Processing education verification for {first_name} {last_name}")
+        logger.info(f"Processing hospital privileges verification for {first_name} {last_name} at {hospital_name}")
         
         # Initialize Gemini client
         gemini_client = genai.Client(
@@ -119,16 +124,16 @@ def process_education_verification(
             api_key=os.environ["ELEVENLABS_API_KEY"]
         )
         
-        # Step 0: Lookup student/practitioner in database for context
-        student_context = _lookup_student_context(first_name, last_name, institution, graduation_year)
+        # Step 0: Lookup practitioner in database for context
+        practitioner_context = _lookup_practitioner_context(npi_number, first_name, last_name)
         
         # Step 1: Generate dialogue transcript using Gemini with database context
         dialogue_inputs = _generate_dialogue_transcript(
-            gemini_client, first_name, last_name, institution, 
-            degree_type, graduation_year, verification_type, student_context
+            gemini_client, first_name, last_name, npi_number, 
+            hospital_name, specialty, verification_type, practitioner_context
         )
         
-        # Step 2: Convert dialogue to audio using ElevenLabs text-to-dialogue
+        # Step 2: Convert dialogue to audio using ElevenLabs text-to-speech
         # Get the current function call ID for file organization
         import modal
         current_function_call_id = modal.current_function_call_id()
@@ -136,8 +141,8 @@ def process_education_verification(
         
         # Step 3: Generate email response content with database context
         email_content = _generate_email_response(
-            gemini_client, first_name, last_name, institution, 
-            degree_type, graduation_year, verification_type, student_context
+            gemini_client, first_name, last_name, npi_number,
+            hospital_name, specialty, verification_type, practitioner_context
         )
         
         # Step 4: Schedule delayed email insertion (1-5 minutes)
@@ -145,15 +150,15 @@ def process_education_verification(
         logger.info(f"Scheduling email insertion in {delay_minutes} minutes")
         
         # Schedule the email to be inserted after delay
-        _schedule_education_email_insertion.spawn(
+        _schedule_hospital_email_insertion.spawn(
             email_content=email_content,
             function_call_id=current_function_call_id,
             delay_minutes=delay_minutes,
             first_name=first_name,
             last_name=last_name,
-            institution=institution,
-            degree_type=degree_type,
-            graduation_year=graduation_year,
+            npi_number=npi_number,
+            hospital_name=hospital_name,
+            specialty=specialty,
             verification_type=verification_type
         )
         
@@ -171,14 +176,14 @@ def process_education_verification(
             "verification_details": {
                 "first_name": first_name,
                 "last_name": last_name,
-                "institution": institution,
-                "degree_type": degree_type,
-                "graduation_year": graduation_year,
+                "npi_number": npi_number,
+                "hospital_name": hospital_name,
+                "specialty": specialty,
                 "verification_type": verification_type
             }
         }
         
-        logger.info(f"Education verification completed for {first_name} {last_name}")
+        logger.info(f"Hospital privileges verification completed for {first_name} {last_name}")
         return result
         
     except Exception as e:
@@ -193,15 +198,15 @@ def process_education_verification(
     image=modal_image,
     timeout=600  # 10 minutes timeout for delayed execution
 )
-def _schedule_education_email_insertion(
+def _schedule_hospital_email_insertion(
     email_content: Dict[str, Any],
     function_call_id: str,
     delay_minutes: int,
     first_name: str,
     last_name: str,
-    institution: str,
-    degree_type: str,
-    graduation_year: int,
+    npi_number: str,
+    hospital_name: str,
+    specialty: str,
     verification_type: str
 ):
     """
@@ -227,7 +232,7 @@ def _schedule_education_email_insertion(
         
         # Insert email into database
         email_data = {
-            "message_id": f"edu-{uuid.uuid4().hex}",
+            "message_id": f"hosp-{uuid.uuid4().hex}",
             "thread_id": f"thread-{function_call_id}",
             "subject": email_content["subject"],
             "sender_email": email_content["sender_email"],
@@ -235,12 +240,11 @@ def _schedule_education_email_insertion(
             "recipient_email": "verifications@vera-platform.com",
             "body_text": email_content["body_text"],
             "body_html": email_content["body_html"],
-            "verification_type": "education",
+            "verification_type": "hospital_privileges",
             "verification_request_id": function_call_id,
             "function_call_id": function_call_id,
-            "institution_name": institution,
-            "degree_type": degree_type,
-            "graduation_year": graduation_year,
+            "institution_name": hospital_name,
+            "degree_type": specialty,  # Using specialty as degree_type for hospital privileges
             "student_first_name": first_name,
             "student_last_name": last_name,
             "status": "unread",
@@ -254,74 +258,74 @@ def _schedule_education_email_insertion(
         result = supabase.schema('vera').table("inbox_emails").insert(email_data).execute()
         
         if result.data:
-            logger.info(f"Email successfully inserted for {first_name} {last_name} from {institution}")
+            logger.info(f"Email successfully inserted for {first_name} {last_name} from {hospital_name}")
         else:
             logger.error(f"Failed to insert email: {result}")
             
     except Exception as e:
         logger.error(f"Error inserting delayed email: {e}")
 
-class EducationService:
-    """Service for education verification with transcript generation and audio conversion"""
+class HospitalPrivilegesService:
+    """Service for hospital privileges verification with transcript generation and audio conversion"""
     
     def __init__(self):
         self.timeout = 30.0
         # Modal function reference will be set when Modal is available
         self.modal_function = None
         
-    async def verify_education(self, request: EducationRequest) -> EducationResponse:
+    async def verify_hospital_privileges(self, request: HospitalPrivilegesRequest) -> HospitalPrivilegesResponse:
         """
-        Initiate education verification process
+        Initiate hospital privileges verification process
         
         Args:
-            request: EducationRequest containing education information
+            request: HospitalPrivilegesRequest containing verification information
             
         Returns:
-            EducationResponse with job information
+            HospitalPrivilegesResponse with job information
             
         Raises:
             ExternalServiceException: If service fails
         """
         try:
-            logger.info(f"Starting education verification for: {request.first_name} {request.last_name}")
+            logger.info(f"Starting hospital privileges verification for: {request.first_name} {request.last_name} at {request.hospital_name}")
             
             # Spawn Modal function for async processing
             function_call = await self._spawn_modal_function(request)
             
-            response = EducationResponse(
+            response = HospitalPrivilegesResponse(
                 status=ResponseStatus.SUCCESS,
-                message="Education verification job spawned successfully",
+                message="Hospital privileges verification job spawned successfully",
                 job_id=function_call.object_id,
                 function_call_id=function_call.object_id,
                 verification_status="processing",
                 first_name=request.first_name,
                 last_name=request.last_name,
-                institution=request.institution,
-                degree_type=request.degree_type,
-                graduation_year=request.graduation_year
+                npi_number=request.npi_number,
+                hospital_name=request.hospital_name,
+                specialty=request.specialty
             )
             
-            logger.info(f"Education verification job spawned with ID: {function_call.object_id}")
+            logger.info(f"Hospital privileges verification job spawned with ID: {function_call.object_id}")
             return response
             
         except Exception as e:
-            logger.error(f"Error during education verification initiation: {e}")
+            logger.error(f"Error during hospital privileges verification initiation: {e}")
             raise ExternalServiceException(
-                detail="Failed to initiate education verification",
-                service_name="Education Verification"
+                detail="Failed to initiate hospital privileges verification",
+                service_name="Hospital Privileges Verification"
             )
     
-    async def _spawn_modal_function(self, request: EducationRequest):
+    async def _spawn_modal_function(self, request: HospitalPrivilegesRequest):
         """Spawn the Modal function for processing"""
         try:
             # Use the function directly from the current module
-            # The process_education_verification function is decorated with @app.function
-            function_call = process_education_verification.spawn(
+            # The process_hospital_privileges_verification function is decorated with @app.function
+            function_call = process_hospital_privileges_verification.spawn(
                 first_name=request.first_name,
                 last_name=request.last_name,
-                institution=request.institution,
-                degree_type=request.degree_type,
-                graduation_year=request.graduation_year,
+                npi_number=request.npi_number,
+                hospital_name=request.hospital_name,
+                specialty=request.specialty,
                 verification_type=request.verification_type
             )
             
@@ -336,7 +340,7 @@ class EducationService:
     
     async def get_verification_result(self, function_call_id: str) -> Dict[str, Any]:
         """
-        Get the result of an education verification job
+        Get the result of a hospital privileges verification job
         
         Args:
             function_call_id: Modal function call ID
@@ -348,7 +352,7 @@ class EducationService:
             ExternalServiceException: If unable to retrieve result
         """
         try:
-            logger.info(f"Retrieving education verification result for function call: {function_call_id}")
+            logger.info(f"Retrieving hospital privileges verification result for function call: {function_call_id}")
             
             # Get the function call result using Modal's FunctionCall.from_id
             import modal
@@ -381,7 +385,7 @@ class EducationService:
             logger.error(f"Error retrieving verification result: {e}")
             raise ExternalServiceException(
                 detail=f"Failed to retrieve verification result: {str(e)}",
-                service_name="Education Verification Result"
+                service_name="Hospital Privileges Verification Result"
             )
     
     async def download_audio_file(self, storage_path: str):
@@ -401,7 +405,7 @@ class EducationService:
             logger.info(f"Downloading audio file from storage path: {storage_path}")
             
             # Get the audio volume
-            volume = modal.Volume.from_name("education-audio-storage")
+            volume = modal.Volume.from_name("hospital-privileges-audio-storage")
             
             # Download the file from the volume
             import tempfile
@@ -442,7 +446,7 @@ class EducationService:
             logger.error(f"Error downloading audio file: {e}")
             raise ExternalServiceException(
                 detail=f"Failed to download audio file: {str(e)}",
-                service_name="Education Audio Download"
+                service_name="Hospital Privileges Audio Download"
             )
 
 
@@ -450,65 +454,64 @@ def _generate_dialogue_transcript(
     gemini_client: genai.Client, 
     first_name: str, 
     last_name: str, 
-    institution: str,
-    degree_type: str, 
-    graduation_year: int, 
+    npi_number: str,
+    hospital_name: str,
+    specialty: str, 
     verification_type: str,
-    student_context: Dict[str, Any]
+    practitioner_context: Dict[str, Any]
 ) -> List[DialogueInput]:
-    """Generate education verification dialogue transcript using Gemini"""
+    """Generate hospital privileges verification dialogue transcript using Gemini"""
     
     # Build context-aware prompt based on database lookup
     context_info = ""
     verification_approach = ""
     
-    if student_context.get("exists"):
+    if practitioner_context.get("exists"):
         context_info = f"""
 Database Context (for realistic dialogue):
-- Student/Practitioner Status: FOUND in verification database
-- Database ID: {student_context.get('practitioner_id')}
-- Current NPI: {student_context.get('npi')}
-- Current Specialty: {student_context.get('specialty', 'Not specified')}
-- License State: {student_context.get('license_state', 'Not specified')}
-- Status: {student_context.get('status', 'Active')}
-- Education Previously Verified: {student_context.get('education_verified', False)}
+- Practitioner Status: FOUND in verification database
+- Database ID: {practitioner_context.get('practitioner_id')}
+- Verified NPI: {practitioner_context.get('npi')}
+- Primary Specialty: {practitioner_context.get('specialty', 'Not specified')}
+- License State: {practitioner_context.get('license_state', 'Not specified')}
+- Status: {practitioner_context.get('status', 'Active')}
 """
-        verification_approach = "The registrar should be able to find and verify the student's information relatively easily, but will still need to send formal verification via email."
+        verification_approach = "The hospital representative should be able to find and verify the practitioner's information relatively easily, but will still need to send formal verification via email."
     else:
         context_info = f"""
 Database Context (for realistic dialogue):
-- Student Status: NOT FOUND in verification database
-- Reason: {student_context.get('note', 'Unknown student')}
+- Practitioner Status: NOT FOUND in verification database
+- Reason: {practitioner_context.get('note', 'Unknown practitioner')}
 """
-        verification_approach = "The registrar should indicate they need to check their records more thoroughly or may not have immediate access to this student's information, and will need to research before sending email verification."
+        verification_approach = "The hospital representative should indicate they need to check their records more thoroughly or may not have immediate access to this practitioner's information, and will need to research before sending email verification."
 
-    prompt = f"""You are an expert at creating realistic educational verification dialogues. Generate a natural conversation between a registrar and a verification officer.
+    prompt = f"""You are an expert at creating realistic hospital privileges verification dialogues. Generate a natural conversation between a hospital medical staff office representative and a verification officer.
 
-Student Details:
+Practitioner Details:
 - Name: {first_name} {last_name}
-- Institution: {institution}
-- Degree Type: {degree_type}
-- Graduation Year: {graduation_year}
+- NPI Number: {npi_number}
+- Hospital: {hospital_name}
+- Requested Specialty: {specialty}
 - Verification Type: {verification_type}
 
 {context_info}
 
 CRITICAL CALL FLOW REQUIREMENTS:
-1. The verification officer is calling to REQUEST education verification
-2. Both parties understand this is a formal verification request that requires official documentation
-3. The registrar will need to check student records and databases
-4. The registrar MUST state that verification details will be provided VIA EMAIL (not during the phone call)
+1. The verification officer is calling to REQUEST hospital privileges verification
+2. Both parties understand this is a formal verification request that requires written documentation
+3. The hospital representative will need to check medical staff records and databases
+4. The hospital representative MUST state that verification details will be provided VIA EMAIL (not during the phone call)
 5. The phone call is to initiate the verification process - actual verification details are sent via email
-6. The registrar should ask for and confirm the email address for sending verification
+6. The hospital representative should ask for and confirm the email address for sending verification
 7. Expected timeline should be mentioned (usually 24-48 hours for email response)
 
 {verification_approach}
 
 Create a professional dialogue that includes:
 1. Professional greeting and introduction
-2. Clear statement that this is an education verification request
-3. Collection of student information (name, degree, graduation year)
-4. Registrar explains they need to check student records/database
+2. Clear statement that this is a hospital privileges verification request
+3. Collection of practitioner information (name, NPI, specialty being verified)
+4. Hospital representative explains they need to check medical staff records/database
 5. EXPLICIT statement that verification details will be provided via email
 6. Confirmation of email address for sending verification
 7. Timeline expectation (24-48 hours)
@@ -519,11 +522,11 @@ Make the conversation natural with realistic institutional language and procedur
 IMPORTANT: Respond with ONLY valid JSON format. No markdown, no explanations, just the raw JSON.
 
 Format as JSON object with "dialogue" key containing array where each element has:
-- "speaker": either "registrar" or "verification_officer"
+- "speaker": either "hospital_representative" or "verification_officer"
 - "text": the dialogue text
 
 Example:
-{{"dialogue": [{{"speaker": "registrar", "text": "Good morning, this is the Registrar's Office at {institution}, how may I help you?"}}, {{"speaker": "verification_officer", "text": "Good morning, I'm calling to request education verification for {first_name} {last_name}. We understand you'll need to send the verification details via email."}}]}}"""
+{{"dialogue": [{{"speaker": "hospital_representative", "text": "Good morning, this is the Medical Staff Office at {hospital_name}, how may I help you?"}}, {{"speaker": "verification_officer", "text": "Good morning, I'm calling to request hospital privileges verification for Dr. {first_name} {last_name}. We understand you'll need to send the verification details via email."}}]}}"""
     
     try:
         # Create content with proper types
@@ -555,7 +558,6 @@ Example:
         if not response_content or response_content.strip() == "":
             raise Exception("Gemini returned empty response")
         
-        import json
         try:
             # First try to parse as-is
             parsed_response = json.loads(response_content)
@@ -605,7 +607,7 @@ Example:
                 raise Exception(f"Dialogue item {i} missing required fields 'speaker' or 'text': {item}")
             
             # Use different voice IDs for different speakers
-            voice_id = "pNInz6obpgDQGcFmaJgB" if item["speaker"] == "registrar" else "EXAVITQu4vr4xnSDxMaL"  # Adam for registrar, Bella for verification officer
+            voice_id = "pNInz6obpgDQGcFmaJgB" if item["speaker"] == "hospital_representative" else "EXAVITQu4vr4xnSDxMaL"  # Adam for hospital rep, Bella for verification officer
             
             dialogue_inputs.append(DialogueInput(
                 text=item["text"],
@@ -620,17 +622,10 @@ Example:
         raise Exception(f"Failed to generate dialogue transcript: {e}")
 
 def _convert_dialogue_to_audio(elevenlabs_client, dialogue_inputs: List[DialogueInput], function_call_id: str) -> Dict[str, Any]:
-    """Convert dialogue transcript to audio using ElevenLabs text-to-speech
-    
-    Note: We use regular text-to-speech instead of text-to-dialogue because:
-    - Text-to-dialogue API requires Eleven v3 model access (alpha/restricted)
-    - Regular text-to-speech works with available models like eleven_flash_v2_5
-    - We generate each dialogue segment separately and combine them
-    """
+    """Convert dialogue transcript to audio using ElevenLabs text-to-speech"""
     
     try:
-        # Since text-to-dialogue requires Eleven v3 access, we'll use regular text-to-speech
-        # and combine the dialogue parts into a single audio file
+        # Generate audio for each dialogue segment and combine them
         audio_segments = []
         
         for i, dialogue_input in enumerate(dialogue_inputs):
@@ -660,7 +655,7 @@ def _convert_dialogue_to_audio(elevenlabs_client, dialogue_inputs: List[Dialogue
         os.makedirs(storage_dir, exist_ok=True)
         
         # Generate unique filename
-        audio_filename = f"education_verification_dialogue_{uuid.uuid4().hex[:8]}.mp3"
+        audio_filename = f"hospital_privileges_verification_dialogue_{uuid.uuid4().hex[:8]}.mp3"
         file_path = f"{storage_dir}/{audio_filename}"
         
         # Save audio file to volume
@@ -696,67 +691,65 @@ def _generate_email_response(
     gemini_client: genai.Client,
     first_name: str,
     last_name: str,
-    institution: str,
-    degree_type: str,
-    graduation_year: int,
+    npi_number: str,
+    hospital_name: str,
+    specialty: str,
     verification_type: str,
-    student_context: Dict[str, Any]
+    practitioner_context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Generate a realistic institutional email response using Gemini"""
+    """Generate a simulated email response using Gemini"""
     
-    # Generate realistic institutional email domains and sender names
-    institution_domains = {
-        "university": ["edu", "ac.uk", "edu.au"],
-        "college": ["edu", "ac.uk"],
-        "institute": ["edu", "org"],
-        "school": ["edu", "ac.uk"]
-    }
+    # Build context-aware email content
+    verification_status = ""
+    email_tone = ""
     
-    # Determine domain based on institution type
-    inst_lower = institution.lower()
-    if "university" in inst_lower:
-        domain_suffix = random.choice(institution_domains["university"])
-    elif "college" in inst_lower:
-        domain_suffix = random.choice(institution_domains["college"])
-    elif "institute" in inst_lower:
-        domain_suffix = random.choice(institution_domains["institute"])
+    if practitioner_context.get("exists"):
+        verification_status = f"""
+VERIFICATION OUTCOME: CONFIRMED
+- Practitioner found in hospital database
+- NPI matches: {practitioner_context.get('npi')}
+- Primary specialty: {practitioner_context.get('specialty', specialty)}
+- Current status: {practitioner_context.get('status', 'Active')}
+- License state: {practitioner_context.get('license_state', 'Not specified')}
+"""
+        email_tone = "The email should confirm the practitioner's privileges with specific details and dates."
     else:
-        domain_suffix = random.choice(institution_domains["university"])
-    
-    # Create institutional email
-    institution_clean = institution.replace(" ", "").replace("University", "").replace("College", "").replace("of", "").lower()[:20]
-    sender_email = f"registrar@{institution_clean}.{domain_suffix}"
-    
-    # Generate sender name
-    registrar_names = [
-        "Dr. Sarah Mitchell", "Dr. Robert Chen", "Dr. Maria Rodriguez", "Dr. James Thompson",
-        "Dr. Lisa Wang", "Dr. Michael Brown", "Dr. Jennifer Davis", "Dr. David Wilson",
-        "Dr. Amanda Taylor", "Dr. Christopher Lee", "Dr. Rachel Green", "Dr. Kevin Martinez"
-    ]
-    sender_name = random.choice(registrar_names)
-    
-    prompt = f"""You are a university registrar responding to education verification requests. Generate a professional, authentic institutional email.
+        verification_status = f"""
+VERIFICATION OUTCOME: NOT FOUND
+- Practitioner not found in hospital database
+- No matching records for NPI: {npi_number}
+- Reason: {practitioner_context.get('note', 'No records found')}
+"""
+        email_tone = "The email should politely indicate that no records were found and suggest alternative verification methods."
 
-Context:
-- Student: {first_name} {last_name}
-- Institution: {institution}
-- Degree: {degree_type}
-- Graduation Year: {graduation_year}
+    prompt = f"""You are a hospital medical staff office representative responding to hospital privileges verification requests. Generate a professional, authentic institutional email based on the verification outcome.
+
+Practitioner Details:
+- Name: {first_name} {last_name}
+- NPI Number: {npi_number}
+- Hospital: {hospital_name}
+- Requested Specialty: {specialty}
 - Verification Type: {verification_type}
-- Sender: {sender_name}, Registrar
 
-Create a realistic email with:
-1. Professional subject line
-2. Formal greeting
-3. Confirmation of student enrollment and graduation
-4. Degree and graduation date verification
-5. Contact information for follow-up
-6. Professional closing
+{verification_status}
+
+Email Requirements:
+{email_tone}
+
+Create a realistic email response with:
+1. Professional subject line that indicates verification status
+2. Formal greeting addressing the requesting party
+3. Reference to the phone verification request received
+4. Clear statement of verification outcome (confirmed/not found)
+5. Specific details if confirmed (privileges, specialty, dates, restrictions)
+6. Professional explanation if not found (no records, suggest alternatives)
+7. Contact information for follow-up questions
+8. Professional closing with hospital letterhead-style signature
 
 IMPORTANT: Respond with ONLY valid JSON - no markdown, no explanations.
 
 Required JSON format:
-{{"subject": "Email subject", "body_text": "Plain text body", "body_html": "HTML body", "attachments": []}}"""
+{{"subject": "Email subject", "sender_name": "Sender name", "sender_email": "sender@hospital.com", "body_text": "Plain text body", "body_html": "HTML body", "attachments": []}}"""
     
     try:
         # Create content with proper types
@@ -781,16 +774,18 @@ Required JSON format:
             config=generate_content_config,
         )
         
+        # Get the response content
         response_content = response.text
+        logger.info(f"Gemini response content: {response_content[:200]}...")  # Log first 200 chars for debugging
         
         if not response_content or response_content.strip() == "":
-            raise Exception("Gemini returned empty response for email generation")
+            raise Exception("Gemini returned empty response")
         
         try:
             # First try to parse as-is
             parsed_response = json.loads(response_content)
         except json.JSONDecodeError as json_error:
-            logger.error(f"Failed to parse Gemini email response as JSON. Content: {response_content}")
+            logger.error(f"Failed to parse Gemini response as JSON. Content: {response_content}")
             # Try to extract JSON from markdown code blocks or other wrapper text
             import re
             
@@ -808,25 +803,40 @@ Required JSON format:
                     logger.info(f"Attempting to parse extracted JSON: {json_str[:200]}...")
                     parsed_response = json.loads(json_str)
                 else:
-                    raise Exception(f"Could not extract valid JSON from email response: {json_error}")
+                    raise Exception(f"Could not extract valid JSON from Gemini response: {json_error}")
         
-        # Validate required fields
-        required_fields = ["subject", "body_text", "body_html"]
-        for field in required_fields:
-            if field not in parsed_response:
-                raise Exception(f"Missing required field '{field}' in email response")
+        # Validate the parsed JSON structure
+        if not isinstance(parsed_response, dict):
+            raise Exception(f"Expected JSON object, got {type(parsed_response)}: {parsed_response}")
         
-        # Add sender information
+        if "subject" not in parsed_response:
+            raise Exception(f"Expected 'subject' key in response: {parsed_response}")
+        
+        if "sender_name" not in parsed_response:
+            raise Exception(f"Expected 'sender_name' key in response: {parsed_response}")
+        
+        if "sender_email" not in parsed_response:
+            raise Exception(f"Expected 'sender_email' key in response: {parsed_response}")
+        
+        if "body_text" not in parsed_response:
+            raise Exception(f"Expected 'body_text' key in response: {parsed_response}")
+        
+        if "body_html" not in parsed_response:
+            raise Exception(f"Expected 'body_html' key in response: {parsed_response}")
+        
+        if "attachments" not in parsed_response:
+            raise Exception(f"Expected 'attachments' key in response: {parsed_response}")
+        
         email_content = {
             "subject": parsed_response["subject"],
-            "sender_email": sender_email,
-            "sender_name": sender_name,
+            "sender_name": parsed_response["sender_name"],
+            "sender_email": parsed_response["sender_email"],
             "body_text": parsed_response["body_text"],
             "body_html": parsed_response["body_html"],
-            "attachments": parsed_response.get("attachments", [])
+            "attachments": parsed_response["attachments"]
         }
         
-        logger.info(f"Email response generated successfully for {first_name} {last_name}")
+        logger.info("Email response generated successfully using Gemini")
         return email_content
         
     except Exception as e:
@@ -834,4 +844,4 @@ Required JSON format:
         raise Exception(f"Failed to generate email response: {e}")
 
 # Global service instance
-education_service = EducationService() 
+hospital_privileges_service = HospitalPrivilegesService() 

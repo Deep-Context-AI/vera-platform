@@ -269,14 +269,6 @@ class LADMFResponse(BaseResponse):
     source: str = Field(default="SSA LADMF", description="Source of truth")
     notes: str = Field(..., description="Any flags or contextual remarks")
 
-# Batch response models
-class BatchNPIResponse(BaseResponse):
-    """Response model for batch NPI lookups"""
-    results: List[NPIResponse] = Field(..., description="List of NPI lookup results")
-    total_requested: int = Field(..., description="Total number of NPIs requested")
-    total_found: int = Field(..., description="Total number of NPIs found")
-    total_not_found: int = Field(..., description="Total number of NPIs not found")
-
 # Comprehensive verification response
 class VerificationSummaryResponse(BaseResponse):
     """Comprehensive verification summary response"""
@@ -454,3 +446,108 @@ class EducationResponse(BaseResponse):
     processed_at: Optional[str] = Field(None, description="ISO timestamp when processing completed")
     verification_details: Optional[EducationVerificationDetails] = Field(None, description="Detailed verification information")
     error_message: Optional[str] = Field(None, description="Error message if processing failed")
+
+class HospitalPrivilegesVerificationDetails(BaseModel):
+    """Hospital privileges verification details model"""
+    first_name: str = Field(..., description="First name of the practitioner")
+    last_name: str = Field(..., description="Last name of the practitioner")
+    npi_number: str = Field(..., description="National Provider Identifier")
+    hospital_name: str = Field(..., description="Hospital name where privileges are being verified")
+    specialty: str = Field(..., description="Medical specialty for privileges")
+    verification_type: str = Field(..., description="Type of verification requested")
+
+class HospitalPrivilegesResponse(BaseResponse):
+    """Response model for hospital privileges verification with transcript generation and audio conversion"""
+    job_id: str = Field(..., description="Unique job identifier for tracking")
+    function_call_id: str = Field(..., description="Modal function call ID")
+    verification_status: str = Field(..., description="Status of verification (processing, completed, failed)")
+    first_name: str = Field(..., description="First name of the practitioner")
+    last_name: str = Field(..., description="Last name of the practitioner")
+    npi_number: str = Field(..., description="National Provider Identifier")
+    hospital_name: str = Field(..., description="Hospital name where privileges are being verified")
+    specialty: str = Field(..., description="Medical specialty for privileges")
+    
+    # Optional fields populated when processing is complete
+    transcript: Optional[str] = Field(None, description="Generated transcript content")
+    audio_file: Optional[AudioFileInfo] = Field(None, description="Generated audio file information")
+    processed_at: Optional[str] = Field(None, description="ISO timestamp when processing completed")
+    verification_details: Optional[HospitalPrivilegesVerificationDetails] = Field(None, description="Detailed verification information")
+    error_message: Optional[str] = Field(None, description="Error message if processing failed")
+
+class InboxEmailAttachment(BaseModel):
+    """Inbox email attachment model"""
+    filename: str = Field(..., description="Attachment filename")
+    content_type: str = Field(..., description="MIME content type")
+    size_bytes: int = Field(..., description="File size in bytes")
+    attachment_id: Optional[str] = Field(None, description="Unique attachment identifier")
+    storage_path: Optional[str] = Field(None, description="Path to stored attachment file")
+
+class InboxEmailResponse(BaseModel):
+    """Response model for inbox email"""
+    id: int = Field(..., description="Email ID")
+    message_id: str = Field(..., description="Unique email identifier")
+    thread_id: Optional[str] = Field(None, description="Email thread identifier")
+    subject: str = Field(..., description="Email subject line")
+    sender_email: str = Field(..., description="Sender email address")
+    sender_name: str = Field(..., description="Sender display name")
+    recipient_email: str = Field(..., description="Recipient email address")
+    
+    # Email content
+    body_text: str = Field(..., description="Plain text email body")
+    body_html: Optional[str] = Field(None, description="HTML formatted email body")
+    
+    # Verification context
+    verification_type: str = Field(..., description="Type of verification")
+    verification_request_id: Optional[str] = Field(None, description="ID of the original verification request")
+    function_call_id: Optional[str] = Field(None, description="Modal function call ID")
+    practitioner_id: Optional[int] = Field(None, description="Foreign key to practitioners table")
+    
+    # Education-specific fields
+    institution_name: Optional[str] = Field(None, description="Educational institution name")
+    degree_type: Optional[str] = Field(None, description="Type of degree")
+    graduation_year: Optional[int] = Field(None, description="Year of graduation")
+    student_first_name: Optional[str] = Field(None, description="Student first name")
+    student_last_name: Optional[str] = Field(None, description="Student last name")
+    
+    # Email status and metadata
+    status: str = Field(..., description="Email status")
+    priority: str = Field(..., description="Email priority")
+    is_verified: bool = Field(..., description="Whether this is a verified institutional response")
+    
+    # Attachments
+    attachments: List[InboxEmailAttachment] = Field(default=[], description="List of email attachments")
+    
+    # Timestamps
+    sent_at: datetime = Field(..., description="When the email was sent")
+    received_at: datetime = Field(..., description="When the email was received")
+    read_at: Optional[datetime] = Field(None, description="When the email was read")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+class InboxListResponse(BaseResponse):
+    """Response model for inbox email list"""
+    emails: List[InboxEmailResponse] = Field(..., description="List of emails")
+    total_count: int = Field(..., description="Total number of emails")
+    unread_count: int = Field(..., description="Number of unread emails")
+    page: int = Field(..., description="Current page number")
+    page_size: int = Field(..., description="Number of emails per page")
+    total_pages: int = Field(..., description="Total number of pages")
+
+class InboxStatsResponse(BaseResponse):
+    """Response model for inbox statistics"""
+    total_emails: int = Field(..., description="Total number of emails")
+    unread_emails: int = Field(..., description="Number of unread emails")
+    read_emails: int = Field(..., description="Number of read emails")
+    flagged_emails: int = Field(..., description="Number of flagged emails")
+    archived_emails: int = Field(..., description="Number of archived emails")
+    emails_by_verification_type: Dict[str, int] = Field(..., description="Email counts by verification type")
+    emails_by_priority: Dict[str, int] = Field(..., description="Email counts by priority")
+    recent_activity: List[Dict[str, Any]] = Field(..., description="Recent email activity")
+
+class EmailActionResponse(BaseResponse):
+    """Response model for email actions (mark as read, archive, etc.)"""
+    email_id: int = Field(..., description="Email ID")
+    action: str = Field(..., description="Action performed")
+    previous_status: str = Field(..., description="Previous email status")
+    new_status: str = Field(..., description="New email status")
+    updated_at: datetime = Field(..., description="When the action was performed")

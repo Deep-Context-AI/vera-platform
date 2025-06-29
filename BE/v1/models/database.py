@@ -163,6 +163,12 @@ class MedicareModelEnhanced(BaseDBModel):
     ffs_provider_enrollment: Optional[FFSProviderEnrollmentData] = Field(None, description="FFS Provider Enrollment data")
     ordering_referring_provider: Optional[OrderingReferringProviderData] = Field(None, description="Ordering/Referring Provider data")
 
+# Enhanced models for NPDB JSONB fields
+class NPDBActionData(BaseModel):
+    """Pydantic model for NPDB action JSONB fields"""
+    result: Optional[str] = Field(None, description="Result of the check (Yes/No)")
+    details: Optional[List[Dict[str, Any]]] = Field(None, description="List of detailed action records")
+
 class NPDBModel(BaseDBModel):
     """Pydantic model for the NPDB table"""
     id: Optional[int] = Field(None, description="Auto-generated primary key")
@@ -180,6 +186,24 @@ class NPDBModel(BaseDBModel):
     dea_or_federal_licensure_action: Optional[Dict[str, Any]] = Field(None, description="DEA or federal licensure action data as JSON")
     judgment_or_conviction: Optional[Dict[str, Any]] = Field(None, description="Judgment or conviction data as JSON")
     peer_review_organization_action: Optional[Dict[str, Any]] = Field(None, description="Peer review organization action data as JSON")
+
+class NPDBModelEnhanced(BaseDBModel):
+    """Enhanced Pydantic model for the NPDB table with typed JSONB fields"""
+    id: Optional[int] = Field(None, description="Auto-generated primary key")
+    practitioner_id: int = Field(..., description="Foreign key to practitioners table")
+    npi_number: Optional[str] = Field(None, description="National Provider Identifier")
+    license_number: Optional[str] = Field(None, description="License number")
+    upin: Optional[str] = Field(None, description="UPIN number")
+    malpractice: Optional[NPDBActionData] = Field(None, description="Malpractice data")
+    state_licensure_action: Optional[NPDBActionData] = Field(None, description="State licensure action data")
+    exclusion_debarment: Optional[NPDBActionData] = Field(None, description="Exclusion/debarment data")
+    government_admin_action: Optional[NPDBActionData] = Field(None, description="Government administrative action data")
+    clinical_privileges_action: Optional[NPDBActionData] = Field(None, description="Clinical privileges action data")
+    health_plan_action: Optional[NPDBActionData] = Field(None, description="Health plan action data")
+    professional_society_action: Optional[NPDBActionData] = Field(None, description="Professional society action data")
+    dea_or_federal_licensure_action: Optional[NPDBActionData] = Field(None, description="DEA or federal licensure action data")
+    judgment_or_conviction: Optional[NPDBActionData] = Field(None, description="Judgment or conviction data")
+    peer_review_organization_action: Optional[NPDBActionData] = Field(None, description="Peer review organization action data")
 
 class NPIModel(BaseDBModel):
     """Pydantic model for the NPI table"""
@@ -367,3 +391,55 @@ class AttestationsModel(BaseDBModel):
     # Timestamps
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+class EmailAttachmentInfo(BaseModel):
+    """Pydantic model for email attachment information"""
+    filename: str = Field(..., description="Attachment filename")
+    content_type: str = Field(..., description="MIME content type")
+    size_bytes: int = Field(..., description="File size in bytes")
+    attachment_id: Optional[str] = Field(None, description="Unique attachment identifier")
+    storage_path: Optional[str] = Field(None, description="Path to stored attachment file")
+
+class InboxEmailModel(BaseDBModel):
+    """Pydantic model for the inbox_emails table"""
+    id: Optional[int] = Field(None, description="Auto-generated primary key")
+    
+    # Email metadata
+    message_id: str = Field(..., description="Unique email identifier")
+    thread_id: Optional[str] = Field(None, description="Email thread identifier")
+    subject: str = Field(..., description="Email subject line", max_length=500)
+    sender_email: str = Field(..., description="Sender email address", max_length=255)
+    sender_name: str = Field(..., description="Sender display name", max_length=255)
+    recipient_email: str = Field(default="verifications@vera-platform.com", description="Recipient email address", max_length=255)
+    
+    # Email content
+    body_text: str = Field(..., description="Plain text email body")
+    body_html: Optional[str] = Field(None, description="HTML formatted email body")
+    
+    # Verification context
+    verification_type: str = Field(..., description="Type of verification (education, hospital_privileges, etc.)")
+    verification_request_id: Optional[str] = Field(None, description="ID of the original verification request")
+    function_call_id: Optional[str] = Field(None, description="Modal function call ID")
+    practitioner_id: Optional[int] = Field(None, description="Foreign key to practitioners table")
+    
+    # Education-specific fields (when verification_type = 'education')
+    institution_name: Optional[str] = Field(None, description="Educational institution name", max_length=255)
+    degree_type: Optional[str] = Field(None, description="Type of degree", max_length=100)
+    graduation_year: Optional[int] = Field(None, description="Year of graduation")
+    student_first_name: Optional[str] = Field(None, description="Student first name", max_length=100)
+    student_last_name: Optional[str] = Field(None, description="Student last name", max_length=100)
+    
+    # Email status and metadata
+    status: str = Field(default="unread", description="Email status (unread, read, archived, flagged, spam)")
+    priority: str = Field(default="normal", description="Email priority (low, normal, high, urgent)")
+    is_verified: bool = Field(default=False, description="Whether this is a verified institutional response")
+    
+    # Attachments (JSON array of attachment info)
+    attachments: Optional[List[EmailAttachmentInfo]] = Field(default=[], description="List of email attachments")
+    
+    # Timestamps
+    sent_at: datetime = Field(..., description="When the email was sent")
+    received_at: datetime = Field(default_factory=datetime.utcnow, description="When the email was received")
+    read_at: Optional[datetime] = Field(None, description="When the email was read")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")

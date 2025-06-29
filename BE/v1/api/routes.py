@@ -1,18 +1,16 @@
-from fastapi import APIRouter, Depends, Query, Path
-from fastapi.responses import FileResponse
-from typing import Optional, List
-from datetime import datetime
+from fastapi import APIRouter, Path, Query
 
 from v1.models.requests import (
     NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
-    ComprehensiveSANCTIONRequest, LADMFRequest, BatchNPIRequest,
-    MedicalRequest, DCARequest, MedicareRequest, EducationRequest
+    ComprehensiveSANCTIONRequest, LADMFRequest,
+    MedicalRequest, DCARequest, MedicareRequest, EducationRequest, HospitalPrivilegesRequest
 )
 from v1.models.responses import (
     NPIResponse, ABMSResponse, NPDBResponse,
-    SANCTIONResponse, ComprehensiveSANCTIONResponse, LADMFResponse, BatchNPIResponse,
-    VerificationSummaryResponse, ResponseStatus, MedicalResponse, DCAResponse, MedicareResponse, EducationResponse,
-    NewDEAVerificationResponse
+    ComprehensiveSANCTIONResponse, LADMFResponse,
+    MedicalResponse, DCAResponse, MedicareResponse, EducationResponse,
+    NewDEAVerificationResponse, HospitalPrivilegesResponse,
+    InboxListResponse, InboxEmailResponse, InboxStatsResponse, EmailActionResponse
 )
 from v1.services.external.NPI import npi_service
 from v1.services.external.DEA import dea_service
@@ -24,53 +22,16 @@ from v1.services.external.MEDICAL import medical_service
 from v1.services.external.DCA import dca_service
 from v1.services.external.MEDICARE import medicare_service
 from v1.services.external.EDUCATION import education_service
+from v1.services.external.HOSPITAL_PRIVILEGES import hospital_privileges_service
+from v1.services.database import DatabaseService
 
 # Create router
 router = APIRouter()
 
+# Initialize database service
+db_service = DatabaseService()
+
 # NPI Endpoints
-@router.get(
-    "/npi/{npi}",
-    response_model=NPIResponse,
-    tags=["NPI"],
-    summary="Lookup NPI by number",
-    description="Retrieve National Provider Identifier information by NPI number"
-)
-async def get_npi(
-    npi: str = Path(..., description="10-digit National Provider Identifier", pattern=r"^\d{10}$")
-) -> NPIResponse:
-    """Lookup a single NPI"""
-    request = NPIRequest(npi=npi)
-    return await npi_service.lookup_npi(request)
-
-@router.get(
-    "/npi/search",
-    response_model=NPIResponse,
-    tags=["NPI"],
-    summary="Search NPI by various criteria",
-    description="Search for National Provider Identifier using provider name, organization name, or address"
-)
-async def search_npi(
-    npi: Optional[str] = Query(None, description="10-digit National Provider Identifier", pattern=r"^\d{10}$"),
-    first_name: Optional[str] = Query(None, description="Provider's first name"),
-    last_name: Optional[str] = Query(None, description="Provider's last name"),
-    organization_name: Optional[str] = Query(None, description="Organization name"),
-    city: Optional[str] = Query(None, description="City"),
-    state: Optional[str] = Query(None, description="State abbreviation (2 letters)", pattern=r"^[A-Z]{2}$"),
-    postal_code: Optional[str] = Query(None, description="ZIP/Postal code")
-) -> NPIResponse:
-    """Search for NPI using various criteria"""
-    request = NPIRequest(
-        npi=npi,
-        first_name=first_name,
-        last_name=last_name,
-        organization_name=organization_name,
-        city=city,
-        state=state,
-        postal_code=postal_code
-    )
-    return await npi_service.lookup_npi(request)
-
 @router.post(
     "/npi/search",
     response_model=NPIResponse,
@@ -81,20 +42,6 @@ async def search_npi(
 async def search_npi_post(request: NPIRequest) -> NPIResponse:
     """Search for NPI using detailed criteria via POST"""
     return await npi_service.lookup_npi(request)
-
-@router.get(
-    "/npi/batch",
-    response_model=BatchNPIResponse,
-    tags=["NPI"],
-    summary="Batch NPI lookup",
-    description="Lookup multiple NPIs in a single request"
-)
-async def get_batch_npi(
-    npis: List[str] = Query(..., description="List of NPIs to lookup (max 100)")
-) -> BatchNPIResponse:
-    """Batch lookup multiple NPIs"""
-    request = BatchNPIRequest(npis=npis)
-    return await npi_service.batch_lookup_npi(request)
 
 # DEA Endpoints
 @router.post(
@@ -227,3 +174,129 @@ async def download_education_audio(
 ):
     """Download the generated audio file"""
     return await education_service.download_audio_file(storage_path)
+
+# Hospital Privileges Endpoints
+@router.post(
+    "/hospital-privileges/verify",
+    response_model=HospitalPrivilegesResponse,
+    tags=["Hospital Privileges"],
+    summary="Hospital privileges verification with transcript generation and audio conversion",
+    description="Verify hospital privileges and generate transcript with audio conversion using AI services"
+)
+async def verify_hospital_privileges(request: HospitalPrivilegesRequest) -> HospitalPrivilegesResponse:
+    """Initiate hospital privileges verification process with transcript generation and audio conversion"""
+    return await hospital_privileges_service.verify_hospital_privileges(request)
+
+@router.get(
+    "/hospital-privileges/result/{function_call_id}",
+    tags=["Hospital Privileges"],
+    summary="Get hospital privileges verification result",
+    description="Retrieve the result of a hospital privileges verification job using the function call ID"
+)
+async def get_hospital_privileges_result(
+    function_call_id: str = Path(..., description="Modal function call ID returned from the verify endpoint")
+):
+    """Get the result of a hospital privileges verification job"""
+    return await hospital_privileges_service.get_verification_result(function_call_id)
+
+@router.get(
+    "/hospital-privileges/audio/{storage_path:path}",
+    tags=["Hospital Privileges"],
+    summary="Download hospital privileges verification audio file",
+    description="Download the generated audio file using the storage path from the verification result"
+)
+async def download_hospital_privileges_audio(
+    storage_path: str = Path(..., description="Storage path from the verification result (e.g., 2025-01-15/fc-123/audio.mp3)")
+):
+    """Download the generated audio file"""
+    return await hospital_privileges_service.download_audio_file(storage_path)
+
+# Inbox Email Endpoints
+@router.get(
+    "/inbox/emails",
+    response_model=InboxListResponse,
+    tags=["Inbox"],
+    summary="Get inbox emails",
+    description="Retrieve paginated list of inbox emails with optional filtering and search"
+)
+async def get_inbox_emails(
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of emails per page"),
+    status: str = Query(None, description="Filter by email status (unread, read, archived, flagged, spam)"),
+    verification_type: str = Query(None, description="Filter by verification type (education, hospital_privileges, etc.)"),
+    practitioner_id: int = Query(None, description="Filter by practitioner ID"),
+    search: str = Query(None, description="Search in subject, sender name, or email body")
+) -> InboxListResponse:
+    """Get paginated list of inbox emails with optional filtering"""
+    return await db_service.get_inbox_emails(
+        page=page,
+        page_size=page_size,
+        status=status,
+        verification_type=verification_type,
+        practitioner_id=practitioner_id,
+        search_query=search
+    )
+
+@router.get(
+    "/inbox/emails/{email_id}",
+    response_model=InboxEmailResponse,
+    tags=["Inbox"],
+    summary="Get specific email",
+    description="Retrieve a specific email by its ID"
+)
+async def get_inbox_email(
+    email_id: int = Path(..., description="Email ID")
+) -> InboxEmailResponse:
+    """Get a specific email by ID"""
+    return await db_service.get_inbox_email_by_id(email_id)
+
+@router.post(
+    "/inbox/emails/{email_id}/read",
+    response_model=EmailActionResponse,
+    tags=["Inbox"],
+    summary="Mark email as read",
+    description="Mark a specific email as read"
+)
+async def mark_email_as_read(
+    email_id: int = Path(..., description="Email ID")
+) -> EmailActionResponse:
+    """Mark an email as read"""
+    return await db_service.mark_email_as_read(email_id)
+
+@router.post(
+    "/inbox/emails/{email_id}/status/{new_status}",
+    response_model=EmailActionResponse,
+    tags=["Inbox"],
+    summary="Update email status",
+    description="Update the status of a specific email"
+)
+async def update_email_status(
+    email_id: int = Path(..., description="Email ID"),
+    new_status: str = Path(..., description="New status (unread, read, archived, flagged, spam)")
+) -> EmailActionResponse:
+    """Update email status"""
+    return await db_service.update_email_status(email_id, new_status)
+
+@router.delete(
+    "/inbox/emails/{email_id}",
+    response_model=EmailActionResponse,
+    tags=["Inbox"],
+    summary="Delete email",
+    description="Delete a specific email"
+)
+async def delete_email(
+    email_id: int = Path(..., description="Email ID")
+) -> EmailActionResponse:
+    """Delete an email"""
+    return await db_service.delete_email(email_id)
+
+@router.get(
+    "/inbox/stats",
+    response_model=InboxStatsResponse,
+    tags=["Inbox"],
+    summary="Get inbox statistics",
+    description="Get comprehensive inbox statistics including counts by status, verification type, and recent activity"
+)
+async def get_inbox_stats() -> InboxStatsResponse:
+    """Get inbox statistics"""
+    return await db_service.get_inbox_stats()
