@@ -597,6 +597,8 @@ function AgentControlPanel() {
           label="Verification Demo"
           description="Click through verification containers"
         />
+        <OpenAIAccordionDemoButton />
+        <OpenAILicenseFormDemoButton />
         <ViewportSnapshotButton />
         <ElementTrackingButton />
         <VisualAlignmentTestButton />
@@ -1421,6 +1423,48 @@ function CancelUploadDemoButton() {
       title="Demo canceling upload dialog"
     >
       ❌ Cancel Upload
+    </button>
+  );
+}
+
+function OpenAIAccordionDemoButton() {
+  const handleAccordionDemo = async () => {
+    console.log('=== OPENAI ACCORDION DEMO ===');
+    
+    // Import the agent runner
+    const { useAgentRunner } = await import('@/hooks/useAgentRunner');
+    
+    // Get the hook instance - we need to use it from a component context
+    // For now, let's trigger it via the custom event system
+    window.dispatchEvent(new CustomEvent('openai-accordion-demo'));
+  };
+
+  return (
+    <button
+      onClick={handleAccordionDemo}
+      className="px-3 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all"
+      title="Demo OpenAI Agent clicking accordions"
+    >
+      🤖 AI Accordion
+    </button>
+  );
+}
+
+function OpenAILicenseFormDemoButton() {
+  const handleLicenseFormDemo = async () => {
+    console.log('=== OPENAI LICENSE FORM DEMO ===');
+    
+    // Trigger via custom event system
+    window.dispatchEvent(new CustomEvent('openai-license-demo'));
+  };
+
+  return (
+    <button
+      onClick={handleLicenseFormDemo}
+      className="px-3 py-2 bg-gradient-to-r from-green-500 to-teal-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-teal-700 transition-all"
+      title="Demo OpenAI Agent filling license form"
+    >
+      🤖 AI License Form
     </button>
   );
 }

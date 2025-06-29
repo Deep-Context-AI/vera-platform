@@ -51,14 +51,26 @@ export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProp
       agentRunner.stopAgent();
     };
 
+    const handleOpenAIAccordionDemo = () => {
+      agentRunner.runAccordionDemo();
+    };
+
+    const handleOpenAILicenseDemo = () => {
+      agentRunner.runLicenseFormDemo();
+    };
+
     // Add event listeners
     window.addEventListener('agent-demo', handleAgentDemo as EventListener);
     window.addEventListener('agent-stop', handleAgentStop);
+    window.addEventListener('openai-accordion-demo', handleOpenAIAccordionDemo);
+    window.addEventListener('openai-license-demo', handleOpenAILicenseDemo);
 
     // Cleanup
     return () => {
       window.removeEventListener('agent-demo', handleAgentDemo as EventListener);
       window.removeEventListener('agent-stop', handleAgentStop);
+      window.removeEventListener('openai-accordion-demo', handleOpenAIAccordionDemo);
+      window.removeEventListener('openai-license-demo', handleOpenAILicenseDemo);
     };
   }, []);
 
@@ -486,6 +498,24 @@ export function VerificationTabContent({
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Complete all verification steps to approve this provider application
             </p>
+            
+            {/* AI Agent Demo Button */}
+            <div className="mt-3">
+              <button
+                onClick={() => {
+                  const event = new CustomEvent('openai-accordion-demo');
+                  window.dispatchEvent(event);
+                }}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
+              >
+                <span className="mr-2">🤖</span>
+                AI Assistant Demo - Complete All Steps
+              </button>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Watch the AI assistant automatically work through verification steps
+              </p>
+            </div>
+            
             {auditDebug.isDev && (
               <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 space-y-1">
                 <p>API: {auditDebug.currentEndpoint}</p>

@@ -131,6 +131,7 @@ export const useAgentStore = create<AgentState>()(
 
       // Agent Control Actions
       startAgent: () => {
+        console.log('🚀 Store: Starting agent');
         set({ 
           isRunning: true,
           isMouseVisible: true,
@@ -146,6 +147,7 @@ export const useAgentStore = create<AgentState>()(
       },
 
       stopAgent: () => {
+        console.log('🛑 Store: Stopping agent');
         set({ 
           isRunning: false,
           currentTask: null,
@@ -156,6 +158,7 @@ export const useAgentStore = create<AgentState>()(
       },
 
       setCurrentTask: (task: string | null) => {
+        console.log('📋 Store: Setting current task', task);
         set({ currentTask: task });
       },
 
@@ -165,6 +168,8 @@ export const useAgentStore = create<AgentState>()(
           id: `thought-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           timestamp: new Date(),
         };
+        
+        console.log('💭 Store: Adding thought', newThought);
         
         set((state) => ({
           thoughtHistory: [...state.thoughtHistory, newThought],

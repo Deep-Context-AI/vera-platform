@@ -148,7 +148,11 @@ export const VerificationStep: React.FC<VerificationStepProps> = ({
 
   return (
     <AccordionItem value={step.id} className="border-b border-gray-200 dark:border-gray-700">
-      <AccordionTrigger className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+      <AccordionTrigger 
+        className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+        data-accordion-trigger={step.id}
+        data-step-name={step.name}
+      >
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-3">

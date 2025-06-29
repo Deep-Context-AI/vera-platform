@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { useAgentExecution, useAgentThoughts } from '@/stores/agentStore';
 import { uiSimulator, UIActions } from '@/lib/agent/UISimulator';
+import { agentRunner } from '@/lib/agent/AgentRunner';
 
 export interface UseAgentRunnerReturn {
   isRunning: boolean;
@@ -11,6 +12,9 @@ export interface UseAgentRunnerReturn {
   stopAgent: () => void;
   runDemo: () => Promise<void>;
   runVerificationDemo: () => Promise<void>;
+  runAccordionDemo: () => Promise<void>;
+  runLicenseFormDemo: () => Promise<void>;
+  executeTask: (task: string) => Promise<void>;
 }
 
 export function useAgentRunner(): UseAgentRunnerReturn {
@@ -98,6 +102,90 @@ export function useAgentRunner(): UseAgentRunnerReturn {
     }
   }, [isRunning, startAgent, setCurrentTask, addThought]);
 
+  const runAccordionDemo = useCallback(async () => {
+    console.log('🎯 Hook: Starting accordion demo');
+    if (!isRunning) {
+      startAgent();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    setCurrentTask('Demonstrating accordion interactions');
+    
+    try {
+      const result = await agentRunner.demoAccordionClicks();
+      console.log('✅ Hook: Accordion demo completed', result);
+      addThought({
+        message: `Accordion demo completed: ${result}`,
+        type: 'result',
+      });
+    } catch (error) {
+      console.error('❌ Hook: Accordion demo failed', error);
+      addThought({
+        message: 'Accordion demo encountered an error.',
+        type: 'result',
+      });
+      console.error('Accordion demo error:', error);
+    } finally {
+      setCurrentTask(null);
+    }
+  }, [isRunning, startAgent, setCurrentTask, addThought]);
+
+  const runLicenseFormDemo = useCallback(async () => {
+    console.log('📝 Hook: Starting license form demo');
+    if (!isRunning) {
+      startAgent();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    setCurrentTask('Demonstrating license form interactions');
+    
+    try {
+      const result = await agentRunner.demoLicenseForm();
+      console.log('✅ Hook: License form demo completed', result);
+      addThought({
+        message: `License form demo completed: ${result}`,
+        type: 'result',
+      });
+    } catch (error) {
+      console.error('❌ Hook: License form demo failed', error);
+      addThought({
+        message: 'License form demo encountered an error.',
+        type: 'result',
+      });
+      console.error('License form demo error:', error);
+    } finally {
+      setCurrentTask(null);
+    }
+  }, [isRunning, startAgent, setCurrentTask, addThought]);
+
+  const executeTask = useCallback(async (task: string) => {
+    console.log('🚀 Hook: Executing custom task', task);
+    if (!isRunning) {
+      startAgent();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    setCurrentTask(`Executing: ${task}`);
+    
+    try {
+      const result = await agentRunner.executeTask(task);
+      console.log('✅ Hook: Custom task completed', result);
+      addThought({
+        message: `Task completed: ${result}`,
+        type: 'result',
+      });
+    } catch (error) {
+      console.error('❌ Hook: Custom task failed', error);
+      addThought({
+        message: 'Task execution encountered an error.',
+        type: 'result',
+      });
+      console.error('Task execution error:', error);
+    } finally {
+      setCurrentTask(null);
+    }
+  }, [isRunning, startAgent, setCurrentTask, addThought]);
+
   return {
     isRunning,
     currentTask,
@@ -105,5 +193,8 @@ export function useAgentRunner(): UseAgentRunnerReturn {
     stopAgent,
     runDemo,
     runVerificationDemo,
+    runAccordionDemo,
+    runLicenseFormDemo,
+    executeTask,
   };
 } 
