@@ -1,8 +1,11 @@
 'use client';
 
 import React from 'react';
-import { Shield, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Shield, CheckCircle, Clock, AlertTriangle, Upload, FileText, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 export function VerificationDemoContainers() {
   return (
@@ -69,6 +72,12 @@ export function VerificationDemoContainers() {
 
       {/* Select Demo Section */}
       <SelectDemoSection />
+
+      {/* Input Demo Section */}
+      <InputDemoSection />
+
+      {/* File Upload Demo Section */}
+      <FileUploadDemoSection />
 
       {/* Agent Control Panel */}
       <AgentControlPanel />
@@ -186,6 +195,254 @@ function SelectDemoSection() {
   );
 }
 
+function InputDemoSection() {
+  const [nameValue, setNameValue] = React.useState<string>('');
+  const [emailValue, setEmailValue] = React.useState<string>('');
+  const [licenseValue, setLicenseValue] = React.useState<string>('');
+
+  return (
+    <div className="mt-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+        <span className="mr-2">📝</span>
+        Input Component Demo
+      </h4>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Test AI agent interaction with input fields. The agent can focus, clear, and type text into various input types.
+      </p>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Practitioner Name
+          </label>
+          <Input
+            type="text"
+            placeholder="Enter full name"
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            className="w-64"
+            data-input-field="practitioner-name"
+            data-testid="name-input"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Email Address
+          </label>
+          <Input
+            type="email"
+            placeholder="practitioner@hospital.com"
+            value={emailValue}
+            onChange={(e) => setEmailValue(e.target.value)}
+            className="w-64"
+            data-input-field="email"
+            data-testid="email-input"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            License Number
+          </label>
+          <Input
+            type="text"
+            placeholder="Enter license number"
+            value={licenseValue}
+            onChange={(e) => setLicenseValue(e.target.value)}
+            className="w-64"
+            data-input-field="license-number"
+            data-testid="license-input"
+          />
+        </div>
+
+        {(nameValue || emailValue || licenseValue) && (
+          <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-200 dark:border-purple-700">
+            <p className="text-sm text-purple-700 dark:text-purple-300 font-medium mb-2">
+              Current Input Values:
+            </p>
+            {nameValue && (
+              <p className="text-sm text-purple-600 dark:text-purple-400">
+                Name: <strong>{nameValue}</strong>
+              </p>
+            )}
+            {emailValue && (
+              <p className="text-sm text-purple-600 dark:text-purple-400">
+                Email: <strong>{emailValue}</strong>
+              </p>
+            )}
+            {licenseValue && (
+              <p className="text-sm text-purple-600 dark:text-purple-400">
+                License: <strong>{licenseValue}</strong>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FileUploadDemoSection() {
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
+  const [isUploading, setIsUploading] = React.useState(false);
+
+  const handleFileUpload = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      const file = files[0];
+      setIsUploading(true);
+      
+      // Simulate upload processing
+      setTimeout(() => {
+        setUploadedFile(file);
+        setIsUploading(false);
+      }, 1500);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    handleFileUpload(e.dataTransfer.files);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFileUpload(e.target.files);
+  };
+
+  const handleAccept = () => {
+    setIsDialogOpen(false);
+    setUploadedFile(null);
+    setIsUploading(false);
+  };
+
+  const handleCancel = () => {
+    setIsDialogOpen(false);
+    setUploadedFile(null);
+    setIsUploading(false);
+  };
+
+  return (
+    <div className="mt-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
+      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+        <span className="mr-2">📁</span>
+        File Upload Dialog Demo
+      </h4>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Test AI agent interaction with file upload dialogs. The agent can open the dialog, simulate file uploads, and interact with dialog buttons.
+      </p>
+      
+      <div className="space-y-4">
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button
+              className="flex items-center gap-2"
+              data-upload-trigger="verification-documents"
+              data-testid="upload-trigger"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Verification Documents
+            </Button>
+          </DialogTrigger>
+          
+          <DialogContent className="sm:max-w-md" data-slot="dialog-content">
+            <DialogHeader>
+              <DialogTitle>Upload Documents</DialogTitle>
+              <DialogDescription>
+                Upload verification documents for processing. Accepted formats: PDF, DOC, DOCX, JPG, PNG.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {!uploadedFile && !isUploading && (
+                <div
+                  className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-gray-400 transition-colors"
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                  data-upload-zone="true"
+                >
+                  <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Drop files here or click to browse
+                  </p>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    onChange={handleFileInputChange}
+                    id="file-upload"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+                  >
+                    Choose files
+                  </label>
+                </div>
+              )}
+
+              {isUploading && (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Processing upload...
+                  </p>
+                </div>
+              )}
+
+              {uploadedFile && !isUploading && (
+                <div className="border rounded-lg p-4 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700">
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-6 h-6 text-green-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                        {uploadedFile.name}
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400">
+                        {(uploadedFile.size / 1024).toFixed(1)} KB • {uploadedFile.type || 'Unknown type'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setUploadedFile(null)}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                data-dialog-action="cancel"
+                data-testid="cancel-button"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAccept}
+                disabled={!uploadedFile}
+                data-dialog-action="accept"
+                data-testid="accept-button"
+              >
+                Accept
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          <p>📋 Demo supports: PDF, DOC, DOCX, JPG, PNG files</p>
+          <p>🤖 Agent will simulate file upload and click Accept automatically</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AgentControlPanel() {
   return (
     <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
@@ -216,6 +473,12 @@ function AgentControlPanel() {
         <MoveToElementButton elementId="license" label="Move to License" />
         <SelectDemoButton />
         <StatusSelectDemoButton />
+        <InputDemoButton />
+        <EmailInputDemoButton />
+        <LicenseInputDemoButton />
+        <FileUploadDemoButton />
+        <CertificateUploadDemoButton />
+        <CancelUploadDemoButton />
         <SmoothClickDemoButton />
         <SmoothHoverDemoButton />
         <ActionThoughtTestButton />
@@ -461,40 +724,33 @@ function MoveToElementButton({ elementId, label }: { elementId: string; label: s
   const handleMoveToElement = async () => {
     console.log(`=== MOVING TO ${label} ===`);
     
-    // Use the new agent store moveToElement method
-    import('@/stores/agentStore').then(async ({ useAgentStore }) => {
-      const store = useAgentStore.getState();
-      
-      // Ensure agent is started and mouse is visible
-      store.startAgent();
-      
-      // Add ACTION thought for moving - this will trigger the moving border
-      store.addThought({
-        message: `Moving to ${label} container...`,
-        type: 'action',
-      });
-      
-      // Try to move to the element
-      const success = await store.moveToElement(elementId);
-      
-      if (success) {
-        console.log(`✅ Successfully moved to ${label}`);
-        
-        // Add a visual confirmation thought
-        store.addThought({
-          message: `Positioned at ${label} verification container`,
-          type: 'result',
-        });
-      } else {
-        console.log(`❌ Failed to move to ${label}`);
-        
-        // Add error thought
-        store.addThought({
-          message: `Failed to locate ${label} container`,
-          type: 'result',
-        });
-      }
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: `Demonstrating movement to ${label} with viewport-aware scrolling...`,
+      type: 'thinking',
     });
+
+    // Use the new moveToElement primitive with viewport-aware scrolling
+    const success = await uiPrimitives.moveToElement({
+      selector: `[data-verification="${elementId}"]`,
+      description: `${label} verification container`,
+      moveDuration: 1200
+    });
+
+    if (success) {
+      console.log(`✅ Successfully moved to ${label}`);
+    } else {
+      console.log(`❌ Failed to move to ${label}`);
+    }
   };
 
   return (
@@ -734,6 +990,305 @@ function ActionThoughtTestButton() {
       title="Test ACTION thought with moving border"
     >
       🔥 Action Test
+    </button>
+  );
+}
+
+function InputDemoButton() {
+  const handleInputDemo = async () => {
+    console.log('=== NAME INPUT DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating name input interaction...',
+      type: 'thinking',
+    });
+
+    // Use the fillInput primitive to interact with the name input
+    const success = await uiPrimitives.fillInput({
+      inputSelector: '[data-input-field="practitioner-name"]',
+      text: 'Dr. Sarah Johnson',
+      description: 'Practitioner Name field',
+      typingSpeed: 80,
+      clearFirst: true
+    });
+
+    if (success) {
+      console.log('✅ Name input demo completed successfully');
+    } else {
+      console.log('❌ Name input demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleInputDemo}
+      className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
+      title="Demo filling the name input field"
+    >
+      📝 Name Input
+    </button>
+  );
+}
+
+function EmailInputDemoButton() {
+  const handleEmailDemo = async () => {
+    console.log('=== EMAIL INPUT DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating email input interaction...',
+      type: 'thinking',
+    });
+
+    // Use the fillInput primitive to interact with the email input
+    const success = await uiPrimitives.fillInput({
+      inputSelector: '[data-input-field="email"]',
+      text: 'sarah.johnson@medicenter.com',
+      description: 'Email Address field',
+      typingSpeed: 60,
+      clearFirst: true
+    });
+
+    if (success) {
+      console.log('✅ Email input demo completed successfully');
+    } else {
+      console.log('❌ Email input demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleEmailDemo}
+      className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+      title="Demo filling the email input field"
+    >
+      📧 Email Input
+    </button>
+  );
+}
+
+function LicenseInputDemoButton() {
+  const handleLicenseDemo = async () => {
+    console.log('=== LICENSE INPUT DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating license input interaction...',
+      type: 'thinking',
+    });
+
+    // Use the fillInput primitive to interact with the license input
+    const success = await uiPrimitives.fillInput({
+      inputSelector: '[data-input-field="license-number"]',
+      text: 'MD-2024-789456',
+      description: 'License Number field',
+      typingSpeed: 90,
+      clearFirst: true
+    });
+
+    if (success) {
+      console.log('✅ License input demo completed successfully');
+    } else {
+      console.log('❌ License input demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleLicenseDemo}
+      className="px-3 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 transition-colors"
+      title="Demo filling the license number input field"
+    >
+      🏥 License Input
+    </button>
+  );
+}
+
+function FileUploadDemoButton() {
+  const handleFileUploadDemo = async () => {
+    console.log('=== FILE UPLOAD DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating file upload dialog interaction...',
+      type: 'thinking',
+    });
+
+    // Use the uploadFile primitive to handle the complete flow
+    const success = await uiPrimitives.uploadFile({
+      uploadTriggerSelector: '[data-upload-trigger="verification-documents"]',
+      fileName: 'medical-license.pdf',
+      fileType: 'application/pdf',
+      acceptButtonSelector: '[data-dialog-action="accept"]',
+      description: 'Verification Documents Upload',
+      moveDuration: 900,
+      clickDelay: 300,
+      uploadDelay: 2500,
+      dialogWaitDelay: 1200
+    });
+
+    if (success) {
+      console.log('✅ File upload demo completed successfully');
+    } else {
+      console.log('❌ File upload demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleFileUploadDemo}
+      className="px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 transition-colors"
+      title="Demo complete file upload dialog flow"
+    >
+      📁 Upload Demo
+    </button>
+  );
+}
+
+function CertificateUploadDemoButton() {
+  const handleCertificateUploadDemo = async () => {
+    console.log('=== CERTIFICATE UPLOAD DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating certificate upload with image file...',
+      type: 'thinking',
+    });
+
+    // Use the uploadFile primitive with a different file type
+    const success = await uiPrimitives.uploadFile({
+      uploadTriggerSelector: '[data-upload-trigger="verification-documents"]',
+      fileName: 'board-certification.jpg',
+      fileType: 'image/jpeg',
+      acceptButtonSelector: '[data-dialog-action="accept"]',
+      description: 'Board Certification Upload',
+      moveDuration: 800,
+      clickDelay: 250,
+      uploadDelay: 3000, // Slightly longer for image processing
+      dialogWaitDelay: 1000
+    });
+
+    if (success) {
+      console.log('✅ Certificate upload demo completed successfully');
+    } else {
+      console.log('❌ Certificate upload demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCertificateUploadDemo}
+      className="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors"
+      title="Demo certificate image upload"
+    >
+      🏆 Certificate Upload
+    </button>
+  );
+}
+
+function CancelUploadDemoButton() {
+  const handleCancelUploadDemo = async () => {
+    console.log('=== CANCEL UPLOAD DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating dialog cancellation...',
+      type: 'thinking',
+    });
+
+    // First open the dialog
+    const openSuccess = await uiPrimitives.smoothClick({
+      selector: '[data-upload-trigger="verification-documents"]',
+      description: 'Upload dialog trigger',
+      moveDuration: 800,
+      clickDelay: 200
+    });
+
+    if (!openSuccess) {
+      console.log('❌ Failed to open dialog');
+      return;
+    }
+
+    // Wait for dialog to appear
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Then cancel it
+    const cancelSuccess = await uiPrimitives.cancelDialog({
+      cancelButtonSelector: '[data-dialog-action="cancel"]',
+      description: 'Upload dialog',
+      moveDuration: 600,
+      clickDelay: 200
+    });
+
+    if (cancelSuccess) {
+      console.log('✅ Cancel upload demo completed successfully');
+    } else {
+      console.log('❌ Cancel upload demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCancelUploadDemo}
+      className="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+      title="Demo canceling upload dialog"
+    >
+      ❌ Cancel Upload
     </button>
   );
 }
