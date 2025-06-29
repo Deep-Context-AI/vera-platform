@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAgentUI, useAgentThoughts, AgentThought } from '@/stores/agentStore';
 import { AgentCursor } from './AgentCursor';
 import { MovingBorder } from '@/components/ui/moving-border';
@@ -9,6 +10,7 @@ export function AgentMouse() {
   const { mousePosition, isMouseVisible } = useAgentUI();
   const { currentThought } = useAgentThoughts();
   const [contentBounds, setContentBounds] = useState<DOMRect | null>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
   // Track the main content area boundaries to adjust coordinates
   useEffect(() => {
@@ -30,44 +32,72 @@ export function AgentMouse() {
     };
   }, [isMouseVisible]);
 
-  if (!isMouseVisible || !contentBounds) return null;
+  // Set up portal container
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPortalContainer(document.body);
+    }
+  }, []);
 
-  // Adjust mouse position to be relative to content area
-  const adjustedPosition = {
-    x: mousePosition.x - contentBounds.left,
-    y: mousePosition.y - contentBounds.top,
+  if (!isMouseVisible || !contentBounds || !portalContainer) return null;
+
+  // Use viewport coordinates directly since we're rendering in a portal
+  const portalPosition = {
+    x: mousePosition.x,
+    y: mousePosition.y,
   };
 
-  return (
-    <div className="absolute inset-0 pointer-events-none z-[9999]">
+  const agentMouseContent = (
+    <div className="fixed inset-0 pointer-events-none z-[99999]">
       {/* Agent Cursor - always the same style */}
-      <AgentCursor position={adjustedPosition} />
+      <AgentCursor position={portalPosition} />
       
       {/* Thought Bubble with conditional moving border */}
       <AgentThoughtBubble 
-        position={adjustedPosition} 
+        position={portalPosition} 
         currentThought={currentThought} 
       />
       
-      {/* Debug info showing both original and adjusted coordinates */}
+      {/* Debug info showing viewport coordinates */}
       <div
-        className="absolute text-xs bg-black text-white px-2 py-1 rounded opacity-75"
+        className="absolute text-xs bg-black text-white px-2 py-1 rounded opacity-75 z-[100001]"
         style={{
-          left: adjustedPosition.x + 20,
-          top: adjustedPosition.y + 30,
+          left: portalPosition.x + 20,
+          top: portalPosition.y + 30,
         }}
       >
         <div>Viewport: ({mousePosition.x}, {mousePosition.y})</div>
-        <div>Content: ({Math.round(adjustedPosition.x)}, {Math.round(adjustedPosition.y)})</div>
+        <div>Portal: ({Math.round(portalPosition.x)}, {Math.round(portalPosition.y)})</div>
         <div>Content Offset: ({Math.round(contentBounds.left)}, {Math.round(contentBounds.top)})</div>
       </div>
     </div>
   );
+
+  return createPortal(agentMouseContent, portalContainer);
 }
 
 interface AgentThoughtBubbleProps {
   position: { x: number; y: number };
   currentThought: AgentThought | null;
+}
+
+// Custom animated border component for action thoughts using MovingBorder
+function AnimatedActionBorder({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative p-[2px] overflow-hidden rounded-lg">
+      <div className="absolute inset-0">
+        <MovingBorder duration={1200} rx="8px" ry="8px">
+          {/* Solid orange segment instead of radial gradient */}
+          <div className="w-6 h-6 bg-orange-500 rounded-sm opacity-90" />
+        </MovingBorder>
+      </div>
+      
+      {/* Content with background to cover the path */}
+      <div className="relative bg-white dark:bg-gray-800 rounded-md">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProps) {
@@ -76,7 +106,7 @@ function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProp
   const isActionThought = currentThought.type === 'action';
 
   if (isActionThought) {
-    // Action thought bubble with moving border
+    // Action thought bubble with animated border
     return (
       <div
         className="absolute max-w-xs"
@@ -86,14 +116,9 @@ function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProp
         }}
       >
         <div className="relative">
-          {/* Moving border container */}
-          <div className="relative overflow-hidden rounded-lg">
-            <MovingBorder duration={1500} rx="12px" ry="12px">
-              <div className="w-4 h-4 opacity-80 bg-[radial-gradient(var(--orange-500)_40%,transparent_60%)]" />
-            </MovingBorder>
-            
+          <AnimatedActionBorder>
             {/* Thought bubble content with action styling */}
-            <div className="relative bg-white dark:bg-gray-800 border-2 border-orange-500/20 rounded-lg shadow-lg px-3 py-2 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg px-3 py-2 backdrop-blur-sm">
               <div className="flex items-start space-x-2">
                 {/* Action indicator */}
                 <div className="flex-shrink-0 mt-0.5">
@@ -106,12 +131,8 @@ function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProp
                 </div>
               </div>
             </div>
-          </div>
+          </AnimatedActionBorder>
           
-          {/* Thought bubble tail */}
-          <div className="absolute -bottom-2 left-4">
-            <div className="w-4 h-4 bg-white dark:bg-gray-800 border-l-2 border-b-2 border-orange-500/20 transform rotate-45"></div>
-          </div>
         </div>
       </div>
     );
@@ -146,11 +167,7 @@ function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProp
             </div>
           </div>
         </div>
-        
-        {/* Thought bubble tail */}
-        <div className="absolute -bottom-2 left-4">
-          <div className="w-4 h-4 bg-white dark:bg-gray-800 border-l border-b border-gray-200 dark:border-gray-600 transform rotate-45"></div>
-        </div>
+
       </div>
     </div>
   );

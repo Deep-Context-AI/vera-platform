@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAgentStore } from '@/stores/agentStore';
 import { AgentMouse } from './AgentMouse';
 
@@ -11,13 +12,13 @@ export function AgentOverlay() {
 
   return (
     <div 
-      className="fixed inset-0 pointer-events-none z-[9998]"
+      className="fixed inset-0 pointer-events-none z-[99998]"
     >
       {/* Agent Mouse Cursor */}
       <AgentMouse />
       
       {/* Optional: Add a subtle overlay to indicate agent is active */}
-      <div className="absolute inset-0 bg-blue-500/5 backdrop-blur-[0.5px]" />
+      <div className="absolute inset-0 bg-blue-500/5 rounded-lg" />
       
       {/* Agent Status Indicator - positioned in top right */}
       <AgentStatusIndicator />
@@ -27,9 +28,18 @@ export function AgentOverlay() {
 
 function AgentStatusIndicator() {
   const currentTask = useAgentStore(state => state.currentTask);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
-  return (
-    <div className="absolute top-4 right-4 z-[10000]">
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPortalContainer(document.body);
+    }
+  }, []);
+
+  if (!portalContainer) return null;
+
+  const statusContent = (
+    <div className="fixed top-4 right-4 z-[100000] pointer-events-none">
       <div className="bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-lg px-3 py-2">
         <div className="flex items-center space-x-2">
           {/* Pulsing indicator */}
@@ -45,4 +55,6 @@ function AgentStatusIndicator() {
       </div>
     </div>
   );
+
+  return createPortal(statusContent, portalContainer);
 }

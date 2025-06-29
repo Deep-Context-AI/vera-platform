@@ -141,7 +141,7 @@ export class UISimulator {
     // Add thought about the action
     useAgentStore.getState().addThought({
       message: `Moving to ${description || selector}...`,
-      type: 'thinking',
+      type: 'action',
     });
 
     // Move mouse to target
@@ -200,7 +200,7 @@ export class UISimulator {
     
     useAgentStore.getState().addThought({
       message: `Hovering over ${description || selector}...`,
-      type: 'thinking',
+      type: 'action',
     });
 
     await this.moveMouseTo(target.position, 600);

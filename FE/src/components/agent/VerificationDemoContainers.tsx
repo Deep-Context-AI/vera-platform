@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Shield, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function VerificationDemoContainers() {
   return (
@@ -66,8 +67,121 @@ export function VerificationDemoContainers() {
         </div>
       </div>
 
+      {/* Select Demo Section */}
+      <SelectDemoSection />
+
       {/* Agent Control Panel */}
       <AgentControlPanel />
+    </div>
+  );
+}
+
+function SelectDemoSection() {
+  const [selectedValue, setSelectedValue] = React.useState<string>('');
+
+  return (
+    <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-lg border border-green-200 dark:border-green-700">
+      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+        <span className="mr-2">📋</span>
+        Select Component Demo
+      </h4>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Test AI agent interaction with select dropdowns. The agent can click to open and select specific values.
+      </p>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Verification Priority
+          </label>
+          <Select 
+            value={selectedValue} 
+            onValueChange={setSelectedValue}
+            data-testid="priority-select"
+          >
+            <SelectTrigger 
+              className="w-48"
+              data-select-trigger="priority"
+            >
+              <SelectValue placeholder="Select priority level" />
+            </SelectTrigger>
+            <SelectContent data-select-content="priority">
+              <SelectItem 
+                value="high" 
+                data-select-item="high"
+              >
+                High Priority
+              </SelectItem>
+              <SelectItem 
+                value="medium" 
+                data-select-item="medium"
+              >
+                Medium Priority
+              </SelectItem>
+              <SelectItem 
+                value="low" 
+                data-select-item="low"
+              >
+                Low Priority
+              </SelectItem>
+              <SelectItem 
+                value="urgent" 
+                data-select-item="urgent"
+              >
+                Urgent
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Verification Status
+          </label>
+          <Select data-testid="status-select">
+            <SelectTrigger 
+              className="w-48"
+              data-select-trigger="status"
+            >
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent data-select-content="status">
+              <SelectItem 
+                value="pending" 
+                data-select-item="pending"
+              >
+                Pending Review
+              </SelectItem>
+              <SelectItem 
+                value="in-progress" 
+                data-select-item="in-progress"
+              >
+                In Progress
+              </SelectItem>
+              <SelectItem 
+                value="completed" 
+                data-select-item="completed"
+              >
+                Completed
+              </SelectItem>
+              <SelectItem 
+                value="failed" 
+                data-select-item="failed"
+              >
+                Failed
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {selectedValue && (
+          <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-700">
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              Selected Priority: <strong>{selectedValue}</strong>
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -100,6 +214,10 @@ function AgentControlPanel() {
         <MoveToElementButton elementId="npdb" label="Move to NPDB" />
         <MoveToElementButton elementId="oig" label="Move to OIG" />
         <MoveToElementButton elementId="license" label="Move to License" />
+        <SelectDemoButton />
+        <StatusSelectDemoButton />
+        <SmoothClickDemoButton />
+        <SmoothHoverDemoButton />
         <ActionThoughtTestButton />
         <AgentStopButton />
       </div>
@@ -302,7 +420,7 @@ function VisualAlignmentTestButton() {
         markerEl.style.border = '2px solid white';
         markerEl.style.borderRadius = '50%';
         markerEl.style.transform = 'translate(-50%, -50%)';
-        markerEl.style.zIndex = '10000';
+        markerEl.style.zIndex = '100002';
         markerEl.style.pointerEvents = 'none';
         markerEl.title = marker.label;
         
@@ -386,6 +504,195 @@ function MoveToElementButton({ elementId, label }: { elementId: string; label: s
       title={`Move to ${label}`}
     >
       {label}
+    </button>
+  );
+}
+
+function SelectDemoButton() {
+  const handleSelectDemo = async () => {
+    console.log('=== SELECT DEMO WITH PRIMITIVES ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating select interaction with smooth movement...',
+      type: 'thinking',
+    });
+
+    // Use the reusable select primitive
+    const success = await uiPrimitives.selectOption({
+      selectTriggerSelector: '[data-select-trigger="priority"]',
+      optionSelector: '[data-select-item="high"]',
+      description: 'Priority Level',
+      moveDuration: 1000,
+      clickDelay: 300,
+      optionWaitDelay: 1200
+    });
+
+    if (success) {
+      console.log('✅ Select demo completed successfully');
+    } else {
+      console.log('❌ Select demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleSelectDemo}
+      className="px-3 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 transition-colors"
+      title="Demo select interaction using reusable primitives with smooth movement"
+    >
+      📋 Select Demo
+    </button>
+  );
+}
+
+function StatusSelectDemoButton() {
+  const handleStatusSelectDemo = async () => {
+    console.log('=== STATUS SELECT DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating status select interaction...',
+      type: 'thinking',
+    });
+
+    // Use the reusable select primitive on the status select
+    const success = await uiPrimitives.selectOption({
+      selectTriggerSelector: '[data-select-trigger="status"]',
+      optionSelector: '[data-select-item="completed"]',
+      description: 'Verification Status',
+      moveDuration: 900,
+      clickDelay: 250,
+      optionWaitDelay: 1000
+    });
+
+    if (success) {
+      console.log('✅ Status select demo completed successfully');
+    } else {
+      console.log('❌ Status select demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleStatusSelectDemo}
+      className="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors"
+      title="Demo status select interaction - selects 'Completed' option"
+    >
+      ✅ Status Select
+    </button>
+  );
+}
+
+function SmoothClickDemoButton() {
+  const handleSmoothClickDemo = async () => {
+    console.log('=== SMOOTH CLICK DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating smooth click interaction...',
+      type: 'thinking',
+    });
+
+    // Use the reusable click primitive on the NPDB container
+    const success = await uiPrimitives.smoothClick({
+      selector: '[data-verification="npdb"]',
+      description: 'NPDB verification container',
+      moveDuration: 1200,
+      clickDelay: 400
+    });
+
+    if (success) {
+      console.log('✅ Smooth click demo completed successfully');
+    } else {
+      console.log('❌ Smooth click demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleSmoothClickDemo}
+      className="px-3 py-2 bg-cyan-600 text-white text-sm rounded-lg hover:bg-cyan-700 transition-colors"
+      title="Demo smooth click interaction with visual feedback"
+    >
+      🖱️ Smooth Click
+    </button>
+  );
+}
+
+function SmoothHoverDemoButton() {
+  const handleSmoothHoverDemo = async () => {
+    console.log('=== SMOOTH HOVER DEMO ===');
+    
+    // Import the UI primitives
+    const { uiPrimitives } = await import('@/lib/agent/UIInteractionPrimitives');
+    const { useAgentStore } = await import('@/stores/agentStore');
+    
+    const store = useAgentStore.getState();
+    
+    // Start the agent
+    store.startAgent();
+    
+    // Add initial thinking thought
+    store.addThought({
+      message: 'Demonstrating smooth hover interaction...',
+      type: 'thinking',
+    });
+
+    // Use the reusable hover primitive on the OIG container
+    const success = await uiPrimitives.smoothHover({
+      selector: '[data-verification="oig"]',
+      description: 'OIG verification container',
+      moveDuration: 1000
+    });
+
+    if (success) {
+      console.log('✅ Smooth hover demo completed successfully');
+      
+      // Add a follow-up thought showing the hover is complete
+      store.addThought({
+        message: 'Hover interaction complete - you should see hover effects',
+        type: 'result',
+      });
+    } else {
+      console.log('❌ Smooth hover demo failed');
+    }
+  };
+
+  return (
+    <button
+      onClick={handleSmoothHoverDemo}
+      className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
+      title="Demo smooth hover interaction with mouse events"
+    >
+      👆 Smooth Hover
     </button>
   );
 }
