@@ -551,3 +551,76 @@ class EmailActionResponse(BaseResponse):
     previous_status: str = Field(..., description="Previous email status")
     new_status: str = Field(..., description="New email status")
     updated_at: datetime = Field(..., description="When the action was performed")
+
+class AuditTrailDataResponse(BaseModel):
+    """Response model for audit trail data"""
+    step_type: str = Field(..., description="Type of verification step")
+    reasoning: Optional[str] = Field(None, description="AI agent or human reasoning for the decision")
+    request_data: Optional[Dict[str, Any]] = Field(None, description="Input data for the verification")
+    response_data: Optional[Dict[str, Any]] = Field(None, description="Response data from the verification")
+    verification_result: Optional[str] = Field(None, description="Overall result (verified, not_verified, partial, error)")
+    match_found: Optional[bool] = Field(None, description="Whether a match was found in the source system")
+    confidence_score: Optional[float] = Field(None, description="Confidence score (0-100)")
+    external_service: Optional[str] = Field(None, description="Name of external service used")
+    external_service_response_time_ms: Optional[int] = Field(None, description="External service response time")
+    external_service_status: Optional[str] = Field(None, description="External service response status")
+    data_quality_score: Optional[float] = Field(None, description="Data quality score (0-100)")
+    validation_errors: Optional[List[str]] = Field(None, description="List of validation errors")
+    data_completeness: Optional[float] = Field(None, description="Data completeness percentage")
+    risk_flags: Optional[List[str]] = Field(None, description="List of risk flags identified")
+    risk_score: Optional[float] = Field(None, description="Risk score (0-100)")
+    requires_manual_review: Optional[bool] = Field(None, description="Whether manual review is required")
+    processing_method: Optional[str] = Field(None, description="Method used (database, external_api, ai_generated)")
+    processing_duration_ms: Optional[int] = Field(None, description="Total processing time in milliseconds")
+    retry_count: Optional[int] = Field(None, description="Number of retries attempted")
+    processed_by: Optional[str] = Field(None, description="Who/what processed this step (ai_agent, human_agent, system)")
+    agent_id: Optional[str] = Field(None, description="Unique identifier for the processing agent")
+    agent_version: Optional[str] = Field(None, description="Version of the processing agent")
+    compliance_checks: Optional[List[str]] = Field(None, description="List of compliance checks performed")
+    audit_notes: Optional[str] = Field(None, description="Additional audit notes")
+    error_code: Optional[str] = Field(None, description="Error code if step failed")
+    error_message: Optional[str] = Field(None, description="Detailed error message")
+    error_stack_trace: Optional[str] = Field(None, description="Stack trace for debugging")
+    depends_on_steps: Optional[List[str]] = Field(None, description="List of step names this step depends on")
+    blocking_steps: Optional[List[str]] = Field(None, description="List of step names that are blocked by this step")
+    tags: Optional[List[str]] = Field(None, description="Tags for categorization")
+    priority: Optional[str] = Field(None, description="Priority level (low, medium, high, critical)")
+    estimated_duration_ms: Optional[int] = Field(None, description="Estimated processing duration")
+    step_specific_data: Optional[Dict[str, Any]] = Field(None, description="Additional data specific to the verification type")
+
+class AuditTrailEntryResponse(BaseModel):
+    """Response model for audit trail entry"""
+    application_id: int = Field(..., description="Application ID")
+    step_name: str = Field(..., description="Step name")
+    status: str = Field(..., description="Current status of the step")
+    data: AuditTrailDataResponse = Field(..., description="Step data")
+    started_at: datetime = Field(..., description="When the step started")
+    finished_at: Optional[datetime] = Field(None, description="When the step finished")
+
+class AuditTrailResponse(BaseResponse):
+    """Response model for audit trail operations"""
+    application_id: int = Field(..., description="Application ID")
+    entries: List[AuditTrailEntryResponse] = Field(..., description="List of audit trail entries")
+    total_steps: int = Field(..., description="Total number of steps")
+    completed_steps: int = Field(..., description="Number of completed steps")
+    failed_steps: int = Field(..., description="Number of failed steps")
+    pending_steps: int = Field(..., description="Number of pending steps")
+    overall_progress: float = Field(..., description="Overall progress percentage (0-100)")
+
+class AuditTrailStepResponse(BaseResponse):
+    """Response model for single audit trail step"""
+    entry: AuditTrailEntryResponse = Field(..., description="Audit trail entry")
+
+class AuditTrailSummaryResponse(BaseResponse):
+    """Response model for audit trail summary"""
+    application_id: int = Field(..., description="Application ID")
+    total_steps: int = Field(..., description="Total number of steps")
+    completed_steps: int = Field(..., description="Number of completed steps")
+    failed_steps: int = Field(..., description="Number of failed steps")
+    pending_steps: int = Field(..., description="Number of pending steps")
+    in_progress_steps: int = Field(..., description="Number of in-progress steps")
+    requires_review_steps: int = Field(..., description="Number of steps requiring review")
+    overall_progress: float = Field(..., description="Overall progress percentage (0-100)")
+    estimated_completion_time: Optional[datetime] = Field(None, description="Estimated completion time")
+    risk_score: Optional[float] = Field(None, description="Overall risk score (0-100)")
+    last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")

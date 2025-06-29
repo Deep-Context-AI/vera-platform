@@ -3,14 +3,16 @@ from fastapi import APIRouter, Path, Query
 from v1.models.requests import (
     NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
     ComprehensiveSANCTIONRequest, LADMFRequest,
-    MedicalRequest, DCARequest, MedicareRequest, EducationRequest, HospitalPrivilegesRequest
+    MedicalRequest, DCARequest, MedicareRequest, EducationRequest, HospitalPrivilegesRequest,
+    AuditTrailStartRequest, AuditTrailCompleteRequest
 )
 from v1.models.responses import (
     NPIResponse, ABMSResponse, NPDBResponse,
     ComprehensiveSANCTIONResponse, LADMFResponse,
     MedicalResponse, DCAResponse, MedicareResponse, EducationResponse,
     NewDEAVerificationResponse, HospitalPrivilegesResponse,
-    InboxListResponse, InboxEmailResponse, InboxStatsResponse, EmailActionResponse
+    InboxListResponse, InboxEmailResponse, InboxStatsResponse, EmailActionResponse,
+    AuditTrailResponse, AuditTrailStepResponse, AuditTrailSummaryResponse
 )
 from v1.services.external.NPI import npi_service
 from v1.services.external.DEA import dea_service
@@ -24,6 +26,7 @@ from v1.services.external.MEDICARE import medicare_service
 from v1.services.external.EDUCATION import education_service
 from v1.services.external.HOSPITAL_PRIVILEGES import hospital_privileges_service
 from v1.services.database import DatabaseService
+from v1.services.audit_trail_service import audit_trail_service
 
 # Create router
 router = APIRouter()
@@ -300,3 +303,233 @@ async def delete_email(
 async def get_inbox_stats() -> InboxStatsResponse:
     """Get inbox statistics"""
     return await db_service.get_inbox_stats()
+
+# Audit Trail Endpoints
+@router.post(
+    "/audit-trail/start",
+    response_model=AuditTrailStepResponse,
+    tags=["Audit Trail"],
+    summary="Start an audit trail step",
+    description="Start a new verification step in the audit trail for an application"
+)
+async def start_audit_trail_step(request: AuditTrailStartRequest) -> AuditTrailStepResponse:
+    """Start a new audit trail step"""
+    from v1.models.responses import AuditTrailDataResponse, AuditTrailEntryResponse
+    
+    entry = await audit_trail_service.start_step(
+        application_id=request.application_id,
+        step_name=request.step_name,
+        step_type=request.step_type,
+        reasoning=request.reasoning,
+        request_data=request.request_data,
+        processed_by=request.processed_by,
+        agent_id=request.agent_id,
+        priority=request.priority,
+        estimated_duration_ms=request.estimated_duration_ms,
+        depends_on_steps=request.depends_on_steps,
+        tags=request.tags
+    )
+    
+    # Convert to response model
+    data_response = AuditTrailDataResponse(**entry.data.model_dump(exclude_none=True))
+    entry_response = AuditTrailEntryResponse(
+        application_id=entry.application_id,
+        step_name=entry.step_name,
+        status=entry.status,
+        data=data_response,
+        started_at=entry.started_at,
+        finished_at=entry.finished_at
+    )
+    
+    return AuditTrailStepResponse(
+        status="success",
+        message="Audit trail step started successfully",
+        entry=entry_response
+    )
+
+@router.post(
+    "/audit-trail/complete",
+    response_model=AuditTrailStepResponse,
+    tags=["Audit Trail"],
+    summary="Complete an audit trail step",
+    description="Complete a verification step in the audit trail with results"
+)
+async def complete_audit_trail_step(request: AuditTrailCompleteRequest) -> AuditTrailStepResponse:
+    """Complete an audit trail step with results"""
+    from v1.models.responses import AuditTrailDataResponse, AuditTrailEntryResponse
+    from v1.models.database import AuditTrailStatus
+    
+    entry = await audit_trail_service.complete_step(
+        application_id=request.application_id,
+        step_name=request.step_name,
+        status=AuditTrailStatus(request.status),
+        reasoning=request.reasoning,
+        response_data=request.response_data,
+        verification_result=request.verification_result,
+        match_found=request.match_found,
+        confidence_score=request.confidence_score,
+        external_service=request.external_service,
+        external_service_response_time_ms=request.external_service_response_time_ms,
+        external_service_status=request.external_service_status,
+        data_quality_score=request.data_quality_score,
+        validation_errors=request.validation_errors,
+        risk_flags=request.risk_flags,
+        risk_score=request.risk_score,
+        requires_manual_review=request.requires_manual_review,
+        processing_method=request.processing_method,
+        processing_duration_ms=request.processing_duration_ms,
+        retry_count=request.retry_count,
+        compliance_checks=request.compliance_checks,
+        audit_notes=request.audit_notes,
+        error_code=request.error_code,
+        error_message=request.error_message
+    )
+    
+    # Convert to response model
+    data_response = AuditTrailDataResponse(**entry.data.model_dump(exclude_none=True))
+    entry_response = AuditTrailEntryResponse(
+        application_id=entry.application_id,
+        step_name=entry.step_name,
+        status=entry.status,
+        data=data_response,
+        started_at=entry.started_at,
+        finished_at=entry.finished_at
+    )
+    
+    return AuditTrailStepResponse(
+        status="success",
+        message="Audit trail step completed successfully",
+        entry=entry_response
+    )
+
+@router.get(
+    "/audit-trail/{application_id}",
+    response_model=AuditTrailResponse,
+    tags=["Audit Trail"],
+    summary="Get application audit trail",
+    description="Get the complete audit trail for an application"
+)
+async def get_application_audit_trail(
+    application_id: int = Path(..., description="Application ID")
+) -> AuditTrailResponse:
+    """Get the complete audit trail for an application"""
+    from v1.models.responses import AuditTrailDataResponse, AuditTrailEntryResponse
+    
+    entries = await audit_trail_service.get_application_audit_trail(application_id)
+    
+    # Convert to response models
+    entry_responses = []
+    for entry in entries:
+        data_response = AuditTrailDataResponse(**entry.data.model_dump(exclude_none=True))
+        entry_response = AuditTrailEntryResponse(
+            application_id=entry.application_id,
+            step_name=entry.step_name,
+            status=entry.status,
+            data=data_response,
+            started_at=entry.started_at,
+            finished_at=entry.finished_at
+        )
+        entry_responses.append(entry_response)
+    
+    # Calculate summary statistics
+    total_steps = len(entry_responses)
+    completed_steps = len([e for e in entry_responses if e.status == "completed"])
+    failed_steps = len([e for e in entry_responses if e.status == "failed"])
+    pending_steps = len([e for e in entry_responses if e.status in ["pending", "in_progress"]])
+    overall_progress = (completed_steps / total_steps * 100) if total_steps > 0 else 0
+    
+    return AuditTrailResponse(
+        status="success",
+        message="Audit trail retrieved successfully",
+        application_id=application_id,
+        entries=entry_responses,
+        total_steps=total_steps,
+        completed_steps=completed_steps,
+        failed_steps=failed_steps,
+        pending_steps=pending_steps,
+        overall_progress=overall_progress
+    )
+
+@router.get(
+    "/audit-trail/{application_id}/summary",
+    response_model=AuditTrailSummaryResponse,
+    tags=["Audit Trail"],
+    summary="Get audit trail summary",
+    description="Get a summary of the audit trail for an application"
+)
+async def get_audit_trail_summary(
+    application_id: int = Path(..., description="Application ID")
+) -> AuditTrailSummaryResponse:
+    """Get a summary of the audit trail for an application"""
+    entries = await audit_trail_service.get_application_audit_trail(application_id)
+    
+    # Calculate summary statistics
+    total_steps = len(entries)
+    completed_steps = len([e for e in entries if e.status == "completed"])
+    failed_steps = len([e for e in entries if e.status == "failed"])
+    pending_steps = len([e for e in entries if e.status == "pending"])
+    in_progress_steps = len([e for e in entries if e.status == "in_progress"])
+    requires_review_steps = len([e for e in entries if e.status == "requires_review"])
+    
+    overall_progress = (completed_steps / total_steps * 100) if total_steps > 0 else 0
+    
+    # Calculate risk score (average of all step risk scores)
+    risk_scores = [e.data.risk_score for e in entries if e.data.risk_score is not None]
+    overall_risk_score = sum(risk_scores) / len(risk_scores) if risk_scores else None
+    
+    # Find last activity
+    last_activity = None
+    if entries:
+        last_activity = max([e.started_at for e in entries] + [e.finished_at for e in entries if e.finished_at])
+    
+    return AuditTrailSummaryResponse(
+        status="success",
+        message="Audit trail summary retrieved successfully",
+        application_id=application_id,
+        total_steps=total_steps,
+        completed_steps=completed_steps,
+        failed_steps=failed_steps,
+        pending_steps=pending_steps,
+        in_progress_steps=in_progress_steps,
+        requires_review_steps=requires_review_steps,
+        overall_progress=overall_progress,
+        risk_score=overall_risk_score,
+        last_activity=last_activity
+    )
+
+@router.get(
+    "/audit-trail/{application_id}/step/{step_name}",
+    response_model=AuditTrailStepResponse,
+    tags=["Audit Trail"],
+    summary="Get specific audit trail step",
+    description="Get the status and details of a specific verification step"
+)
+async def get_audit_trail_step(
+    application_id: int = Path(..., description="Application ID"),
+    step_name: str = Path(..., description="Step name")
+) -> AuditTrailStepResponse:
+    """Get the status and details of a specific verification step"""
+    from v1.models.responses import AuditTrailDataResponse, AuditTrailEntryResponse
+    
+    entry = await audit_trail_service.get_step_status(application_id, step_name)
+    
+    if not entry:
+        from v1.exceptions.api import NotFoundException
+        raise NotFoundException(detail=f"Audit trail step '{step_name}' not found for application {application_id}")
+    
+    # Convert to response model
+    data_response = AuditTrailDataResponse(**entry.data.model_dump(exclude_none=True))
+    entry_response = AuditTrailEntryResponse(
+        application_id=entry.application_id,
+        step_name=entry.step_name,
+        status=entry.status,
+        data=data_response,
+        started_at=entry.started_at,
+        finished_at=entry.finished_at
+    )
+    
+    return AuditTrailStepResponse(
+        status="success",
+        message="Audit trail step retrieved successfully",
+        entry=entry_response
+    )
