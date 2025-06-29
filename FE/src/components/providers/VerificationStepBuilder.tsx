@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { 
   Shield,
   FileText,
@@ -10,7 +9,6 @@ import {
   Award,
   Database,
   Phone,
-  Mail,
   Globe
 } from 'lucide-react';
 import { VerificationStepConfig } from './VerificationStep';

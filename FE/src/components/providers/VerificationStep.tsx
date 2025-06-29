@@ -313,143 +313,151 @@ const ActiveState: React.FC<{
         </div>
       </div>
 
-      {/* Status selection */}
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Verification Status
-          </label>
-          <Select 
-            value={stepState.status} 
-            onValueChange={(value) => onUpdateStatus(value as VerificationStepState['status'])}
-          >
-            <SelectTrigger className="w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-              <SelectItem value="requires_review">Requires Review</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Main content area with flex layout */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left side - Default form */}
+        <div className="flex-1 space-y-4">
+          {/* Status selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Verification Status
+            </label>
+            <Select 
+              value={stepState.status} 
+              onValueChange={(value) => onUpdateStatus(value as VerificationStepState['status'])}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="failed">Failed</SelectItem>
+                <SelectItem value="requires_review">Requires Review</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Reasoning/Notes */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Reasoning / Notes
-          </label>
-          <textarea
-            value={stepState.reasoning}
-            onChange={(e) => onUpdateReasoning(e.target.value)}
-            placeholder="Enter your reasoning, findings, or notes for this verification step..."
-            className="w-full h-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-          />
-        </div>
+          {/* Reasoning/Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Reasoning / Notes
+            </label>
+            <textarea
+              value={stepState.reasoning}
+              onChange={(e) => onUpdateReasoning(e.target.value)}
+              placeholder="Enter your reasoning, findings, or notes for this verification step..."
+              className="w-full h-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            />
+          </div>
 
-        {/* File uploads */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Supporting Documents
-          </label>
-          
-          {/* Uploaded files list */}
-          {stepState.files && stepState.files.length > 0 && (
-            <div className="mb-3 space-y-2">
-              {stepState.files.map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border">
-                  <div className="flex items-center space-x-2">
-                    <FileText className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-900 dark:text-gray-100">{file.name}</span>
-                    <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+          {/* File uploads */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Supporting Documents
+            </label>
+            
+            {/* Uploaded files list */}
+            {stepState.files && stepState.files.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {stepState.files.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-900 dark:text-gray-100">{file.name}</span>
+                      <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                    <button
+                      onClick={() => onRemoveFile(index)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => onRemoveFile(index)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Upload dialog */}
-          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full">
-                <Upload className="w-4 h-4 mr-2" />
-                Upload Documents
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Upload Documents</DialogTitle>
-                <DialogDescription>
-                  Upload supporting documents for {step.name}. Accepted formats: PDF, DOC, DOCX, JPG, PNG.
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
-                  <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Drop files here or click to browse
-                  </p>
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    onChange={(e) => onFileUpload(e.target.files)}
-                    className="hidden"
-                    id={`file-upload-${step.id}`}
-                  />
-                  <label
-                    htmlFor={`file-upload-${step.id}`}
-                    className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
-                  >
-                    Choose files
-                  </label>
-                </div>
+                ))}
               </div>
+            )}
 
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setUploadDialogOpen(false)}
-                >
-                  Done
+            {/* Upload dialog */}
+            <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload Documents
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Upload Documents</DialogTitle>
+                  <DialogDescription>
+                    Upload supporting documents for {step.name}. Accepted formats: PDF, DOC, DOCX, JPG, PNG.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
+                    <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                      Drop files here or click to browse
+                    </p>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={(e) => onFileUpload(e.target.files)}
+                      className="hidden"
+                      id={`file-upload-${step.id}`}
+                    />
+                    <label
+                      htmlFor={`file-upload-${step.id}`}
+                      className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+                    >
+                      Choose files
+                    </label>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setUploadDialogOpen(false)}
+                  >
+                    Done
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {/* Special Form Section - rendered as children */}
-        {children}
-
-        {/* Error display */}
-        {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-sm text-red-600 dark:text-red-400">
-              <AlertTriangle className="w-4 h-4 inline mr-1" />
-              {error}
-            </p>
+        {/* Right side - Special forms */}
+        {children && (
+          <div className="flex-1 lg:max-w-md">
+            {children}
           </div>
         )}
+      </div>
 
-        {/* Save button */}
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Button 
-            onClick={onSave}
-            disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            {isLoading ? 'Saving...' : 'Save Progress'}
-          </Button>
+      {/* Error display */}
+      {error && (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            <AlertTriangle className="w-4 h-4 inline mr-1" />
+            {error}
+          </p>
         </div>
+      )}
+
+      {/* Save button */}
+      <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <Button 
+          onClick={onSave}
+          disabled={isLoading}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <CheckCircle className="w-4 h-4 mr-2" />
+          {isLoading ? 'Saving...' : 'Save Progress'}
+        </Button>
       </div>
     </div>
   );

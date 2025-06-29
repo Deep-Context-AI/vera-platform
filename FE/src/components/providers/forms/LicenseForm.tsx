@@ -150,16 +150,16 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="CA">California</SelectItem>
-                          <SelectItem value="NY">New York</SelectItem>
-                          <SelectItem value="TX">Texas</SelectItem>
-                          <SelectItem value="FL">Florida</SelectItem>
-                          <SelectItem value="IL">Illinois</SelectItem>
-                          <SelectItem value="PA">Pennsylvania</SelectItem>
-                          <SelectItem value="OH">Ohio</SelectItem>
-                          <SelectItem value="GA">Georgia</SelectItem>
-                          <SelectItem value="NC">North Carolina</SelectItem>
-                          <SelectItem value="MI">Michigan</SelectItem>
+                          <SelectItem key="CA" value="CA">California</SelectItem>
+                          <SelectItem key="NY" value="NY">New York</SelectItem>
+                          <SelectItem key="TX" value="TX">Texas</SelectItem>
+                          <SelectItem key="FL" value="FL">Florida</SelectItem>
+                          <SelectItem key="IL" value="IL">Illinois</SelectItem>
+                          <SelectItem key="PA" value="PA">Pennsylvania</SelectItem>
+                          <SelectItem key="OH" value="OH">Ohio</SelectItem>
+                          <SelectItem key="GA" value="GA">Georgia</SelectItem>
+                          <SelectItem key="NC" value="NC">North Carolina</SelectItem>
+                          <SelectItem key="MI" value="MI">Michigan</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -188,6 +188,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                   </div>
                   <div className="flex justify-end space-x-2">
                     <Button
+                      key="cancel"
                       type="button"
                       variant="outline"
                       size="sm"
@@ -197,6 +198,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                       Cancel
                     </Button>
                     <Button
+                      key="save"
                       type="button"
                       size="sm"
                       onClick={handleSaveEdit}
@@ -217,14 +219,14 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                         <span className="font-medium text-gray-900 dark:text-gray-100">
                           {license.number}
                         </span>
-                        <Badge variant="secondary">{license.state}</Badge>
+                        <Badge key="state" variant="secondary">{license.state}</Badge>
                         {isExpired(license.expiration) && (
-                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                          <Badge key="expired" className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
                             Expired
                           </Badge>
                         )}
                         {isExpiringSoon(license.expiration) && !isExpired(license.expiration) && (
-                          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
+                          <Badge key="expires-soon" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
                             Expires Soon
                           </Badge>
                         )}
@@ -244,6 +246,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                   {isEditable && (
                     <div className="flex space-x-1">
                       <Button
+                        key="edit"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -253,6 +256,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                         <Edit2 className="w-3 h-3" />
                       </Button>
                       <Button
+                        key="remove"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -298,16 +302,16 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CA">California</SelectItem>
-                  <SelectItem value="NY">New York</SelectItem>
-                  <SelectItem value="TX">Texas</SelectItem>
-                  <SelectItem value="FL">Florida</SelectItem>
-                  <SelectItem value="IL">Illinois</SelectItem>
-                  <SelectItem value="PA">Pennsylvania</SelectItem>
-                  <SelectItem value="OH">Ohio</SelectItem>
-                  <SelectItem value="GA">Georgia</SelectItem>
-                  <SelectItem value="NC">North Carolina</SelectItem>
-                  <SelectItem value="MI">Michigan</SelectItem>
+                  <SelectItem key="CA" value="CA">California</SelectItem>
+                  <SelectItem key="NY" value="NY">New York</SelectItem>
+                  <SelectItem key="TX" value="TX">Texas</SelectItem>
+                  <SelectItem key="FL" value="FL">Florida</SelectItem>
+                  <SelectItem key="IL" value="IL">Illinois</SelectItem>
+                  <SelectItem key="PA" value="PA">Pennsylvania</SelectItem>
+                  <SelectItem key="OH" value="OH">Ohio</SelectItem>
+                  <SelectItem key="GA" value="GA">Georgia</SelectItem>
+                  <SelectItem key="NC" value="NC">North Carolina</SelectItem>
+                  <SelectItem key="MI" value="MI">Michigan</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -336,6 +340,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
           </div>
           <div className="flex justify-end space-x-2 mt-4">
             <Button
+              key="cancel-add"
               type="button"
               variant="outline"
               size="sm"
@@ -344,6 +349,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
               Cancel
             </Button>
             <Button
+              key="add-license"
               type="button"
               size="sm"
               onClick={handleAddLicense}

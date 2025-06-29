@@ -141,8 +141,8 @@ export function VerificationTabContent({
   // Check if a step can be started
   const canStartStep = (step: VerificationStepConfig): boolean => {
     const completedSteps = Object.entries(verificationState)
-      .filter(([_, state]) => state.status === 'completed')
-      .map(([stepId, _]) => stepId);
+      .filter(([, state]) => state.status === 'completed')
+      .map(([stepId]) => stepId);
     
     return builderCanStartStep(step, completedSteps);
   };
