@@ -34,11 +34,11 @@ export function AgentCursor({ position }: AgentCursorProps) {
           <g clipPath="url(#clip0_429_11096_default)">
             <path
               d="M11 20.9999L4 3.99994L21 10.9999L14.7353 13.6848C14.2633 13.8871 13.8872 14.2632 13.6849 14.7353L11 20.9999Z"
-              stroke="#292929"
+              stroke="blue"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              fill="white"
+              fill="blue"
             />
           </g>
           <defs>

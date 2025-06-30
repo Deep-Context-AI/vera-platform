@@ -5,7 +5,6 @@ import { useAgentRunner } from '@/hooks/useAgentRunner';
 import { useAuditTrailDebug } from '@/hooks/useAuditTrail';
 import { useAuth } from '@/hooks/useAuth';
 import { AgentOverlay } from '@/components/agent/AgentOverlay';
-import { VerificationDemoContainers } from '@/components/agent/VerificationDemoContainers';
 import { Accordion } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
@@ -40,7 +39,7 @@ export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProp
       // Get practitioner context from global window object if available
       const practitionerContext = typeof window !== 'undefined' ? (window as any).__practitionerContext : undefined;
       
-      const task = 'Please execute the identity verification workflow for the healthcare provider. Use the identity_verification_workflow tool to complete the entire process.';
+      const task = 'Please execute the NPI verification workflow for the healthcare provider. Use the npi_verification_workflow tool to complete the entire process.';
       
       // Structure the context properly for the agent
       let agentContext = undefined;
@@ -103,6 +102,7 @@ export function VerificationTabContent({
 }) {
   const auditDebug = useAuditTrailDebug();
   const { user } = useAuth();
+  const agentRunner = useAgentRunner();
 
   // Generate workflow using builder pattern
   const workflow = useMemo(() => {
@@ -117,6 +117,12 @@ export function VerificationTabContent({
 
   // Application ID fallback
   const applicationId = propApplicationId || 12345;
+
+  // Helper function to get the current user identifier
+  // Use "Vera" when agent is active, otherwise use the authenticated user
+  const getCurrentUser = () => {
+    return agentRunner.isRunning ? 'Vera' : (user?.email || 'Unknown');
+  };
 
   // Initialize verification state for all workflow steps
   useEffect(() => {
@@ -136,12 +142,12 @@ export function VerificationTabContent({
         hospitalPrivileges: existingData?.hospitalPrivileges || [],
         startedAt: existingAudit?.timestamp ? new Date(existingAudit.timestamp) : undefined,
         completedAt: existingAudit?.status === 'completed' && existingAudit.timestamp ? new Date(existingAudit.timestamp) : undefined,
-        examiner: existingAudit?.changed_by || user?.email || 'Unknown'
+        examiner: existingAudit?.changed_by || getCurrentUser()
       };
     });
     
     setVerificationState(initialState);
-  }, [workflow, auditSteps, user]);
+  }, [workflow, auditSteps, user, agentRunner.isRunning]);
 
   // Utility function to map audit status to verification status
   const mapAuditStatusToVerification = (auditStatus: string): VerificationStepState['status'] => {
@@ -178,7 +184,7 @@ export function VerificationTabContent({
         step_key: stepId,
         status: 'in_progress',
         notes: `Started ${step.name} verification`,
-        changed_by: user?.email || 'system',
+        changed_by: getCurrentUser(),
         data: {}
       });
 
@@ -189,7 +195,7 @@ export function VerificationTabContent({
           ...prev[stepId],
           status: 'in_progress',
           startedAt: new Date(),
-          examiner: user?.email || 'Unknown'
+          examiner: getCurrentUser()
         }
       }));
 
@@ -245,7 +251,7 @@ export function VerificationTabContent({
         step_key: stepId,
         status: mapVerificationStatus(stepState.status),
         notes: stepState.reasoning || fallbackNotes,
-        changed_by: user?.email || 'system',
+        changed_by: getCurrentUser(),
         data: structuredData
       });
 
@@ -663,10 +669,6 @@ export function VerificationTabContent({
         )}
       </div>
 
-      {/* Agent demo containers - for development/testing */}
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-        <VerificationDemoContainers />
-      </div>
     </div>
   );
 } 

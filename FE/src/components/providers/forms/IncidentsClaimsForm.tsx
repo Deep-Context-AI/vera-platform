@@ -28,6 +28,7 @@ interface IncidentsClaimsFormProps {
   onRemoveIncident: (incidentId: string) => void;
   onUpdateIncident: (incidentId: string, updatedIncident: Partial<IncidentClaim>) => void;
   isEditable?: boolean; // Whether incidents can be edited/removed
+  stepId?: string; // Step ID for agent interaction
 }
 
 export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
@@ -35,7 +36,8 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
   onAddIncident,
   onRemoveIncident,
   onUpdateIncident,
-  isEditable = true
+  isEditable = true,
+  stepId
 }) => {
   const [newIncident, setNewIncident] = useState({
     incidentType: 'Malpractice Claim',
@@ -132,6 +134,8 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
             size="sm"
             onClick={() => setShowAddForm(!showAddForm)}
             className="text-blue-600 hover:text-blue-700"
+            data-agent-action="open-add-incident-form"
+            data-step-id={stepId}
           >
             <Plus className="w-4 h-4 mr-1" />
             Add Incident
@@ -301,12 +305,16 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                   value={newIncident.incidentType} 
                   onValueChange={(value) => setNewIncident(prev => ({ ...prev, incidentType: value }))}
                 >
-                  <SelectTrigger className="w-full h-10 text-sm">
+                  <SelectTrigger 
+                    className="w-full h-10 text-sm"
+                    data-agent-field="incident-type"
+                    data-step-id={stepId}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {incidentTypes.map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                      <SelectItem key={type} value={type} data-agent-option={type}>{type}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -320,6 +328,8 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                   value={newIncident.date}
                   onChange={(e) => setNewIncident(prev => ({ ...prev, date: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  data-agent-field="incident-date"
+                  data-step-id={stepId}
                 />
               </div>
             </div>
@@ -333,6 +343,8 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
                 placeholder="Provide detailed information about the incident or claim..."
                 rows={4}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-vertical"
+                data-agent-field="incident-details"
+                data-step-id={stepId}
               />
             </div>
           </div>
@@ -353,6 +365,8 @@ export const IncidentsClaimsForm: React.FC<IncidentsClaimsFormProps> = ({
               onClick={handleAddIncident}
               disabled={!newIncident.incidentType || !newIncident.details || !newIncident.date}
               className="bg-blue-600 hover:bg-blue-700"
+              data-agent-action="submit-add-incident"
+              data-step-id={stepId}
             >
               Add Incident
             </Button>

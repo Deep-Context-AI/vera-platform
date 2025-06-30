@@ -109,7 +109,13 @@ function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProp
               <div className="flex items-start space-x-2">
                 {/* Action indicator */}
                 <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 240 246" fill="none" className="animate-spin">
+                    <path d="M168.5 21L153 0L119.5 37.5L84.5 0L68 21L119.5 79.5L168.5 21Z" fill="#15639F"/>
+                    <path d="M136.185 229.918L161.635 235.711L162.537 185.434L213.53 190.998L212.323 164.319L135.122 153.616L136.185 229.918Z" fill="#15639F"/>
+                    <path d="M26.5884 161.08L23.1493 186.953L73.297 183.251L72.4221 234.539L98.8792 230.896L102.474 153.04L26.5884 161.08Z" fill="#15639F"/>
+                    <path d="M40.6482 44.194L16.9757 55.1877L47.0298 95.5021L3.29528 122.308L20.5769 142.669L88.1837 103.89L40.6482 44.194Z" fill="#15639F"/>
+                    <path d="M218.677 141.665L235.868 122.025L192.06 97.3396L221.189 55.1167L197.141 43.5001L151.036 106.34L218.677 141.665Z" fill="#15639F"/>
+                  </svg>
                 </div>
                 
                 {/* Thought message */}
@@ -140,12 +146,13 @@ function AgentThoughtBubble({ position, currentThought }: AgentThoughtBubbleProp
           <div className="flex items-start space-x-2">
             {/* Thought type indicator */}
             <div className="flex-shrink-0 mt-0.5">
-              {currentThought.type === 'thinking' && (
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-              )}
-              {currentThought.type === 'result' && (
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-              )}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 240 246" fill="none" className={`${currentThought.type === 'thinking' ? 'animate-spin' : ''}`}>
+                    <path d="M168.5 21L153 0L119.5 37.5L84.5 0L68 21L119.5 79.5L168.5 21Z" fill="#15639F"/>
+                    <path d="M136.185 229.918L161.635 235.711L162.537 185.434L213.53 190.998L212.323 164.319L135.122 153.616L136.185 229.918Z" fill="#15639F"/>
+                    <path d="M26.5884 161.08L23.1493 186.953L73.297 183.251L72.4221 234.539L98.8792 230.896L102.474 153.04L26.5884 161.08Z" fill="#15639F"/>
+                    <path d="M40.6482 44.194L16.9757 55.1877L47.0298 95.5021L3.29528 122.308L20.5769 142.669L88.1837 103.89L40.6482 44.194Z" fill="#15639F"/>
+                    <path d="M218.677 141.665L235.868 122.025L192.06 97.3396L221.189 55.1167L197.141 43.5001L151.036 106.34L218.677 141.665Z" fill="#15639F"/>
+                  </svg>
             </div>
             
             {/* Thought message */}

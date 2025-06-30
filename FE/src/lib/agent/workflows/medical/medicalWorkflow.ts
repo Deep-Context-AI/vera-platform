@@ -84,12 +84,13 @@ export const medicalVerificationWorkflowTool = tool({
           
         } catch (apiError) {
           const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown API error';
-          console.error('❌ Medi-Cal Verification API Error:', apiError);
           
           // Check if this is a 404 error (provider not found in Medi-Cal database)
           const is404Error = errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found');
           
           if (is404Error) {
+            console.log('ℹ️ Medi-Cal Verification: Provider not found in database (expected for non-Medi-Cal providers)');
+            
             store.addThought({
               message: `Provider not found in Medi-Cal database - this is normal for non-Medi-Cal providers`,
               type: 'result',
@@ -105,6 +106,8 @@ export const medicalVerificationWorkflowTool = tool({
               }
             };
           } else {
+            console.error('❌ Medi-Cal Verification API Error:', apiError);
+            
             store.addThought({
               message: `Medi-Cal verification API call failed: ${errorMessage}`,
               type: 'result',

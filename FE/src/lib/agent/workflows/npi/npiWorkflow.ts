@@ -18,7 +18,39 @@ const NPIVerificationWorkflowSchema = z.object({
     city: z.string().nullable().describe('City'),
     state: z.string().nullable().describe('State (2-letter abbreviation)'),
     postalCode: z.string().nullable().describe('Postal/ZIP code')
-  }).nullable().describe('Practitioner data to use for NPI verification')
+  }).nullable().describe('Practitioner data to use for NPI verification'),
+  providerContext: z.object({
+    practitionerData: z.object({
+      practitioner: z.object({
+        first_name: z.string().nullable(),
+        last_name: z.string().nullable(),
+        middle_name: z.string().nullable(),
+        ssn: z.string().nullable(),
+        date_of_birth: z.string().nullable(),
+        home_address: z.object({
+          line1: z.string().nullable(),
+          line2: z.string().nullable(),
+          city: z.string().nullable(),
+          state: z.string().nullable(),
+          zip_code: z.string().nullable()
+        }).nullable(),
+        mailing_address: z.object({
+          line1: z.string().nullable(),
+          line2: z.string().nullable(),
+          city: z.string().nullable(),
+          state: z.string().nullable(),
+          zip_code: z.string().nullable()
+        }).nullable()
+      }).nullable(),
+      applications: z.array(z.object({
+        license_numbers: z.array(z.string()).nullable(),
+        application_id: z.string().nullable()
+      })).nullable()
+    }).nullable(),
+    currentPage: z.string().nullable(),
+    userId: z.string().nullable(),
+    isAuthenticated: z.boolean().nullable()
+  }).nullable().describe('Additional provider context from the agent runner')
 });
 
 // NPI verification workflow tool
@@ -133,7 +165,7 @@ export const npiVerificationWorkflowTool = tool({
           verificationDecision = await analyzeNPIVerificationResult(
             npiVerificationResult,
             params.practitionerData,
-            null // Provider context will be accessed via runContext in future refactor
+            params.providerContext
           );
           
           store.addThought({

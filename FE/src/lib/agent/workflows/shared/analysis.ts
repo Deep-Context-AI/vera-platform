@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { NPIVerificationDecision, CALicenseVerificationDecision, ABMSVerificationDecision, DEAVerificationDecision, MedicareVerificationDecision, MedicalVerificationDecision, NPDBVerificationDecision } from './types';
+import { NPIVerificationDecision, CALicenseVerificationDecision, ABMSVerificationDecision, DEAVerificationDecision, MedicareVerificationDecision, MedicalVerificationDecision, NPDBVerificationDecision, SanctionCheckVerificationDecision } from './types';
 
 // OpenAI client for verification analysis
 const getOpenAIClient = () => {
@@ -715,6 +715,116 @@ Analyze the verification result and provide your decision in the specified JSON 
       summary: 'NPDB analysis could not be completed due to AI analysis failure.',
       issues_found: ['OpenAI analysis unavailable'],
       recommendations: ['Perform manual NPDB verification review']
+    };
+  }
+}
+
+// Function to analyze Sanction Check verification result using OpenAI
+export async function analyzeSanctionCheckVerificationResult(
+  apiResult: any,
+  practitionerData: any,
+  providerContext?: any
+): Promise<SanctionCheckVerificationDecision> {
+  const openai = getOpenAIClient();
+  
+  const systemPrompt = `You are a healthcare verification specialist analyzing comprehensive sanction check results from OIG (Office of Inspector General) and GSA (General Services Administration) exclusion lists.
+
+Your task is to analyze the API response and make a verification decision based on sanction data quality and match accuracy.
+
+DECISION CRITERIA:
+- "completed": No sanctions found, or sanctions data has been thoroughly reviewed and documented
+- "failed": API call failed, major system errors, or inability to complete the sanction check
+- "requires_review": Sanctions found, potential matches requiring human review, or ambiguous results
+
+ANALYSIS FACTORS:
+1. Name matching accuracy (first name, last name, middle name if available)
+2. Date of birth matching (if available)
+3. NPI number consistency
+4. License number matching
+5. SSN last 4 digits matching (if available)
+6. Sanction type and severity assessment
+7. Sanction dates and current status
+8. Source verification (OIG, GSA, state-specific exclusions)
+9. Geographic consistency (license state matching)
+
+SANCTION TYPES TO IDENTIFY:
+- OIG Exclusions (healthcare fraud, patient abuse, etc.)
+- GSA Debarments (federal contracting exclusions)
+- State Medicaid exclusions
+- Medicare exclusions
+- Professional license sanctions
+- Criminal convictions
+- Civil monetary penalties
+
+RESPONSE FORMAT:
+Return a JSON object with:
+{
+  "decision": "completed|failed|requires_review",
+  "reasoning": "Clear explanation of the decision and any sanctions found",
+  "sanctions_found": [
+    {
+      "sanction_type": "specific type of sanction",
+      "date": "YYYY-MM-DD format if available",
+      "details": "detailed description of the sanction",
+      "severity": "high|medium|low",
+      "source": "OIG|GSA|State|Medicare|etc"
+    }
+  ],
+  "summary": "Brief summary of sanction check results",
+  "issues_found": ["list of any issues or concerns"],
+  "recommendations": ["list of recommendations for next steps"]
+}
+
+SEVERITY GUIDELINES:
+- HIGH: Active exclusions, fraud convictions, patient abuse, felony convictions
+- MEDIUM: Expired exclusions, civil penalties, license suspensions
+- LOW: Minor violations, administrative issues, resolved matters
+
+Be thorough in your analysis. If ANY sanctions are found, the decision should typically be "requires_review" unless they are clearly resolved or irrelevant.`;
+
+  const userPrompt = `Please analyze this sanction check verification result:
+
+API Response:
+${JSON.stringify(apiResult, null, 2)}
+
+Practitioner Information:
+${JSON.stringify(practitionerData, null, 2)}
+
+${providerContext ? `Provider Context:
+${JSON.stringify(providerContext, null, 2)}` : ''}
+
+Please provide your analysis as a JSON object following the specified format.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.1,
+      response_format: { type: 'json_object' }
+    });
+
+    const analysisResult = JSON.parse(response.choices[0].message.content || '{}');
+    
+    return {
+      decision: analysisResult.decision || 'requires_review',
+      reasoning: analysisResult.reasoning || 'Analysis completed',
+      sanctions_found: analysisResult.sanctions_found || [],
+      summary: analysisResult.summary || 'Sanction check completed',
+      issues_found: analysisResult.issues_found || [],
+      recommendations: analysisResult.recommendations || []
+    };
+  } catch (error) {
+    console.error('Error in sanction check analysis:', error);
+    return {
+      decision: 'failed',
+      reasoning: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      sanctions_found: [],
+      summary: 'Unable to complete sanction check analysis',
+      issues_found: ['AI analysis failed'],
+      recommendations: ['Manual review required']
     };
   }
 }

@@ -18,7 +18,7 @@ export function AgentOverlay() {
       <AgentMouse />
       
       {/* Optional: Add a subtle overlay to indicate agent is active */}
-      <div className="absolute inset-0 bg-blue-500/5 rounded-lg" />
+      <div className="absolute inset-0 bg-blue-500/10 rounded-lg" />
       
       {/* Agent Status Indicator - positioned in top right */}
       <AgentStatusIndicator />
@@ -46,9 +46,11 @@ function AgentStatusIndicator() {
           <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
           
           <div className="text-sm">
-            <div className="font-medium text-gray-900">AI Assistant Active</div>
+            <div className="font-medium text-gray-900">Vera Active</div>
             {currentTask && (
-              <div className="text-xs text-gray-600">{currentTask}</div>
+              <div className="text-xs text-gray-600">
+                {currentTask.length > 200 ? `${currentTask.substring(0, 200)}...` : currentTask}
+              </div>
             )}
           </div>
         </div>

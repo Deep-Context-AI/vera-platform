@@ -235,11 +235,6 @@ export class UIInteractionPrimitives {
 
     // Step 2: Clear existing content if requested
     if (clearFirst) {
-      store.addThought({
-        message: `Clearing existing content in ${description}...`,
-        type: 'thinking',
-      });
-
       const element = document.querySelector(inputSelector) as HTMLInputElement;
       if (element && element.value) {
         // Select all and delete with React-compatible approach
@@ -287,7 +282,7 @@ export class UIInteractionPrimitives {
 
     // Step 3: Type the new text
     store.addThought({
-      message: `Typing "${text}" into ${description}...`,
+      message: `Filling out ${description}...`,
       type: 'action',
     });
 
@@ -345,11 +340,6 @@ export class UIInteractionPrimitives {
       value: finalElement 
     });
     finalElement.dispatchEvent(changeEvent);
-
-    store.addThought({
-      message: `Successfully entered "${text}" into ${description}`,
-      type: 'result',
-    });
 
     return true;
   }
@@ -660,11 +650,6 @@ export class UIInteractionPrimitives {
     // Smooth movement to element
     await this.uiSimulator.moveMouseTo(position, moveDuration);
 
-    store.addThought({
-      message: `Positioned cursor over ${description}`,
-      type: 'result',
-    });
-
     return true;
   }
 
@@ -697,7 +682,7 @@ export class UIInteractionPrimitives {
 
     // Add typing thought
     store.addThought({
-      message: `Typing "${text}" into ${description}...`,
+      message: `Filling out ${description}...`,
       type: 'action',
     });
 
@@ -726,7 +711,7 @@ export class UIInteractionPrimitives {
     element.dispatchEvent(new Event('change', { bubbles: true }));
 
     store.addThought({
-      message: `Successfully typed "${text}" into ${description}`,
+      message: `Successfully filled out ${description}`,
       type: 'result',
     });
 
@@ -1139,14 +1124,9 @@ export class UIInteractionPrimitives {
    */
   async expandVerificationStep(stepId: string): Promise<boolean> {
     const store = useAgentStore.getState();
-    
-    store.addThought({
-      message: `Expanding verification step: ${stepId}`,
-      type: 'action',
-    });
 
     // Add timing delay for better UX readability
-    await this.wait(800);
+    await this.wait(400);
 
     // Use direct selector approach since we know the exact format
     const success = await this.smartClick({
@@ -1157,11 +1137,6 @@ export class UIInteractionPrimitives {
     if (success) {
       // Wait for accordion animation
       await this.wait(1000);
-      
-      store.addThought({
-        message: `Successfully expanded ${stepId} verification step`,
-        type: 'result',
-      });
     } else {
       // Fallback: try to find by step name if direct selector fails
       store.addThought({
@@ -1193,14 +1168,9 @@ export class UIInteractionPrimitives {
    */
   async collapseVerificationStep(stepId: string): Promise<boolean> {
     const store = useAgentStore.getState();
-    
-    store.addThought({
-      message: `Collapsing verification step: ${stepId}`,
-      type: 'action',
-    });
 
     // Add timing delay for better UX readability
-    await this.wait(800);
+    await this.wait(400);
 
     // First check if the step is currently expanded
     const inspectionResult = this.inspectVerificationStep(stepId);
@@ -1229,11 +1199,6 @@ export class UIInteractionPrimitives {
     if (success) {
       // Wait for accordion animation
       await this.wait(1000);
-      
-      store.addThought({
-        message: `Successfully collapsed ${stepId} verification step`,
-        type: 'result',
-      });
     } else {
       // Fallback: try to find by step name if direct selector fails
       store.addThought({
@@ -1265,22 +1230,12 @@ export class UIInteractionPrimitives {
    */
   async startVerificationStep(stepId: string): Promise<boolean> {
     const store = useAgentStore.getState();
-    
-    store.addThought({
-      message: `Starting verification for step: ${stepId}`,
-      type: 'action',
-    });
 
     // Add timing delay for better UX readability
     await this.wait(800);
 
     // Use the specific data-agent-action selector for the Start Verification button
     const startButtonSelector = `button[data-step-id="${stepId}"][data-agent-action="start-verification"]`;
-    
-    store.addThought({
-      message: `Looking for Start Verification button with selector: ${startButtonSelector}`,
-      type: 'action',
-    });
     
     // Check if the start button exists, with retry mechanism for timing issues
     let startButton = document.querySelector(startButtonSelector);
@@ -1923,10 +1878,6 @@ export class UIInteractionPrimitives {
     
     try {
       // Step 1: Click the "Add License" button to show the form
-      store.addThought({
-        message: `Opening license form for ${stepId}...`,
-        type: 'action',
-      });
       
       // Look for the Add License button
       const addButtonSelectors = [
@@ -2088,20 +2039,8 @@ export class UIInteractionPrimitives {
         type: 'action',
       });
       
-      // Wait a bit more to ensure the form is fully rendered and ready
-      store.addThought({
-        message: `Waiting for form to be fully ready...`,
-        type: 'action',
-      });
-      await this.wait(1000);
-      
       // Look for the submit button with the specific data-agent-action attribute
       const submitButtonSelector = `[data-step-id="${stepId}"] button[data-agent-action="submit-add-license"]`;
-      
-      store.addThought({
-        message: `Looking for submit button with selector: ${submitButtonSelector}`,
-        type: 'action',
-      });
       
       // Check if the submit button exists
       const submitButton = document.querySelector(submitButtonSelector);
@@ -2204,6 +2143,233 @@ export class UIInteractionPrimitives {
       
       store.addThought({
         message: `Failed to add license: ${errorMessage}`,
+        type: 'result',
+      });
+      
+      return false;
+    }
+  }
+
+  /**
+   * Add an incident to the IncidentsClaimsForm component
+   * This handles the complete flow: click Add Incident button -> fill form -> submit
+   */
+  async addIncidentToForm(options: {
+    stepId: string;
+    incidentData: {
+      incidentType: string;
+      date: string; // YYYY-MM-DD format
+      details: string;
+    };
+    description?: string;
+  }): Promise<boolean> {
+    const { stepId, incidentData } = options;
+    const store = useAgentStore.getState();
+    
+    try {
+      // Step 1: Click the "Add Incident" button to show the form
+      
+      // Look for the Add Incident button
+      const addButtonSelector = `button[data-step-id="${stepId}"][data-agent-action="open-add-incident-form"]`;
+      
+      const addButton = document.querySelector(addButtonSelector);
+      if (!addButton) {
+        store.addThought({
+          message: `Could not find Add Incident button for ${stepId}`,
+          type: 'result',
+        });
+        throw new Error(`Could not find Add Incident button for ${stepId}`);
+      }
+      
+      const addButtonSuccess = await this.smartClick({
+        selector: addButtonSelector,
+        description: 'Add Incident button'
+      });
+      
+      if (!addButtonSuccess) {
+        throw new Error(`Could not click Add Incident button for ${stepId}`);
+      }
+      
+      // Wait for form to appear
+      await this.wait(1000);
+      
+      // Step 2: Fill out the incident form fields
+      store.addThought({
+        message: `Filling incident form fields...`,
+        type: 'action',
+      });
+      
+      // Fill Incident Type (dropdown)
+      store.addThought({
+        message: `Setting incident type to ${incidentData.incidentType}...`,
+        type: 'action',
+      });
+      
+      const incidentTypeSuccess = await this.selectOption({
+        selectTriggerSelector: `[data-step-id="${stepId}"][data-agent-field="incident-type"]`,
+        optionSelector: `[data-agent-option="${incidentData.incidentType}"]`,
+        description: `incident type selection to ${incidentData.incidentType}`,
+        moveDuration: 800,
+        clickDelay: 200,
+        optionWaitDelay: 1000
+      });
+      
+      if (!incidentTypeSuccess) {
+        store.addThought({
+          message: `Could not set incident type to ${incidentData.incidentType}`,
+          type: 'result',
+        });
+        throw new Error(`Could not set incident type to ${incidentData.incidentType} for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Fill Date
+      const dateSuccess = await this.fillInput({
+        inputSelector: `[data-step-id="${stepId}"][data-agent-field="incident-date"]`,
+        text: incidentData.date,
+        description: 'incident date field',
+        clearFirst: true
+      });
+      
+      if (!dateSuccess) {
+        store.addThought({
+          message: `Could not fill incident date`,
+          type: 'result',
+        });
+        throw new Error(`Could not fill incident date field for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Fill Details
+      const detailsSuccess = await this.fillInput({
+        inputSelector: `[data-step-id="${stepId}"][data-agent-field="incident-details"]`,
+        text: incidentData.details,
+        description: 'incident details field',
+        clearFirst: true
+      });
+      
+      if (!detailsSuccess) {
+        store.addThought({
+          message: `Could not fill incident details`,
+          type: 'result',
+        });
+        throw new Error(`Could not fill incident details field for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Step 3: Click the "Add Incident" button to submit
+      store.addThought({
+        message: `Submitting incident form...`,
+        type: 'action',
+      });
+      
+      // Look for the submit button with the specific data-agent-action attribute
+      const submitButtonSelector = `[data-step-id="${stepId}"] button[data-agent-action="submit-add-incident"]`;
+      
+      // Check if the submit button exists
+      const submitButton = document.querySelector(submitButtonSelector);
+      if (!submitButton) {
+        // Log all buttons for debugging
+        const allButtons = document.querySelectorAll(`[data-step-id="${stepId}"] button`);
+        const buttonDetails = Array.from(allButtons).map(b => {
+          const text = b.textContent?.trim() || '';
+          const action = b.getAttribute('data-agent-action') || '';
+          const disabled = (b as HTMLButtonElement).disabled;
+          return `"${text}" (action: "${action}", disabled: ${disabled})`;
+        });
+        
+        store.addThought({
+          message: `Submit button not found! Available buttons: ${buttonDetails.join(' | ')}`,
+          type: 'result',
+        });
+        
+        throw new Error(`Could not find submit button with selector: ${submitButtonSelector}`);
+      }
+      
+      // Check if button is disabled
+      const isDisabled = (submitButton as HTMLButtonElement).disabled;
+      if (isDisabled) {
+        store.addThought({
+          message: `Submit button is disabled - checking form validation...`,
+          type: 'result',
+        });
+        
+        // Wait a bit more and try again
+        await this.wait(1000);
+        const recheckButton = document.querySelector(submitButtonSelector) as HTMLButtonElement;
+        if (recheckButton?.disabled) {
+          throw new Error(`Submit button is still disabled after waiting`);
+        }
+      }
+      
+      // Click the submit button
+      store.addThought({
+        message: `Clicking submit button: ${submitButton.textContent?.trim()}`,
+        type: 'action',
+      });
+      
+      const submitSuccess = await this.smoothClick({
+        selector: submitButtonSelector,
+        description: 'Add Incident submit button'
+      });
+      
+      if (!submitSuccess) {
+        store.addThought({
+          message: `Submit button click failed for ${stepId}`,
+          type: 'result',
+        });
+        throw new Error(`Failed to click submit button for ${stepId}`);
+      }
+      
+      store.addThought({
+        message: `Successfully clicked submit button for ${stepId}`,
+        type: 'result',
+      });
+      
+      // Wait for form submission to complete and verify the form is closed
+      store.addThought({
+        message: `Waiting for incident form submission to complete...`,
+        type: 'action',
+      });
+      await this.wait(2000);
+      
+      // Verify that the incident was actually added by checking if the form closed
+      const formStillOpen = document.querySelector(`[data-step-id="${stepId}"][data-agent-field="incident-type"]`);
+      if (formStillOpen) {
+        store.addThought({
+          message: `Incident form still appears to be open after submission for ${stepId}`,
+          type: 'result',
+        });
+        // Try to close the form by clicking Cancel if available
+        const cancelButton = document.querySelector(`[data-step-id="${stepId}"] button:contains("Cancel")`);
+        if (cancelButton) {
+          (cancelButton as HTMLElement).click();
+          await this.wait(500);
+        }
+        throw new Error(`Incident form submission failed - form still open for ${stepId}`);
+      } else {
+        store.addThought({
+          message: `Incident form closed successfully - incident appears to have been added`,
+          type: 'result',
+        });
+      }
+      
+      store.addThought({
+        message: `Successfully added incident ${incidentData.incidentType} to ${stepId}`,
+        type: 'result',
+      });
+      
+      return true;
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Add Incident Error:', error);
+      
+      store.addThought({
+        message: `Failed to add incident: ${errorMessage}`,
         type: 'result',
       });
       

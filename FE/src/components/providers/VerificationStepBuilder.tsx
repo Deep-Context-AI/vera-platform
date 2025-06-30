@@ -21,15 +21,6 @@ import { VerificationStepConfig } from './VerificationStep';
 
 // Predefined verification step configurations
 export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
-  identity_verification: {
-    id: 'identity_verification',
-    name: 'Identity Verification',
-    description: 'Verify provider identity and basic information',
-    icon: Shield,
-    priority: 'high',
-    estimatedDuration: '5-10 min',
-    hasSpecialForm: false
-  },
   
   ca_license_verification: {
     id: 'ca_license_verification',
@@ -38,7 +29,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Award,
     priority: 'high',
     estimatedDuration: '10-15 min',
-    dependsOn: ['identity_verification'],
+    dependsOn: [],
     hasSpecialForm: true,
     formType: 'licenses'
   },
@@ -61,7 +52,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Database,
     priority: 'high',
     estimatedDuration: '10-15 min',
-    dependsOn: ['identity_verification'],
+    dependsOn: [],
     hasSpecialForm: true,
     formType: 'incidents_claims'
   },
@@ -84,7 +75,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Hash,
     priority: 'high',
     estimatedDuration: '5-10 min',
-    dependsOn: ['identity_verification'],
+    dependsOn: [],
     hasSpecialForm: false
   },
   
@@ -106,7 +97,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Search,
     priority: 'high',
     estimatedDuration: '10-15 min',
-    dependsOn: ['identity_verification'],
+    dependsOn: [],
     hasSpecialForm: true,
     formType: 'incidents_claims'
   },
@@ -152,7 +143,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: GraduationCap,
     priority: 'medium',
     estimatedDuration: '15-20 min',
-    dependsOn: ['identity_verification'],
+    dependsOn: [],
     hasSpecialForm: false
   },
   
@@ -164,7 +155,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Award,
     priority: 'high',
     estimatedDuration: '10-15 min',
-    dependsOn: ['identity_verification'],
+    dependsOn: [],
     hasSpecialForm: true,
     formType: 'licenses'
   },
@@ -176,7 +167,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Building,
     priority: 'medium',
     estimatedDuration: '10-15 min',
-    dependsOn: ['identity_verification']
+    dependsOn: []
   },
   
   reference_verification: {
@@ -196,7 +187,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Database,
     priority: 'high',
     estimatedDuration: '24-48 hours',
-    dependsOn: ['identity_verification']
+    dependsOn: []
   },
   
   contact_verification: {
@@ -206,7 +197,7 @@ export const VERIFICATION_STEPS: Record<string, VerificationStepConfig> = {
     icon: Phone,
     priority: 'medium',
     estimatedDuration: '5-10 min',
-    dependsOn: ['identity_verification']
+    dependsOn: []
   },
   
   specialty_certification: {
@@ -393,7 +384,6 @@ export const WORKFLOW_TEMPLATES = {
   // Basic verification for simple providers
   basic: () => new VerificationWorkflowBuilder()
     .addSteps([
-      'identity_verification',
       'contact_verification',
       'ca_license_verification'
     ]),
@@ -401,7 +391,6 @@ export const WORKFLOW_TEMPLATES = {
   // Standard verification for most healthcare providers (updated with new steps)
   standard: () => new VerificationWorkflowBuilder()
     .addSteps([
-      'identity_verification',
       'npi_verification',
       'ca_license_verification',
       'abms_verification',
@@ -417,7 +406,6 @@ export const WORKFLOW_TEMPLATES = {
   // Comprehensive verification for high-risk or specialized providers
   comprehensive: () => new VerificationWorkflowBuilder()
     .addSteps([
-      'identity_verification',
       'contact_verification',
       'npi_verification',
       'ca_license_verification',
@@ -441,7 +429,6 @@ export const WORKFLOW_TEMPLATES = {
   // Quick verification for emergency or temporary credentialing
   express: () => new VerificationWorkflowBuilder()
     .addSteps([
-      'identity_verification',
       'npi_verification',
       'ca_license_verification',
       'npdb_verification',
@@ -451,7 +438,6 @@ export const WORKFLOW_TEMPLATES = {
   // California-specific workflow (new template)
   california: () => new VerificationWorkflowBuilder()
     .addSteps([
-      'identity_verification',
       'npi_verification',
       'ca_license_verification',
       'abms_verification',

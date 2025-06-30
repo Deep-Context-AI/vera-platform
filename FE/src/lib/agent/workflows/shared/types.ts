@@ -61,3 +61,14 @@ export interface NPDBVerificationDecision extends BaseVerificationDecision {
   }>;
   summary?: string;
 }
+
+export interface SanctionCheckVerificationDecision extends BaseVerificationDecision {
+  sanctions_found?: Array<{
+    sanction_type: string;
+    date?: string;
+    details: string;
+    severity?: 'high' | 'medium' | 'low';
+    source?: string; // OIG, GSA, etc.
+  }>;
+  summary?: string;
+}
