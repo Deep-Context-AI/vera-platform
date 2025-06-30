@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { NPIVerificationDecision, CALicenseVerificationDecision, ABMSVerificationDecision } from './types';
+import { NPIVerificationDecision, CALicenseVerificationDecision, ABMSVerificationDecision, DEAVerificationDecision, MedicareVerificationDecision } from './types';
 
 // OpenAI client for verification analysis
 const getOpenAIClient = () => {
@@ -294,6 +294,209 @@ Analyze the verification result and provide your decision in the specified JSON 
       reasoning: `OpenAI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Manual review required.`,
       issues_found: ['OpenAI analysis unavailable'],
       recommendations: ['Perform manual ABMS certification review']
+    };
+  }
+}
+
+// Function to analyze DEA verification result using OpenAI
+export async function analyzeDEAVerificationResult(
+  apiResult: any,
+  practitionerData: any,
+  providerContext?: any
+): Promise<DEAVerificationDecision> {
+  const openai = getOpenAIClient();
+  
+  const systemPrompt = `You are a healthcare verification specialist analyzing DEA (Drug Enforcement Administration) registration verification results.
+
+Your task is to analyze the API response and make a verification decision based on the DEA registration data quality and match accuracy.
+
+DECISION CRITERIA:
+- "completed": DEA registration data matches practitioner information well, registration is active and valid
+- "failed": Major discrepancies, invalid DEA number, expired registration, or verification API call failed
+- "requires_review": Complex case that needs human review due to ambiguous results, or if registration has issues
+
+ANALYSIS FACTORS:
+1. Name matching (first name, last name, registrant name)
+2. DEA number validity and format
+3. Registration status (active, expired, suspended, etc.)
+4. Registration expiration date
+5. Business activity codes and drug schedules
+6. Any disciplinary actions or restrictions
+7. Registration type consistency
+
+RESPONSE FORMAT:
+Return a JSON object with:
+{
+  "decision": "completed|failed|requires_review",
+  "reasoning": "Clear explanation of the decision",
+  "dea_details": {
+    "number": "extracted DEA number",
+    "status": "active|expired|suspended|etc",
+    "expiration_date": "YYYY-MM-DD format if available",
+    "registrant_name": "name on registration",
+    "business_activity": "business activity description"
+  },
+  "issues_found": ["list of any issues"],
+  "recommendations": ["list of recommendations if any"]
+}
+
+Be thorough but concise in your analysis. Pay special attention to registration status and expiration dates.`;
+
+  const userPrompt = `Please analyze this DEA verification result:
+
+PRACTITIONER DATA:
+${JSON.stringify(practitionerData, null, 2)}
+
+DEA VERIFICATION API RESULT:
+${JSON.stringify(apiResult, null, 2)}
+
+PROVIDER CONTEXT (if available):
+${providerContext ? JSON.stringify(providerContext, null, 2) : 'No additional context provided'}
+
+Analyze the verification result and provide your decision in the specified JSON format.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 1000,
+      response_format: { type: 'json_object' }
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response from OpenAI');
+    }
+
+    const decision = JSON.parse(content) as DEAVerificationDecision;
+    
+    // Validate the decision structure
+    if (!decision.decision || !decision.reasoning) {
+      throw new Error('Invalid decision format from OpenAI');
+    }
+
+    // Ensure decision is one of the valid options
+    if (!['completed', 'in_progress', 'failed', 'requires_review'].includes(decision.decision)) {
+      throw new Error(`Invalid decision value: ${decision.decision}`);
+    }
+
+    return decision;
+  } catch (error) {
+    console.error('❌ OpenAI DEA Analysis Error:', error);
+    
+    // Fallback decision if OpenAI fails
+    return {
+      decision: 'requires_review',
+      reasoning: `OpenAI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Manual review required.`,
+      issues_found: ['OpenAI analysis unavailable'],
+      recommendations: ['Perform manual DEA verification review']
+    };
+  }
+}
+
+// Function to analyze Medicare verification result using OpenAI
+export async function analyzeMedicareVerificationResult(
+  apiResult: any,
+  practitionerData: any,
+  providerContext?: any
+): Promise<MedicareVerificationDecision> {
+  const openai = getOpenAIClient();
+  
+  const systemPrompt = `You are a healthcare verification specialist analyzing Medicare enrollment verification results.
+
+Your task is to analyze the API response and make a verification decision based on the Medicare enrollment data quality and match accuracy.
+
+DECISION CRITERIA:
+- "completed": Medicare enrollment data matches practitioner information well, enrollment is active and valid, OR provider is confirmed not enrolled in Medicare (404/not found)
+- "failed": Major discrepancies, invalid enrollment, or verification API call failed with non-404 error
+- "requires_review": Complex case that needs human review due to ambiguous results, or if enrollment has issues
+
+ANALYSIS FACTORS:
+1. Name matching (first name, last name)
+2. NPI number validity and consistency
+3. Medicare enrollment status (active, inactive, terminated, not_enrolled, etc.)
+4. Enrollment effective dates and termination dates
+5. Provider type and specialty matching
+6. Reassignment eligibility status
+7. Fee-for-service vs. ordering/referring provider enrollment
+8. Any enrollment restrictions or limitations
+9. Provider not found (404) should be treated as completed verification with "not enrolled in Medicare" status
+
+RESPONSE FORMAT:
+Return a JSON object with:
+{
+  "decision": "completed|failed|requires_review",
+  "reasoning": "Clear explanation of the decision",
+  "medicare_details": {
+    "npi": "NPI number from enrollment",
+    "enrollment_status": "active|inactive|terminated|etc",
+    "enrollment_date": "YYYY-MM-DD format if available",
+    "provider_type": "individual|organization|etc",
+    "specialty": "provider specialty",
+    "reassignment_eligible": true/false
+  },
+  "issues_found": ["list of any issues"],
+  "recommendations": ["list of recommendations if any"]
+}
+
+Be thorough but concise in your analysis. Pay special attention to enrollment status and effective dates.`;
+
+  const userPrompt = `Please analyze this Medicare verification result:
+
+PRACTITIONER DATA:
+${JSON.stringify(practitionerData, null, 2)}
+
+MEDICARE VERIFICATION API RESULT:
+${JSON.stringify(apiResult, null, 2)}
+
+PROVIDER CONTEXT (if available):
+${providerContext ? JSON.stringify(providerContext, null, 2) : 'No additional context provided'}
+
+Analyze the verification result and provide your decision in the specified JSON format.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 1000,
+      response_format: { type: 'json_object' }
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response from OpenAI');
+    }
+
+    const decision = JSON.parse(content) as MedicareVerificationDecision;
+    
+    // Validate the decision structure
+    if (!decision.decision || !decision.reasoning) {
+      throw new Error('Invalid decision format from OpenAI');
+    }
+
+    // Ensure decision is one of the valid options
+    if (!['completed', 'in_progress', 'failed', 'requires_review'].includes(decision.decision)) {
+      throw new Error(`Invalid decision value: ${decision.decision}`);
+    }
+
+    return decision;
+  } catch (error) {
+    console.error('❌ OpenAI Medicare Analysis Error:', error);
+    
+    // Fallback decision if OpenAI fails
+    return {
+      decision: 'requires_review',
+      reasoning: `OpenAI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Manual review required.`,
+      issues_found: ['OpenAI analysis unavailable'],
+      recommendations: ['Perform manual Medicare verification review']
     };
   }
 }

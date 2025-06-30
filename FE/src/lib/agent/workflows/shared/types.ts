@@ -18,3 +18,24 @@ export interface CALicenseVerificationDecision extends BaseVerificationDecision 
 }
 
 export interface ABMSVerificationDecision extends BaseVerificationDecision {}
+
+export interface DEAVerificationDecision extends BaseVerificationDecision {
+  dea_details?: {
+    number?: string;
+    status?: string;
+    expiration_date?: string;
+    registrant_name?: string;
+    business_activity?: string;
+  };
+}
+
+export interface MedicareVerificationDecision extends BaseVerificationDecision {
+  medicare_details?: {
+    npi?: string;
+    enrollment_status?: string;
+    enrollment_date?: string;
+    provider_type?: string;
+    specialty?: string;
+    reassignment_eligible?: boolean;
+  };
+}

@@ -3,12 +3,16 @@ import { identityVerificationWorkflowTool } from './identity/identityWorkflow';
 import { npiVerificationWorkflowTool } from './npi/npiWorkflow';
 import { caLicenseVerificationWorkflowTool } from './ca-license/caLicenseWorkflow';
 import { abmsVerificationWorkflowTool } from './abms/abmsWorkflow';
+import { deaVerificationWorkflowTool } from './dea/deaWorkflow';
+import { medicareVerificationWorkflowTool } from './medicare/medicareWorkflow';
 
 // Re-export individual tools
 export { identityVerificationWorkflowTool };
 export { npiVerificationWorkflowTool };
 export { caLicenseVerificationWorkflowTool };
 export { abmsVerificationWorkflowTool };
+export { deaVerificationWorkflowTool };
+export { medicareVerificationWorkflowTool };
 
 // Export all workflow tools as array for easy registration
 export const allWorkflowTools = [
@@ -16,4 +20,6 @@ export const allWorkflowTools = [
   npiVerificationWorkflowTool,
   caLicenseVerificationWorkflowTool,
   abmsVerificationWorkflowTool,
+  deaVerificationWorkflowTool,
+  medicareVerificationWorkflowTool,
 ];
