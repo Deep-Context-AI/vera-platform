@@ -39,3 +39,25 @@ export interface MedicareVerificationDecision extends BaseVerificationDecision {
     reassignment_eligible?: boolean;
   };
 }
+
+export interface MedicalVerificationDecision extends BaseVerificationDecision {
+  medical_details?: {
+    npi?: string;
+    enrollment_status?: string;
+    provider_type?: string;
+    license_type?: string;
+    taxonomy_code?: string;
+    managed_care_enrollment?: boolean;
+    orp_enrollment?: boolean;
+  };
+}
+
+export interface NPDBVerificationDecision extends BaseVerificationDecision {
+  incidents_found?: Array<{
+    incident_type: string;
+    date?: string;
+    details: string;
+    severity?: 'high' | 'medium' | 'low';
+  }>;
+  summary?: string;
+}

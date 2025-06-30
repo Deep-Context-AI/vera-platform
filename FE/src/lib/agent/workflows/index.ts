@@ -5,6 +5,8 @@ import { caLicenseVerificationWorkflowTool } from './ca-license/caLicenseWorkflo
 import { abmsVerificationWorkflowTool } from './abms/abmsWorkflow';
 import { deaVerificationWorkflowTool } from './dea/deaWorkflow';
 import { medicareVerificationWorkflowTool } from './medicare/medicareWorkflow';
+import { medicalVerificationWorkflowTool } from './medical/medicalWorkflow';
+import { npdbVerificationWorkflowTool } from './npdb/npdbWorkflow';
 
 // Re-export individual tools
 export { identityVerificationWorkflowTool };
@@ -13,6 +15,8 @@ export { caLicenseVerificationWorkflowTool };
 export { abmsVerificationWorkflowTool };
 export { deaVerificationWorkflowTool };
 export { medicareVerificationWorkflowTool };
+export { medicalVerificationWorkflowTool };
+export { npdbVerificationWorkflowTool };
 
 // Export all workflow tools as array for easy registration
 export const allWorkflowTools = [
@@ -22,4 +26,6 @@ export const allWorkflowTools = [
   abmsVerificationWorkflowTool,
   deaVerificationWorkflowTool,
   medicareVerificationWorkflowTool,
+  medicalVerificationWorkflowTool,
+  npdbVerificationWorkflowTool,
 ];
