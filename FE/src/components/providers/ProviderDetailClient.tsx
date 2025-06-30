@@ -236,11 +236,15 @@ export function VerificationTabContent({
       }));
 
       // Record in audit trail
+      // Only use fallback message if no reasoning provided and no existing notes
+      const existingAudit = auditSteps.find(audit => audit.step_key === stepId);
+      const fallbackNotes = existingAudit?.notes || `Updated ${step.name} verification`;
+      
       await auditTrailService.recordChange({
         application_id: applicationId,
         step_key: stepId,
         status: mapVerificationStatus(stepState.status),
-        notes: stepState.reasoning || `Updated ${step.name} verification`,
+        notes: stepState.reasoning || fallbackNotes,
         changed_by: user?.email || 'system',
         data: structuredData
       });

@@ -19,7 +19,7 @@ const getOpenAIClient = () => {
 
 // Interface for OpenAI decision response
 interface NPIVerificationDecision {
-  decision: 'completed' | 'in_progress' | 'not_started';
+  decision: 'completed' | 'in_progress' | 'failed' | 'requires_review';
   reasoning: string;
   confidence: number;
   issues_found?: string[];
@@ -40,13 +40,14 @@ Your task is to analyze the API response and make a verification decision based 
 
 DECISION CRITERIA:
 - "completed": NPI data matches practitioner information well, no significant discrepancies
-- "in_progress": Some discrepancies found that need manual review or additional verification
-- "not_started": Major discrepancies, invalid NPI, or verification failed
+- "in_progress": Some discrepancies found that need manual review or additional verification  
+- "failed": Major discrepancies, invalid NPI, or verification API call failed
+- "requires_review": Complex case that needs human review due to ambiguous results
 
 ANALYSIS FACTORS:
 1. Name matching (first name, last name)
 2. NPI validity and status
-3. Address/location matching
+3. Address/location matching (Mismatches are not a problem)
 4. Organization/practice information
 5. License status and credentials
 6. Any red flags or inconsistencies
@@ -54,7 +55,7 @@ ANALYSIS FACTORS:
 RESPONSE FORMAT:
 Return a JSON object with:
 {
-  "decision": "completed|in_progress|not_started",
+  "decision": "completed|in_progress|failed|requires_review",
   "reasoning": "Clear explanation of the decision",
   "issues_found": ["list of any issues"],
   "recommendations": ["list of recommendations if any"]
@@ -100,7 +101,7 @@ Analyze the verification result and provide your decision in the specified JSON 
     }
 
     // Ensure decision is one of the valid options
-    if (!['completed', 'in_progress', 'not_started'].includes(decision.decision)) {
+    if (!['completed', 'in_progress', 'failed', 'requires_review'].includes(decision.decision)) {
       throw new Error(`Invalid decision value: ${decision.decision}`);
     }
 
@@ -110,7 +111,7 @@ Analyze the verification result and provide your decision in the specified JSON 
     
     // Fallback decision if OpenAI fails
     return {
-      decision: 'in_progress',
+      decision: 'requires_review',
       reasoning: `OpenAI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Manual review required.`,
       confidence: 0.0,
       issues_found: ['OpenAI analysis unavailable'],
@@ -432,7 +433,7 @@ export const npiVerificationWorkflowTool = tool({
           
           // Fallback decision
           verificationDecision = {
-            decision: 'in_progress',
+            decision: 'requires_review',
             reasoning: `AI analysis failed: ${errorMessage}. Manual review required.`,
             confidence: 0.0,
             issues_found: ['AI analysis unavailable'],
@@ -442,7 +443,7 @@ export const npiVerificationWorkflowTool = tool({
       } else {
         // No API result to analyze
         verificationDecision = {
-          decision: 'in_progress',
+          decision: 'requires_review',
           reasoning: 'No NPI verification data available for analysis. Manual review required.',
           confidence: 0.0,
           issues_found: ['No API data available'],
@@ -456,16 +457,8 @@ export const npiVerificationWorkflowTool = tool({
         type: 'action',
       });
       
-      const reasoningNotes = `AI Analysis Results:
-Decision: ${verificationDecision.decision.toUpperCase()}
-Confidence: ${Math.round(verificationDecision.confidence * 100)}%
-Reasoning: ${verificationDecision.reasoning}
-
-${verificationDecision.issues_found && verificationDecision.issues_found.length > 0 ? 
-  `Issues Found:\n${verificationDecision.issues_found.map(issue => `- ${issue}`).join('\n')}\n\n` : ''
-}${verificationDecision.recommendations && verificationDecision.recommendations.length > 0 ? 
-  `Recommendations:\n${verificationDecision.recommendations.map(rec => `- ${rec}`).join('\n')}\n\n` : ''
-}API Response Summary: ${npiVerificationResult ? JSON.stringify(npiVerificationResult, null, 2) : 'No API response available'}`;
+      // Use only the reasoning field from the parsed OpenAI response
+      const reasoningNotes = verificationDecision.reasoning;
 
       // Fill the reasoning notes field
       const notesSuccess = await uiPrimitives.fillInput({

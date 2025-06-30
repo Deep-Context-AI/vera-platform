@@ -210,7 +210,7 @@ export class UIInteractionPrimitives {
       description = 'input field',
       moveDuration = 800,
       clickDelay = 200,
-      typingSpeed = 100,
+      typingSpeed = 10,
       clearFirst = true
     } = options;
 
@@ -242,12 +242,46 @@ export class UIInteractionPrimitives {
 
       const element = document.querySelector(inputSelector) as HTMLInputElement;
       if (element && element.value) {
-        // Select all and delete
+        // Select all and delete with React-compatible approach
         element.select();
         await this.wait(100);
-        element.value = '';
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        element.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        // Use native setter for React controlled components
+        let nativeInputValueSetter;
+        const htmlElement = element as HTMLInputElement | HTMLTextAreaElement;
+        
+        if (htmlElement.tagName === 'INPUT') {
+          nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype,
+            'value'
+          )?.set;
+        } else if (htmlElement.tagName === 'TEXTAREA') {
+          nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype,
+            'value'
+          )?.set;
+        }
+        
+        if (nativeInputValueSetter) {
+          nativeInputValueSetter.call(htmlElement, '');
+        } else {
+          htmlElement.value = '';
+        }
+        
+        // Dispatch React-compatible events
+        const inputEvent = new Event('input', { bubbles: true });
+        Object.defineProperty(inputEvent, 'target', { 
+          writable: false, 
+          value: htmlElement 
+        });
+        htmlElement.dispatchEvent(inputEvent);
+        
+        const changeEvent = new Event('change', { bubbles: true });
+        Object.defineProperty(changeEvent, 'target', { 
+          writable: false, 
+          value: htmlElement 
+        });
+        htmlElement.dispatchEvent(changeEvent);
       }
     }
 
@@ -270,12 +304,47 @@ export class UIInteractionPrimitives {
     const currentValue = clearFirst ? '' : element.value;
     for (let i = 0; i < text.length; i++) {
       await this.wait(typingSpeed);
-      element.value = currentValue + text.substring(0, i + 1);
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+      const newValue = currentValue + text.substring(0, i + 1);
+      
+      // For React controlled components, we need to set the value and trigger events properly
+      let nativeInputValueSetter;
+      const htmlElement = element as HTMLInputElement | HTMLTextAreaElement;
+      
+      if (htmlElement.tagName === 'INPUT') {
+        nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          'value'
+        )?.set;
+      } else if (htmlElement.tagName === 'TEXTAREA') {
+        nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype,
+          'value'
+        )?.set;
+      }
+      
+      if (nativeInputValueSetter) {
+        nativeInputValueSetter.call(htmlElement, newValue);
+      } else {
+        htmlElement.value = newValue;
+      }
+      
+      // Dispatch both input and change events with proper React-compatible event objects
+      const inputEvent = new Event('input', { bubbles: true });
+      Object.defineProperty(inputEvent, 'target', { 
+        writable: false, 
+        value: htmlElement 
+      });
+      htmlElement.dispatchEvent(inputEvent);
     }
 
-    // Trigger change event
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+    // Final change event
+    const finalElement = document.querySelector(inputSelector) as HTMLInputElement | HTMLTextAreaElement;
+    const changeEvent = new Event('change', { bubbles: true });
+    Object.defineProperty(changeEvent, 'target', { 
+      writable: false, 
+      value: finalElement 
+    });
+    finalElement.dispatchEvent(changeEvent);
 
     store.addThought({
       message: `Successfully entered "${text}" into ${description}`,
@@ -610,7 +679,7 @@ export class UIInteractionPrimitives {
     const {
       description = 'input field',
       moveDuration = 800,
-      typingSpeed = 100
+      typingSpeed = 10
     } = options || {};
 
     const store = useAgentStore.getState();
@@ -1306,7 +1375,7 @@ export class UIInteractionPrimitives {
   /**
    * Set verification status for a step
    */
-  async setVerificationStatus(stepId: string, status: 'completed' | 'in_progress' | 'not_started'): Promise<boolean> {
+  async setVerificationStatus(stepId: string, status: 'completed' | 'in_progress' | 'failed' | 'requires_review'): Promise<boolean> {
     const store = useAgentStore.getState();
     
     store.addThought({
@@ -1338,8 +1407,11 @@ export class UIInteractionPrimitives {
       case 'in_progress':
         optionSelector = `[data-agent-option="in_progress"]`;
         break;
-      case 'not_started':
-        optionSelector = `[data-agent-option="not_started"]`;
+      case 'failed':
+        optionSelector = `[data-agent-option="failed"]`;
+        break;
+      case 'requires_review':
+        optionSelector = `[data-agent-option="requires_review"]`;
         break;
       default:
         store.addThought({
