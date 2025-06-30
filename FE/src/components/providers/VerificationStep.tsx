@@ -357,10 +357,10 @@ const ActiveState: React.FC<{
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="in_progress" data-agent-option="in-progress">In Progress</SelectItem>
+                <SelectItem value="in_progress" data-agent-option="in_progress">In Progress</SelectItem>
                 <SelectItem value="completed" data-agent-option="completed">Completed</SelectItem>
                 <SelectItem value="failed" data-agent-option="failed">Failed</SelectItem>
-                <SelectItem value="requires_review" data-agent-option="requires-review">Requires Review</SelectItem>
+                <SelectItem value="requires_review" data-agent-option="requires_review">Requires Review</SelectItem>
               </SelectContent>
             </Select>
           </div>

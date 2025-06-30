@@ -2,10 +2,9 @@
 // For now, this is a placeholder that provides the structure
 
 import { Agent, run, setDefaultOpenAIClient } from '@openai/agents';
-import { uiPrimitives } from './UIInteractionPrimitives';
 import { useAgentStore } from '@/stores/agentStore';
 import OpenAI from 'openai';
-import { identityVerificationWorkflowTool } from './AgentWorkflows';
+import { identityVerificationWorkflowTool, npiVerificationWorkflowTool } from './AgentWorkflows';
 
 
 // Context interface for our agent
@@ -41,30 +40,53 @@ export class AgentRunner {
       console.warn('OpenAI API key not found. Agent functionality may be limited.');
     }
 
-    // Initialize the agent with the single workflow tool
+    // Initialize the agent with the verification workflow tools
     this.agent = new Agent<VeraAgentContext>({
-      name: 'Vera Identity Verification Assistant',
-      instructions: `You are an AI assistant specialized in executing healthcare identity verification workflows. You have access to a single, deterministic workflow tool:
+      name: 'Vera Healthcare Verification Assistant',
+      instructions: `You are an AI assistant specialized in executing healthcare verification workflows. You have access to two deterministic workflow tools:
 
-AVAILABLE TOOL:
-- identity_verification_workflow - Execute the complete identity verification process
+Available Tools:
+1. identity_verification_workflow - Handles identity verification process
+2. npi_verification_workflow - Handles NPI verification with API integration
 
 WORKFLOW STRATEGY:
-The identity_verification_workflow tool handles the entire sequence automatically:
-1. INSPECT: Check current state of the identity verification step
+Each workflow tool handles the entire sequence automatically:
+1. INSPECT: Check current state of the verification step
 2. EXPAND: Open accordion if collapsed
 3. START: Begin verification if not already started
-4. PREPARE: Ready the step for data retrieval and form filling
+4. PROCESS: Execute verification logic (API calls for NPI, status setting for identity)
+5. COMPLETE: Finalize the verification step
 
-IMPORTANT: STEP ID
-Always use "identity_verification" as the stepId parameter.
+STEP IDs:
+- For identity verification: use stepId="identity_verification"
+- For NPI verification: use stepId="npi_verification"
 
-EXECUTION SEQUENCE:
-1. Call identity_verification_workflow with stepId="identity_verification"
-2. The tool will handle all the UI interactions automatically
-3. Report the final state and next steps
+EXECUTION APPROACH:
+- If asked to execute identity verification, call identity_verification_workflow with stepId="identity_verification"
+- If asked to execute NPI verification, call npi_verification_workflow with stepId="npi_verification"
+- If asked to execute both or "all verifications", call both workflows in sequence
+- Each workflow is self-contained and handles all UI interactions and business logic automatically
 
-The workflow is deterministic and will handle all edge cases automatically. You don't need to make multiple tool calls - a single call to identity_verification_workflow will complete the entire sequence.
+PRACTITIONER DATA HANDLING:
+- When practitioner data is provided in the task description, extract it and pass it to the workflow tools
+- Look for practitioner information in the task text including: name, NPI, date of birth, address, organization, city, state, postal code
+- Format the data as a practitionerData object with appropriate fields:
+  - For identity verification: firstName, lastName, fullName, ssn, dateOfBirth, address
+  - For NPI verification: firstName, lastName, fullName, npi, organizationName, city, state, postalCode
+- Always pass the practitionerData parameter to workflow tools when available
+- If no practitioner data is provided, pass null for the practitionerData parameter
+
+PROVIDER CONTEXT HANDLING:
+- For NPI verification workflow, also extract and pass the PROVIDER CONTEXT section from the task
+- This context contains additional information about the provider that will be used for AI analysis
+- Pass this as the providerContext parameter to the npi_verification_workflow tool
+- The AI will use this context along with the API response to make verification decisions
+
+DATA EXTRACTION RULES:
+- Extract practitioner data from task instructions that contain "Use the following practitioner data"
+- Parse each field (Name, First Name, Last Name, NPI, etc.) from the task text
+- Convert field names to camelCase for the API (e.g., "First Name" -> "firstName")
+- Handle null/undefined values gracefully
 
 You must verbalize your actions in a succinct single sentence before every tool call.
 
@@ -72,7 +94,8 @@ If you run into an error, you must verbalize the error first before trying to fi
 `,
       model: 'gpt-4.1',
       tools: [
-        identityVerificationWorkflowTool
+        identityVerificationWorkflowTool,
+        npiVerificationWorkflowTool
       ],
       modelSettings: {
         temperature: 0.1,
@@ -89,27 +112,16 @@ If you run into an error, you must verbalize the error first before trying to fi
   }
 
   /**
-   * Execute a task with the agent using streaming and agent loop pattern
+   * Execute all verification workflows in sequence
    */
-  async executeTask(task: string, context?: Partial<VeraAgentContext>): Promise<string> {
+  async executeAllVerifications(context?: Partial<VeraAgentContext>): Promise<string> {
     const store = useAgentStore.getState();
-    console.log('🚀 Agent Runner: Starting streaming task execution', { task, context });
+    console.log('🚀 Agent Runner: Starting complete verification workflow execution');
     
     // Check if API key is available
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      console.log('⚠️ Agent Runner: No API key found, running in demo mode');
-      store.addThought({
-        message: 'OpenAI API key not configured. Running in demo mode with simulated responses.',
-        type: 'result'
-      });
-      
-      // For demo purposes, simulate identity verification workflow
-      if (task.toLowerCase().includes('identity') || task.toLowerCase().includes('verification')) {
-        return this.simulateIdentityVerificationDemo();
-      }
-      
-      return 'Demo mode: OpenAI API key required for full functionality';
+      throw new Error('OpenAI API key not configured');
     }
     
     // Build context
@@ -121,19 +133,141 @@ If you run into an error, you must verbalize the error first before trying to fi
     };
 
     try {
-      console.log('🧠 Agent Runner: Starting streaming agent loop', { task });
+      console.log('🧠 Agent Runner: Starting complete verification workflow');
       store.addThought({
-        message: `Starting task: ${task}`,
+        message: 'Starting complete verification workflow execution',
         type: 'thinking'
       });
 
+      // Extract practitioner data from context if available
+      let practitionerDataForTask = null;
+      if (context?.practitionerData) {
+        const practitioner = context.practitionerData.practitioner;
+        const applications = context.practitionerData.applications;
+        
+        if (practitioner) {
+          // Extract NPI from applications if available
+          const npiNumber = applications?.find((app: any) => app.npi_number)?.npi_number || null;
+          
+          // Extract address information - handle both home_address and mailing_address
+          let addressString = null;
+          if (practitioner.home_address && typeof practitioner.home_address === 'object') {
+            const addr = practitioner.home_address;
+            addressString = `${addr.line1 || ''} ${addr.line2 || ''} ${addr.city || ''} ${addr.state || ''} ${addr.zip_code || ''}`.trim();
+          } else if (practitioner.mailing_address && typeof practitioner.mailing_address === 'object') {
+            const addr = practitioner.mailing_address;
+            addressString = `${addr.line1 || ''} ${addr.line2 || ''} ${addr.city || ''} ${addr.state || ''} ${addr.zip_code || ''}`.trim();
+          }
+          
+          // Extract city, state, postal code from address objects
+          let city = null;
+          let state = null;
+          let postalCode = null;
+          
+          if (practitioner.home_address && typeof practitioner.home_address === 'object') {
+            city = practitioner.home_address.city || null;
+            state = practitioner.home_address.state || null;
+            postalCode = practitioner.home_address.zip_code || practitioner.home_address.postal_code || null;
+          } else if (practitioner.mailing_address && typeof practitioner.mailing_address === 'object') {
+            city = practitioner.mailing_address.city || null;
+            state = practitioner.mailing_address.state || null;
+            postalCode = practitioner.mailing_address.zip_code || practitioner.mailing_address.postal_code || null;
+          }
+          
+          // Validate and normalize state to 2-letter abbreviation
+          if (state && typeof state === 'string') {
+            // If state is longer than 2 characters, try to convert common state names to abbreviations
+            if (state.length > 2) {
+              const stateAbbreviations: Record<string, string> = {
+                'california': 'CA', 'texas': 'TX', 'florida': 'FL', 'new york': 'NY',
+                'pennsylvania': 'PA', 'illinois': 'IL', 'ohio': 'OH', 'georgia': 'GA',
+                'north carolina': 'NC', 'michigan': 'MI', 'new jersey': 'NJ', 'virginia': 'VA',
+                'washington': 'WA', 'arizona': 'AZ', 'massachusetts': 'MA', 'tennessee': 'TN',
+                'indiana': 'IN', 'missouri': 'MO', 'maryland': 'MD', 'wisconsin': 'WI',
+                'colorado': 'CO', 'minnesota': 'MN', 'south carolina': 'SC', 'alabama': 'AL',
+                'louisiana': 'LA', 'kentucky': 'KY', 'oregon': 'OR', 'oklahoma': 'OK',
+                'connecticut': 'CT', 'utah': 'UT', 'iowa': 'IA', 'nevada': 'NV',
+                'arkansas': 'AR', 'mississippi': 'MS', 'kansas': 'KS', 'new mexico': 'NM',
+                'nebraska': 'NE', 'west virginia': 'WV', 'idaho': 'ID', 'hawaii': 'HI',
+                'new hampshire': 'NH', 'maine': 'ME', 'montana': 'MT', 'rhode island': 'RI',
+                'delaware': 'DE', 'south dakota': 'SD', 'north dakota': 'ND', 'alaska': 'AK',
+                'vermont': 'VT', 'wyoming': 'WY'
+              };
+              
+              const normalizedState = state.toLowerCase().trim();
+              state = stateAbbreviations[normalizedState] || null;
+            } else {
+              // Ensure it's uppercase if it's already 2 characters
+              state = state.toUpperCase();
+            }
+            
+            // Final validation - must be exactly 2 letters
+            if (!state || state.length !== 2 || !/^[A-Z]{2}$/.test(state)) {
+              console.warn(`Invalid state format: ${state}, setting to null`);
+              state = null;
+            }
+          } else {
+            state = null;
+          }
+          
+          practitionerDataForTask = {
+            firstName: practitioner.first_name || null,
+            lastName: practitioner.last_name || null,
+            fullName: `${practitioner.first_name || ''} ${practitioner.middle_name || ''} ${practitioner.last_name || ''}`.trim() || null,
+            npi: npiNumber,
+            ssn: practitioner.ssn || null,
+            dateOfBirth: practitioner.date_of_birth || (practitioner.demographics?.birth_date) || null,
+            address: addressString,
+            // Extract additional fields for NPI verification
+            organizationName: null, // This might need to be extracted from another source
+            city: city,
+            state: state,
+            postalCode: postalCode
+          };
+          
+          console.log('🔍 Agent Runner: Extracted practitioner data:', practitionerDataForTask);
+          store.addThought({
+            message: `Using practitioner data: ${practitionerDataForTask.fullName || 'Unknown'} (NPI: ${practitionerDataForTask.npi || 'N/A'})`,
+            type: 'thinking'
+          });
+        }
+      }
+
+      // Build task with practitioner data if available
+      let task = 'Execute all verification workflows in sequence: first run identity verification workflow, then run NPI verification workflow. Complete both workflows fully including setting status to completed and saving progress.';
+      
+      if (practitionerDataForTask) {
+        task += `\n\nUse the following practitioner data for the workflows:
+- Name: ${practitionerDataForTask.fullName}
+- First Name: ${practitionerDataForTask.firstName}
+- Last Name: ${practitionerDataForTask.lastName}
+- NPI: ${practitionerDataForTask.npi}
+- Date of Birth: ${practitionerDataForTask.dateOfBirth}
+- Address: ${practitionerDataForTask.address}
+- Organization: ${practitionerDataForTask.organizationName}
+- City: ${practitionerDataForTask.city}
+- State: ${practitionerDataForTask.state}
+- Postal Code: ${practitionerDataForTask.postalCode}
+
+For identity verification workflow, use stepId="identity_verification" and pass the practitioner data.
+For NPI verification workflow, use stepId="npi_verification" and pass the practitioner data including NPI number for API verification, and also pass the full provider context for AI analysis.
+
+PROVIDER CONTEXT FOR NPI VERIFICATION:
+${JSON.stringify(context, null, 2)}`;
+      } else {
+        store.addThought({
+          message: 'No practitioner data available - workflows will run without pre-populated data',
+          type: 'thinking'
+        });
+      }
+      
       return await this.runAgentLoop(task, agentContext);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.error('❌ Agent Runner: Task execution failed', error);
+      console.error('❌ Agent Runner: Complete verification workflow failed', error);
       
       store.addThought({
-        message: `Task failed: ${errorMessage}`,
+        message: `Complete verification workflow failed: ${errorMessage}`,
         type: 'result'
       });
 
@@ -298,6 +432,8 @@ If you run into an error, you must verbalize the error first before trying to fi
     switch (toolName) {
       case 'identity_verification_workflow':
         return `Executing identity verification workflow for ${args.stepId || 'identity_verification'}`;
+      case 'npi_verification_workflow':
+        return `Executing NPI verification workflow for ${args.stepId || 'npi_verification'}`;
       default:
         return `${toolName} with ${JSON.stringify(args)}`;
     }
@@ -329,127 +465,6 @@ If you run into an error, you must verbalize the error first before trying to fi
   isExecuting(): boolean {
     return this.isLoopRunning;
   }
-
-  /**
-   * Simulate identity verification demo for testing without API key
-   */
-  private async simulateIdentityVerificationDemo(): Promise<string> {
-    console.log('🎭 Agent Runner: Running simulated identity verification demo (no API key)');
-    const store = useAgentStore.getState();
-    
-    store.addThought({
-      message: 'Starting identity verification workflow simulation...',
-      type: 'action'
-    });
-    
-    // Simulate the workflow steps
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Try to expand identity verification accordion
-    const identityAccordion = document.querySelector('[data-accordion-trigger="identity_verification"]');
-    if (identityAccordion) {
-      store.addThought({
-        message: 'Expanding identity verification accordion...',
-        type: 'action'
-      });
-      
-      await uiPrimitives.smoothClick({
-        selector: '[data-accordion-trigger="identity_verification"]',
-        description: 'identity verification accordion',
-        moveDuration: 800,
-        clickDelay: 500
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Try to start verification if button exists
-      const startButton = document.querySelector('[data-agent-action="start-verification"][data-step-id="identity_verification"]');
-      if (startButton) {
-        store.addThought({
-          message: 'Starting identity verification...',
-          type: 'action'
-        });
-        
-        await uiPrimitives.smoothClick({
-          selector: '[data-agent-action="start-verification"][data-step-id="identity_verification"]',
-          description: 'start verification button',
-          moveDuration: 600,
-          clickDelay: 300
-        });
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-    
-    store.addThought({
-      message: 'Identity verification workflow simulation completed',
-      type: 'result'
-    });
-    
-    console.log('✅ Simulated Demo: Identity verification workflow completed');
-    return 'Demo completed: Identity verification workflow executed (simulated mode)';
-  }
-
-  /**
-   * Execute identity verification workflow
-   */
-  async executeIdentityVerification(practitionerContext?: any): Promise<string> {
-    console.log('🆔 Agent Runner: Starting identity verification workflow');
-    
-    let task = 'Please execute the identity verification workflow for the healthcare provider. Use the identity_verification_workflow tool to complete the entire process.';
-    
-    if (practitionerContext?.practitioner) {
-      const practitioner = practitionerContext.practitioner;
-      const firstName = practitioner.first_name || 'John';
-      const lastName = practitioner.last_name || 'Doe';
-      const fullName = `${firstName} ${practitioner.middle_name ? practitioner.middle_name + ' ' : ''}${lastName}${practitioner.suffix ? ' ' + practitioner.suffix : ''}`;
-      const ssn = practitioner.ssn || '123-45-6789';
-      
-      // Extract DOB
-      let dateOfBirth = '1985-03-15';
-      if (practitioner.demographics) {
-        const demo = practitioner.demographics as any;
-        if (demo?.date_of_birth) {
-          dateOfBirth = demo.date_of_birth;
-        }
-      }
-      
-      // Extract address info
-      let address = '123 Main St, Anytown, CA 90210';
-      if (practitioner.home_address) {
-        if (typeof practitioner.home_address === 'object') {
-          const addr = practitioner.home_address as any;
-          const parts = [];
-          if (addr.street || addr.address_line_1) parts.push(addr.street || addr.address_line_1);
-          if (addr.city) parts.push(addr.city);
-          if (addr.state) parts.push(addr.state);
-          if (addr.zip_code || addr.postal_code) parts.push(addr.zip_code || addr.postal_code);
-          if (parts.length > 0) address = parts.join(', ');
-        } else if (typeof practitioner.home_address === 'string') {
-          address = practitioner.home_address;
-        }
-      }
-      
-      task = `Please execute the identity verification workflow for ${fullName}. Use the identity_verification_workflow tool with the following practitioner data:
-      
-PRACTITIONER DATA:
-- Full Name: ${fullName}
-- SSN: ${ssn}
-- Date of Birth: ${dateOfBirth}
-- Address: ${address}
-
-Execute the workflow with stepId="identity_verification" and include this practitioner data.`;
-    }
-    
-    return this.executeTask(task, practitionerContext ? { 
-      currentPage: 'provider-verification',
-      isAuthenticated: true,
-      store: useAgentStore.getState(),
-      practitionerData: practitionerContext
-    } : undefined);
-  }
-
-
 
   /**
    * Get the underlying agent instance (for advanced usage)

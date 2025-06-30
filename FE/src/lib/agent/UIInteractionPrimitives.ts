@@ -1120,6 +1120,78 @@ export class UIInteractionPrimitives {
   }
 
   /**
+   * Collapse verification step accordion
+   */
+  async collapseVerificationStep(stepId: string): Promise<boolean> {
+    const store = useAgentStore.getState();
+    
+    store.addThought({
+      message: `Collapsing verification step: ${stepId}`,
+      type: 'action',
+    });
+
+    // Add timing delay for better UX readability
+    await this.wait(800);
+
+    // First check if the step is currently expanded
+    const inspectionResult = this.inspectVerificationStep(stepId);
+    if (inspectionResult.state === 'collapsed') {
+      store.addThought({
+        message: `Step ${stepId} is already collapsed`,
+        type: 'result',
+      });
+      return true;
+    }
+
+    if (inspectionResult.state === 'not_found') {
+      store.addThought({
+        message: `Could not find verification step: ${stepId}`,
+        type: 'result',
+      });
+      return false;
+    }
+
+    // Use direct selector approach since we know the exact format
+    const success = await this.smartClick({
+      selector: `[data-accordion-trigger="${stepId}"]`,
+      description: `${stepId} verification step (to collapse)`
+    });
+
+    if (success) {
+      // Wait for accordion animation
+      await this.wait(1000);
+      
+      store.addThought({
+        message: `Successfully collapsed ${stepId} verification step`,
+        type: 'result',
+      });
+    } else {
+      // Fallback: try to find by step name if direct selector fails
+      store.addThought({
+        message: `Trying alternative approach for ${stepId}...`,
+        type: 'thinking',
+      });
+      
+      const fallbackSuccess = await this.smartClick({
+        dataAttribute: 'step-name',
+        dataValue: stepId.replace('_', ' '),
+        description: `${stepId} verification step (fallback collapse)`
+      });
+      
+      if (fallbackSuccess) {
+        await this.wait(1000);
+        store.addThought({
+          message: `Successfully collapsed ${stepId} verification step (fallback method)`,
+          type: 'result',
+        });
+        return true;
+      }
+    }
+
+    return success;
+  }
+
+  /**
    * Start verification for a specific step
    */
   async startVerificationStep(stepId: string): Promise<boolean> {
@@ -1232,6 +1304,72 @@ export class UIInteractionPrimitives {
   }
 
   /**
+   * Set verification status for a step
+   */
+  async setVerificationStatus(stepId: string, status: 'completed' | 'in_progress' | 'not_started'): Promise<boolean> {
+    const store = useAgentStore.getState();
+    
+    store.addThought({
+      message: `Setting verification status to "${status}" for step: ${stepId}`,
+      type: 'action',
+    });
+
+    // Add timing delay for better UX readability
+    await this.wait(800);
+
+    // Look for the status select field
+    const statusSelectSelector = `[data-agent-field="verification-status"][data-step-id="${stepId}"]`;
+    const statusSelect = document.querySelector(statusSelectSelector);
+    
+    if (!statusSelect) {
+      store.addThought({
+        message: `Could not find status select field for ${stepId}`,
+        type: 'result',
+      });
+      return false;
+    }
+
+    // Map status to option selectors - use the correct data-agent-option attributes
+    let optionSelector: string;
+    switch (status) {
+      case 'completed':
+        optionSelector = `[data-agent-option="completed"]`;
+        break;
+      case 'in_progress':
+        optionSelector = `[data-agent-option="in_progress"]`;
+        break;
+      case 'not_started':
+        optionSelector = `[data-agent-option="not_started"]`;
+        break;
+      default:
+        store.addThought({
+          message: `Invalid status value: ${status}`,
+          type: 'result',
+        });
+        return false;
+    }
+
+    // Use the working selectOption method that handles the complete flow
+    const success = await this.selectOption({
+      selectTriggerSelector: statusSelectSelector,
+      optionSelector: optionSelector,
+      description: `verification status to "${status}"`,
+      moveDuration: 800,
+      clickDelay: 200,
+      optionWaitDelay: 1200
+    });
+
+    if (success) {
+      store.addThought({
+        message: `Successfully set verification status to "${status}" for ${stepId}`,
+        type: 'result',
+      });
+    }
+
+    return success;
+  }
+
+  /**
    * Save verification step progress
    */
   async saveVerificationStep(stepId: string): Promise<boolean> {
@@ -1281,6 +1419,146 @@ export class UIInteractionPrimitives {
     }
 
     return success;
+  }
+
+  /**
+   * Generic workflow step to expand accordion and start verification if needed
+   * This is a reusable utility for any verification step
+   */
+  async expandAndStartVerificationStep(stepId: string): Promise<{
+    success: boolean;
+    message: string;
+    step: string;
+    currentState?: any;
+  }> {
+    const store = useAgentStore.getState();
+    
+    try {
+      // Step 1: Inspect current state
+      store.addThought({
+        message: `Preparing verification step: ${stepId}`,
+        type: 'action',
+      });
+      
+      const inspectionResult = this.inspectVerificationStep(stepId);
+      console.log('🔍 Expand and Start - Inspection result:', inspectionResult);
+      
+      if (!inspectionResult.success) {
+        return {
+          success: false,
+          message: `Failed to inspect ${stepId}: ${inspectionResult.message}`,
+          step: 'inspection'
+        };
+      }
+      
+      // Step 2: Expand accordion if collapsed
+      if (inspectionResult.state === 'collapsed') {
+        store.addThought({
+          message: `Expanding ${stepId} accordion...`,
+          type: 'action',
+        });
+        
+        const expandSuccess = await this.expandVerificationStep(stepId);
+        if (!expandSuccess) {
+          return {
+            success: false,
+            message: `Failed to expand ${stepId} accordion`,
+            step: 'expand'
+          };
+        }
+        
+        // Wait for accordion animation and re-inspect
+        await this.wait(1500);
+        
+        const reInspectionResult = this.inspectVerificationStep(stepId);
+        console.log('🔍 Expand and Start - Re-inspection after expand:', reInspectionResult);
+        
+        if (reInspectionResult.state !== 'expanded') {
+          return {
+            success: false,
+            message: `Failed to properly expand ${stepId} accordion`,
+            step: 'expand_verification'
+          };
+        }
+      }
+      
+      // Step 3: Start verification if not already started
+      const finalInspection = this.inspectVerificationStep(stepId);
+      
+      // Check if we need to start verification (status is 'not_started' or 'unknown' with a start button)
+      const needsToStart = finalInspection.hasStartButton && 
+        (finalInspection.currentStatus === 'not_started' || finalInspection.currentStatus === 'unknown');
+      
+      if (needsToStart) {
+        store.addThought({
+          message: `Starting verification for ${stepId} (current status: ${finalInspection.currentStatus})...`,
+          type: 'action',
+        });
+        
+        const startSuccess = await this.startVerificationStep(stepId);
+        if (!startSuccess) {
+          return {
+            success: false,
+            message: `Failed to start verification for ${stepId}`,
+            step: 'start'
+          };
+        }
+        
+        // Wait for start action to complete
+        await this.wait(1000);
+        
+        store.addThought({
+          message: `Successfully started verification for ${stepId}`,
+          type: 'result',
+        });
+      } else if (finalInspection.currentStatus === 'in_progress') {
+        store.addThought({
+          message: `Verification for ${stepId} is already in progress`,
+          type: 'result',
+        });
+      } else if (finalInspection.currentStatus === 'completed') {
+        store.addThought({
+          message: `Verification for ${stepId} is already completed`,
+          type: 'result',
+        });
+      } else {
+        store.addThought({
+          message: `Verification for ${stepId} status: ${finalInspection.currentStatus}, start button available: ${finalInspection.hasStartButton}`,
+          type: 'result',
+        });
+      }
+      
+      // Final inspection to report current state
+      const completionInspection = this.inspectVerificationStep(stepId);
+      
+      return {
+        success: true,
+        message: `Successfully prepared verification step ${stepId} for processing`,
+        step: 'completed',
+        currentState: {
+          status: completionInspection.currentStatus,
+          availableActions: completionInspection.availableActions,
+          availableFields: completionInspection.availableFields,
+          hasStartButton: completionInspection.hasStartButton,
+          hasSaveButton: completionInspection.hasSaveButton
+        }
+      };
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown workflow error';
+      console.error('❌ Expand and Start Verification Error:', error);
+      
+      store.addThought({
+        message: `Failed to prepare verification step: ${errorMessage}`,
+        type: 'result',
+      });
+      
+      return {
+        success: false,
+        message: `Failed to prepare verification step ${stepId}: ${errorMessage}`,
+        step: 'error'
+      };
+    }
   }
 
   /**

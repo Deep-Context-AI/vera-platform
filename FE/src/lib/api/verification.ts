@@ -239,7 +239,7 @@ export class VerificationAPI {
       throw new Error('State must be 2-letter abbreviation');
     }
 
-    return apiCall<NPIResponse>('/npi/search', 'POST', {
+    return apiCall<NPIResponse>('/v1/npi/search', 'POST', {
       ...request,
       state: request.state?.toUpperCase()
     });
@@ -255,7 +255,7 @@ export class VerificationAPI {
       throw new Error('DEA number must be 2 letters followed by 7 digits');
     }
 
-    return apiCall<NewDEAVerificationResponse>('/dea/verify', 'POST', {
+    return apiCall<NewDEAVerificationResponse>('/v1/dea/verify', 'POST', {
       ...request,
       dea_number: request.dea_number.toUpperCase()
     });
@@ -275,7 +275,7 @@ export class VerificationAPI {
       throw new Error('State must be 2-letter abbreviation');
     }
 
-    return apiCall<ABMSResponse>('/abms/certification', 'POST', {
+    return apiCall<ABMSResponse>('/v1/abms/certification', 'POST', {
       ...request,
       state: request.state.toUpperCase()
     });
@@ -306,7 +306,7 @@ export class VerificationAPI {
       throw new Error('DEA number must be 2 letters followed by 7 digits');
     }
 
-    return apiCall<NPDBResponse>('/npdb/verify', 'POST', {
+    return apiCall<NPDBResponse>('/v1/npdb/verify', 'POST', {
       ...request,
       address: {
         ...request.address,
@@ -336,7 +336,7 @@ export class VerificationAPI {
       throw new Error('SSN last 4 digits must be exactly 4 digits');
     }
 
-    return apiCall<ComprehensiveSANCTIONResponse>('/sanctioncheck', 'POST', {
+    return apiCall<ComprehensiveSANCTIONResponse>('/v1/sanctioncheck', 'POST', {
       ...request,
       license_state: request.license_state.toUpperCase()
     });
@@ -356,7 +356,7 @@ export class VerificationAPI {
       throw new Error('Social Security Number must be exactly 9 digits');
     }
 
-    return apiCall<LADMFResponse>('/ladmf/verify', 'POST', request);
+    return apiCall<LADMFResponse>('/v1/ladmf/verify', 'POST', request);
   }
 
   /**
@@ -368,7 +368,7 @@ export class VerificationAPI {
       throw new Error('NPI must be exactly 10 digits');
     }
 
-    return apiCall<MedicalResponse>('/medical/verify', 'POST', {
+    return apiCall<MedicalResponse>('/v1/medical/verify', 'POST', {
       ...request,
       state: request.state?.toUpperCase()
     });
@@ -378,7 +378,7 @@ export class VerificationAPI {
    * DCA (Department of Consumer Affairs) CA License Verification
    */
   static async verifyDCALicense(request: DCARequest): Promise<DCAResponse> {
-    return apiCall<DCAResponse>('/dca/verify', 'POST', request);
+    return apiCall<DCAResponse>('/v1/dca/verify', 'POST', request);
   }
 
   /**
@@ -408,7 +408,7 @@ export class VerificationAPI {
       throw new Error('At least one verification source must be provided');
     }
 
-    return apiCall<MedicareResponse>('/medicare/verify', 'POST', request);
+    return apiCall<MedicareResponse>('/v1/medicare/verify', 'POST', request);
   }
 
   /**
@@ -435,7 +435,7 @@ export class VerificationAPI {
       throw new Error(`degree_type must be one of: ${allowedDegrees.join(', ')}`);
     }
 
-    return apiCall<EducationResponse>('/education/verify', 'POST', request);
+    return apiCall<EducationResponse>('/v1/education/verify', 'POST', request);
   }
 
   /**
@@ -453,7 +453,7 @@ export class VerificationAPI {
       throw new Error(`Verification type must be one of: ${allowedTypes.join(', ')}`);
     }
 
-    return apiCall<HospitalPrivilegesResponse>('/hospital-privileges/verify', 'POST', {
+    return apiCall<HospitalPrivilegesResponse>('/v1/hospital-privileges/verify', 'POST', {
       ...request,
       verification_type: request.verification_type.toLowerCase(),
       specialty: request.specialty.split(' ').map(word => 

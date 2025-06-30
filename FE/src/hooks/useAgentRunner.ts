@@ -47,7 +47,7 @@ export function useAgentRunner(): UseAgentRunnerReturn {
     setCurrentTask(`Executing: ${task}`);
     
     try {
-      const result = await agentRunner.executeTask(task, context);
+      const result = await agentRunner.executeAllVerifications(context);
       console.log('✅ Hook: Task completed', result);
       addThought({
         message: `Task completed: ${result}`,

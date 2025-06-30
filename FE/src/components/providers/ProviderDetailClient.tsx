@@ -42,11 +42,21 @@ export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProp
       
       const task = 'Please execute the identity verification workflow for the healthcare provider. Use the identity_verification_workflow tool to complete the entire process.';
       
-      agentRunner.executeTask(task, practitionerContext ? { 
-        currentPage: 'provider-verification',
-        isAuthenticated: true,
-        practitionerData: practitionerContext
-      } : undefined);
+      // Structure the context properly for the agent
+      let agentContext = undefined;
+      if (practitionerContext) {
+        console.log('🔍 ProviderDetailClient: Raw practitioner context:', practitionerContext);
+        
+        agentContext = { 
+          currentPage: 'provider-verification',
+          isAuthenticated: true,
+          practitionerData: practitionerContext // Pass the entire context object
+        };
+        
+        console.log('🔍 ProviderDetailClient: Structured agent context:', agentContext);
+      }
+      
+      agentRunner.executeTask(task, agentContext);
     };
 
     // Add event listeners
