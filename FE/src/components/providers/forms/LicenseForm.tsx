@@ -20,6 +20,7 @@ export interface License {
   state: string;
   issued: string; // ISO date string
   expiration: string; // ISO date string
+  status?: string; // License status (active, expired, suspended, etc.)
 }
 
 interface LicenseFormProps {
@@ -41,7 +42,8 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
     number: '',
     state: 'CA',
     issued: '',
-    expiration: ''
+    expiration: '',
+    status: ''
   });
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingLicense, setEditingLicense] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
   const handleAddLicense = () => {
     if (newLicense.number && newLicense.issued && newLicense.expiration) {
       onAddLicense(newLicense);
-      setNewLicense({ number: '', state: 'CA', issued: '', expiration: '' });
+      setNewLicense({ number: '', state: 'CA', issued: '', expiration: '', status: '' });
       setShowAddForm(false);
     }
   };
@@ -101,6 +103,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
             variant="outline"
             size="sm"
             onClick={() => setShowAddForm(!showAddForm)}
+            data-agent-action="open-add-license-form"
             className="text-blue-600 hover:text-blue-700"
           >
             <Plus className="w-4 h-4 mr-1" />
@@ -126,7 +129,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
               {editingLicense === license.id ? (
                 // Edit mode
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                         License Number
@@ -185,6 +188,18 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                         className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Status
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.status || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                        placeholder="e.g., Active, Expired, Suspended"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      />
+                    </div>
                   </div>
                   <div className="flex justify-end space-x-2">
                     <Button
@@ -240,6 +255,11 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                           <Calendar className="w-3 h-3 mr-1" />
                           Expires: {formatDate(license.expiration)}
                         </span>
+                        {license.status && (
+                          <span className="flex items-center">
+                            Status: {license.status}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -290,6 +310,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                 value={newLicense.number}
                 onChange={(e) => setNewLicense(prev => ({ ...prev, number: e.target.value }))}
                 placeholder="Enter license number"
+                data-agent-field="license-number"
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -297,21 +318,25 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 State
               </label>
-              <Select value={newLicense.state} onValueChange={(value) => setNewLicense(prev => ({ ...prev, state: value }))}>
-                <SelectTrigger className="w-full h-10 text-sm">
+              <Select 
+                value={newLicense.state} 
+                onValueChange={(value) => setNewLicense(prev => ({ ...prev, state: value }))}
+                data-agent-field="license-state"
+              >
+                <SelectTrigger className="w-full h-10 text-sm" data-agent-trigger="license-state">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem key="CA" value="CA">California</SelectItem>
-                  <SelectItem key="NY" value="NY">New York</SelectItem>
-                  <SelectItem key="TX" value="TX">Texas</SelectItem>
-                  <SelectItem key="FL" value="FL">Florida</SelectItem>
-                  <SelectItem key="IL" value="IL">Illinois</SelectItem>
-                  <SelectItem key="PA" value="PA">Pennsylvania</SelectItem>
-                  <SelectItem key="OH" value="OH">Ohio</SelectItem>
-                  <SelectItem key="GA" value="GA">Georgia</SelectItem>
-                  <SelectItem key="NC" value="NC">North Carolina</SelectItem>
-                  <SelectItem key="MI" value="MI">Michigan</SelectItem>
+                  <SelectItem key="CA" value="CA" data-agent-option="CA">California</SelectItem>
+                  <SelectItem key="NY" value="NY" data-agent-option="NY">New York</SelectItem>
+                  <SelectItem key="TX" value="TX" data-agent-option="TX">Texas</SelectItem>
+                  <SelectItem key="FL" value="FL" data-agent-option="FL">Florida</SelectItem>
+                  <SelectItem key="IL" value="IL" data-agent-option="IL">Illinois</SelectItem>
+                  <SelectItem key="PA" value="PA" data-agent-option="PA">Pennsylvania</SelectItem>
+                  <SelectItem key="OH" value="OH" data-agent-option="OH">Ohio</SelectItem>
+                  <SelectItem key="GA" value="GA" data-agent-option="GA">Georgia</SelectItem>
+                  <SelectItem key="NC" value="NC" data-agent-option="NC">North Carolina</SelectItem>
+                  <SelectItem key="MI" value="MI" data-agent-option="MI">Michigan</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -323,6 +348,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                 type="date"
                 value={newLicense.issued}
                 onChange={(e) => setNewLicense(prev => ({ ...prev, issued: e.target.value }))}
+                data-agent-field="license-issue-date"
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -334,6 +360,20 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
                 type="date"
                 value={newLicense.expiration}
                 onChange={(e) => setNewLicense(prev => ({ ...prev, expiration: e.target.value }))}
+                data-agent-field="license-expiration-date"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Status
+              </label>
+              <input
+                type="text"
+                value={newLicense.status}
+                onChange={(e) => setNewLicense(prev => ({ ...prev, status: e.target.value }))}
+                placeholder="e.g., Active, Expired, Suspended"
+                data-agent-field="license-status"
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -354,6 +394,7 @@ export const LicenseForm: React.FC<LicenseFormProps> = ({
               size="sm"
               onClick={handleAddLicense}
               disabled={!newLicense.number || !newLicense.issued || !newLicense.expiration}
+              data-agent-action="submit-add-license"
               className="bg-blue-600 hover:bg-blue-700"
             >
               Add License

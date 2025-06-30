@@ -4,7 +4,7 @@
 import { Agent, run, setDefaultOpenAIClient } from '@openai/agents';
 import { useAgentStore } from '@/stores/agentStore';
 import OpenAI from 'openai';
-import { identityVerificationWorkflowTool, npiVerificationWorkflowTool } from './AgentWorkflows';
+import { identityVerificationWorkflowTool, npiVerificationWorkflowTool, caLicenseVerificationWorkflowTool } from './AgentWorkflows';
 
 
 // Context interface for our agent
@@ -43,43 +43,48 @@ export class AgentRunner {
     // Initialize the agent with the verification workflow tools
     this.agent = new Agent<VeraAgentContext>({
       name: 'Vera Healthcare Verification Assistant',
-      instructions: `You are an AI assistant specialized in executing healthcare verification workflows. You have access to two deterministic workflow tools:
+      instructions: `You are an AI assistant specialized in executing healthcare verification workflows. You have access to three deterministic workflow tools:
 
 Available Tools:
 1. identity_verification_workflow - Handles identity verification process
 2. npi_verification_workflow - Handles NPI verification with API integration
+3. ca_license_verification_workflow - Handles CA license verification with DCA API integration
 
 WORKFLOW STRATEGY:
 Each workflow tool handles the entire sequence automatically:
 1. INSPECT: Check current state of the verification step
 2. EXPAND: Open accordion if collapsed
 3. START: Begin verification if not already started
-4. PROCESS: Execute verification logic (API calls for NPI, status setting for identity)
+4. PROCESS: Execute verification logic (API calls for NPI/DCA, status setting for identity)
 5. COMPLETE: Finalize the verification step
 
 STEP IDs:
 - For identity verification: use stepId="identity_verification"
 - For NPI verification: use stepId="npi_verification"
+- For CA license verification: use stepId="ca_license_verification"
 
 EXECUTION APPROACH:
 - If asked to execute identity verification, call identity_verification_workflow with stepId="identity_verification"
 - If asked to execute NPI verification, call npi_verification_workflow with stepId="npi_verification"
-- If asked to execute both or "all verifications", call both workflows in sequence
+- If asked to execute CA license verification, call ca_license_verification_workflow with stepId="ca_license_verification"
+- If asked to execute "all verifications", call all three workflows in sequence
 - Each workflow is self-contained and handles all UI interactions and business logic automatically
 
 PRACTITIONER DATA HANDLING:
 - When practitioner data is provided in the task description, extract it and pass it to the workflow tools
-- Look for practitioner information in the task text including: name, NPI, date of birth, address, organization, city, state, postal code
+- Look for practitioner information in the task text including: name, NPI, date of birth, address, organization, city, state, postal code, license numbers
 - Format the data as a practitionerData object with appropriate fields:
   - For identity verification: firstName, lastName, fullName, ssn, dateOfBirth, address
   - For NPI verification: firstName, lastName, fullName, npi, organizationName, city, state, postalCode
+  - For CA license verification: firstName, lastName, fullName, licenseNumber, licenseState, licenseType
 - Always pass the practitionerData parameter to workflow tools when available
 - If no practitioner data is provided, pass null for the practitionerData parameter
 
 PROVIDER CONTEXT HANDLING:
 - For NPI verification workflow, also extract and pass the PROVIDER CONTEXT section from the task
+- For CA license verification workflow, also extract and pass the PROVIDER CONTEXT section from the task
 - This context contains additional information about the provider that will be used for AI analysis
-- Pass this as the providerContext parameter to the npi_verification_workflow tool
+- Pass this as the providerContext parameter to both npi_verification_workflow and ca_license_verification_workflow tools
 - The AI will use this context along with the API response to make verification decisions
 
 DATA EXTRACTION RULES:
@@ -95,7 +100,8 @@ If you run into an error, you must verbalize the error first before trying to fi
       model: 'gpt-4.1',
       tools: [
         identityVerificationWorkflowTool,
-        npiVerificationWorkflowTool
+        npiVerificationWorkflowTool,
+        caLicenseVerificationWorkflowTool
       ],
       modelSettings: {
         temperature: 0.1,
@@ -139,39 +145,45 @@ If you run into an error, you must verbalize the error first before trying to fi
         type: 'thinking'
       });
 
-      // Extract practitioner data from context if available
-      let practitionerDataForTask = null;
+      // Extract and organize practitioner data from context if available
+      let identityData = null;
+      let npiData = null;
+      let caLicenseData = null;
+      
       if (context?.practitionerData) {
         const practitioner = context.practitionerData.practitioner;
         const applications = context.practitionerData.applications;
         
         if (practitioner) {
+          // Extract common data
+          const firstName = practitioner.first_name || null;
+          const lastName = practitioner.last_name || null;
+          const fullName = `${practitioner.first_name || ''} ${practitioner.middle_name || ''} ${practitioner.last_name || ''}`.trim() || null;
+          
           // Extract NPI from applications if available
           const npiNumber = applications?.find((app: any) => app.npi_number)?.npi_number || null;
           
+          // Extract CA license number from applications if available
+          const caLicenseNumber = applications?.find((app: any) => app.license_number)?.license_number || null;
+          
           // Extract address information - handle both home_address and mailing_address
           let addressString = null;
-          if (practitioner.home_address && typeof practitioner.home_address === 'object') {
-            const addr = practitioner.home_address;
-            addressString = `${addr.line1 || ''} ${addr.line2 || ''} ${addr.city || ''} ${addr.state || ''} ${addr.zip_code || ''}`.trim();
-          } else if (practitioner.mailing_address && typeof practitioner.mailing_address === 'object') {
-            const addr = practitioner.mailing_address;
-            addressString = `${addr.line1 || ''} ${addr.line2 || ''} ${addr.city || ''} ${addr.state || ''} ${addr.zip_code || ''}`.trim();
-          }
-          
-          // Extract city, state, postal code from address objects
           let city = null;
           let state = null;
           let postalCode = null;
           
           if (practitioner.home_address && typeof practitioner.home_address === 'object') {
-            city = practitioner.home_address.city || null;
-            state = practitioner.home_address.state || null;
-            postalCode = practitioner.home_address.zip_code || practitioner.home_address.postal_code || null;
+            const addr = practitioner.home_address;
+            addressString = `${addr.line1 || ''} ${addr.line2 || ''} ${addr.city || ''} ${addr.state || ''} ${addr.zip_code || ''}`.trim();
+            city = addr.city || null;
+            state = addr.state || null;
+            postalCode = addr.zip_code || addr.postal_code || null;
           } else if (practitioner.mailing_address && typeof practitioner.mailing_address === 'object') {
-            city = practitioner.mailing_address.city || null;
-            state = practitioner.mailing_address.state || null;
-            postalCode = practitioner.mailing_address.zip_code || practitioner.mailing_address.postal_code || null;
+            const addr = practitioner.mailing_address;
+            addressString = `${addr.line1 || ''} ${addr.line2 || ''} ${addr.city || ''} ${addr.state || ''} ${addr.zip_code || ''}`.trim();
+            city = addr.city || null;
+            state = addr.state || null;
+            postalCode = addr.zip_code || addr.postal_code || null;
           }
           
           // Validate and normalize state to 2-letter abbreviation
@@ -210,49 +222,105 @@ If you run into an error, you must verbalize the error first before trying to fi
             state = null;
           }
           
-          practitionerDataForTask = {
-            firstName: practitioner.first_name || null,
-            lastName: practitioner.last_name || null,
-            fullName: `${practitioner.first_name || ''} ${practitioner.middle_name || ''} ${practitioner.last_name || ''}`.trim() || null,
-            npi: npiNumber,
+          // Create workflow-specific data objects
+          
+          // Identity verification data
+          identityData = {
+            firstName,
+            lastName,
+            fullName,
             ssn: practitioner.ssn || null,
             dateOfBirth: practitioner.date_of_birth || (practitioner.demographics?.birth_date) || null,
-            address: addressString,
-            // Extract additional fields for NPI verification
-            organizationName: null, // This might need to be extracted from another source
-            city: city,
-            state: state,
-            postalCode: postalCode
+            address: addressString
           };
           
-          console.log('🔍 Agent Runner: Extracted practitioner data:', practitionerDataForTask);
+          // NPI verification data
+          if (npiNumber) {
+            npiData = {
+              firstName,
+              lastName,
+              fullName,
+              npi: npiNumber,
+              organizationName: null, // This might need to be extracted from another source
+              city,
+              state,
+              postalCode
+            };
+          }
+          
+          // CA License verification data
+          if (caLicenseNumber) {
+            caLicenseData = {
+              firstName,
+              lastName,
+              fullName,
+              licenseNumber: caLicenseNumber,
+              licenseState: 'CA', // Assuming CA license for DCA verification
+              licenseType: null // Could be extracted from application type if available
+            };
+          }
+          
+          console.log('🔍 Agent Runner: Extracted workflow-specific data:', {
+            identity: identityData,
+            npi: npiData,
+            caLicense: caLicenseData
+          });
+          
+          const dataDescription = [];
+          if (identityData) dataDescription.push(`Identity: ${fullName}`);
+          if (npiData) dataDescription.push(`NPI: ${npiNumber}`);
+          if (caLicenseData) dataDescription.push(`CA License: ${caLicenseNumber}`);
+          
           store.addThought({
-            message: `Using practitioner data: ${practitionerDataForTask.fullName || 'Unknown'} (NPI: ${practitionerDataForTask.npi || 'N/A'})`,
+            message: `Extracted verification data - ${dataDescription.join(', ')}`,
             type: 'thinking'
           });
         }
       }
 
-      // Build task with practitioner data if available
-      let task = 'Execute all verification workflows in sequence: first run identity verification workflow, then run NPI verification workflow. Complete both workflows fully including setting status to completed and saving progress.';
+      // Build task with workflow-specific practitioner data if available
+      let task = 'Execute all verification workflows in sequence: first run identity verification workflow, then run NPI verification workflow, then run CA license verification workflow. Complete all workflows fully including setting status to completed and saving progress.';
       
-      if (practitionerDataForTask) {
-        task += `\n\nUse the following practitioner data for the workflows:
-- Name: ${practitionerDataForTask.fullName}
-- First Name: ${practitionerDataForTask.firstName}
-- Last Name: ${practitionerDataForTask.lastName}
-- NPI: ${practitionerDataForTask.npi}
-- Date of Birth: ${practitionerDataForTask.dateOfBirth}
-- Address: ${practitionerDataForTask.address}
-- Organization: ${practitionerDataForTask.organizationName}
-- City: ${practitionerDataForTask.city}
-- State: ${practitionerDataForTask.state}
-- Postal Code: ${practitionerDataForTask.postalCode}
+      if (identityData || npiData || caLicenseData) {
+        task += `\n\nUse the following workflow-specific data:`;
+        
+        if (identityData) {
+          task += `\n\nFor IDENTITY VERIFICATION (stepId="identity_verification"):
+- Name: ${identityData.fullName}
+- First Name: ${identityData.firstName}
+- Last Name: ${identityData.lastName}
+- Date of Birth: ${identityData.dateOfBirth}
+- Address: ${identityData.address}
+- SSN: ${identityData.ssn}`;
+        }
+        
+        if (npiData) {
+          task += `\n\nFor NPI VERIFICATION (stepId="npi_verification"):
+- Name: ${npiData.fullName}
+- First Name: ${npiData.firstName}
+- Last Name: ${npiData.lastName}
+- NPI: ${npiData.npi}
+- Organization: ${npiData.organizationName}
+- City: ${npiData.city}
+- State: ${npiData.state}
+- Postal Code: ${npiData.postalCode}
 
-For identity verification workflow, use stepId="identity_verification" and pass the practitioner data.
-For NPI verification workflow, use stepId="npi_verification" and pass the practitioner data including NPI number for API verification, and also pass the full provider context for AI analysis.
+Also pass the full provider context for AI analysis.`;
+        }
+        
+        if (caLicenseData) {
+          task += `\n\nFor CA LICENSE VERIFICATION (stepId="ca_license_verification"):
+- Name: ${caLicenseData.fullName}
+- First Name: ${caLicenseData.firstName}
+- Last Name: ${caLicenseData.lastName}
+- License Number: ${caLicenseData.licenseNumber}
+- License State: ${caLicenseData.licenseState}
+- License Type: ${caLicenseData.licenseType}
 
-PROVIDER CONTEXT FOR NPI VERIFICATION:
+Also pass the full provider context for AI analysis.`;
+        }
+        
+        task += `\n\nPROVIDER CONTEXT FOR API VERIFICATIONS:
 ${JSON.stringify(context, null, 2)}`;
       } else {
         store.addThought({
@@ -434,6 +502,8 @@ ${JSON.stringify(context, null, 2)}`;
         return `Executing identity verification workflow for ${args.stepId || 'identity_verification'}`;
       case 'npi_verification_workflow':
         return `Executing NPI verification workflow for ${args.stepId || 'npi_verification'}`;
+      case 'ca_license_verification_workflow':
+        return `Executing CA license verification workflow for ${args.stepId || 'ca_license_verification'}`;
       default:
         return `${toolName} with ${JSON.stringify(args)}`;
     }

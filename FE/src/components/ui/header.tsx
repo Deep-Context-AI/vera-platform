@@ -98,12 +98,6 @@ const Header: React.FC<HeaderProps> = ({ className }) => {
           Providers
         </Link>
         <Link
-          href="/committee"
-          className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-        >
-          Committee
-        </Link>
-        <Link
           href="/inbox"
           className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
         >

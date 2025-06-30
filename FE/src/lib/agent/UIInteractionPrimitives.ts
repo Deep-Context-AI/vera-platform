@@ -1274,42 +1274,110 @@ export class UIInteractionPrimitives {
     // Add timing delay for better UX readability
     await this.wait(800);
 
-    // Use direct selector approach since we know the exact format
-    const success = await this.smartClick({
-      selector: `[data-agent-action="start-verification"][data-step-id="${stepId}"]`,
+    // Use the specific data-agent-action selector for the Start Verification button
+    const startButtonSelector = `button[data-step-id="${stepId}"][data-agent-action="start-verification"]`;
+    
+    store.addThought({
+      message: `Looking for Start Verification button with selector: ${startButtonSelector}`,
+      type: 'action',
+    });
+    
+    // Check if the start button exists, with retry mechanism for timing issues
+    let startButton = document.querySelector(startButtonSelector);
+    
+    // If not found immediately, wait a bit and try again (in case of DOM updates)
+    if (!startButton) {
+      store.addThought({
+        message: `Start button not found immediately, waiting and retrying...`,
+        type: 'action',
+      });
+      await this.wait(1000);
+      startButton = document.querySelector(startButtonSelector);
+    }
+    if (!startButton) {
+      // Enhanced debugging - let's see what's actually in the DOM
+      store.addThought({
+        message: `Start button not found. Debugging DOM state...`,
+        type: 'action',
+      });
+      
+      // Check if any elements with the stepId exist at all
+      const stepElements = document.querySelectorAll(`[data-step-id="${stepId}"]`);
+      store.addThought({
+        message: `Found ${stepElements.length} elements with data-step-id="${stepId}"`,
+        type: 'action',
+      });
+      
+      // Check all buttons in the step
+      const allButtons = document.querySelectorAll(`[data-step-id="${stepId}"] button`);
+      const buttonDetails = Array.from(allButtons).map(b => {
+        const text = b.textContent?.trim() || '';
+        const action = b.getAttribute('data-agent-action') || '';
+        const stepId = b.getAttribute('data-step-id') || '';
+        const disabled = (b as HTMLButtonElement).disabled;
+        const visible = (b as HTMLElement).offsetParent !== null;
+        return `"${text}" (action: "${action}", step: "${stepId}", disabled: ${disabled}, visible: ${visible})`;
+      });
+      
+      // Also check for buttons with start-verification action anywhere
+      const startButtons = document.querySelectorAll(`button[data-agent-action="start-verification"]`);
+      const startButtonDetails = Array.from(startButtons).map(b => {
+        const text = b.textContent?.trim() || '';
+        const stepId = b.getAttribute('data-step-id') || '';
+        const disabled = (b as HTMLButtonElement).disabled;
+        const visible = (b as HTMLElement).offsetParent !== null;
+        return `"${text}" (step: "${stepId}", disabled: ${disabled}, visible: ${visible})`;
+      });
+      
+      store.addThought({
+        message: `Buttons in step: ${buttonDetails.length > 0 ? buttonDetails.join(' | ') : 'NONE'}`,
+        type: 'result',
+      });
+      
+      store.addThought({
+        message: `All start-verification buttons: ${startButtonDetails.length > 0 ? startButtonDetails.join(' | ') : 'NONE'}`,
+        type: 'result',
+      });
+      
+      throw new Error(`Could not find Start Verification button with selector: ${startButtonSelector}`);
+    }
+    
+    // Check if button is disabled
+    const isDisabled = (startButton as HTMLButtonElement).disabled;
+    if (isDisabled) {
+      store.addThought({
+        message: `Start Verification button is disabled for ${stepId}`,
+        type: 'result',
+      });
+      throw new Error(`Start Verification button is disabled for ${stepId}`);
+    }
+    
+    // Click the start button
+    store.addThought({
+      message: `Clicking Start Verification button: ${startButton.textContent?.trim()}`,
+      type: 'action',
+    });
+    
+    const success = await this.smoothClick({
+      selector: startButtonSelector,
       description: `Start verification button for ${stepId}`
     });
 
-    if (success) {
-      await this.wait(500);
+    if (!success) {
       store.addThought({
-        message: `Successfully started verification for ${stepId}`,
+        message: `Start Verification button click failed for ${stepId}`,
         type: 'result',
       });
-    } else {
-      // Fallback: try to find by text content
-      store.addThought({
-        message: `Trying alternative approach for ${stepId}...`,
-        type: 'thinking',
-      });
-      
-      const fallbackSuccess = await this.smartClick({
-        text: 'Start Verification',
-        tagName: 'button',
-        description: `Start verification button for ${stepId} (fallback)`
-      });
-      
-      if (fallbackSuccess) {
-        await this.wait(500);
-        store.addThought({
-          message: `Successfully started verification for ${stepId} (fallback method)`,
-          type: 'result',
-        });
-        return true;
-      }
+      throw new Error(`Failed to click Start Verification button for ${stepId}`);
     }
 
-    return success;
+    await this.wait(500);
+    store.addThought({
+      message: `Successfully started verification for ${stepId}`,
+      type: 'result',
+    });
+
+    return true;
   }
 
   /**
@@ -1455,42 +1523,110 @@ export class UIInteractionPrimitives {
     // Add timing delay for better UX readability
     await this.wait(800);
 
-    // Use direct selector approach since we know the exact format
-    const success = await this.smartClick({
-      selector: `[data-agent-action="save-progress"][data-step-id="${stepId}"]`,
+    // Use the specific data-agent-action selector for the Save Progress button
+    const saveButtonSelector = `button[data-step-id="${stepId}"][data-agent-action="save-progress"]`;
+    
+    store.addThought({
+      message: `Looking for Save Progress button with selector: ${saveButtonSelector}`,
+      type: 'action',
+    });
+    
+    // Check if the save button exists, with retry mechanism for timing issues
+    let saveButton = document.querySelector(saveButtonSelector);
+    
+    // If not found immediately, wait a bit and try again (in case of DOM updates)
+    if (!saveButton) {
+      store.addThought({
+        message: `Save button not found immediately, waiting and retrying...`,
+        type: 'action',
+      });
+      await this.wait(1000);
+      saveButton = document.querySelector(saveButtonSelector);
+    }
+    if (!saveButton) {
+      // Enhanced debugging - let's see what's actually in the DOM
+      store.addThought({
+        message: `Save button not found. Debugging DOM state...`,
+        type: 'action',
+      });
+      
+      // Check if any elements with the stepId exist at all
+      const stepElements = document.querySelectorAll(`[data-step-id="${stepId}"]`);
+      store.addThought({
+        message: `Found ${stepElements.length} elements with data-step-id="${stepId}"`,
+        type: 'action',
+      });
+      
+      // Check all buttons in the step
+      const allButtons = document.querySelectorAll(`[data-step-id="${stepId}"] button`);
+      const buttonDetails = Array.from(allButtons).map(b => {
+        const text = b.textContent?.trim() || '';
+        const action = b.getAttribute('data-agent-action') || '';
+        const stepId = b.getAttribute('data-step-id') || '';
+        const disabled = (b as HTMLButtonElement).disabled;
+        const visible = (b as HTMLElement).offsetParent !== null;
+        return `"${text}" (action: "${action}", step: "${stepId}", disabled: ${disabled}, visible: ${visible})`;
+      });
+      
+      // Also check for buttons with save-progress action anywhere
+      const saveButtons = document.querySelectorAll(`button[data-agent-action="save-progress"]`);
+      const saveButtonDetails = Array.from(saveButtons).map(b => {
+        const text = b.textContent?.trim() || '';
+        const stepId = b.getAttribute('data-step-id') || '';
+        const disabled = (b as HTMLButtonElement).disabled;
+        const visible = (b as HTMLElement).offsetParent !== null;
+        return `"${text}" (step: "${stepId}", disabled: ${disabled}, visible: ${visible})`;
+      });
+      
+      store.addThought({
+        message: `Buttons in step: ${buttonDetails.length > 0 ? buttonDetails.join(' | ') : 'NONE'}`,
+        type: 'result',
+      });
+      
+      store.addThought({
+        message: `All save-progress buttons: ${saveButtonDetails.length > 0 ? saveButtonDetails.join(' | ') : 'NONE'}`,
+        type: 'result',
+      });
+      
+      throw new Error(`Could not find Save Progress button with selector: ${saveButtonSelector}`);
+    }
+    
+    // Check if button is disabled
+    const isDisabled = (saveButton as HTMLButtonElement).disabled;
+    if (isDisabled) {
+      store.addThought({
+        message: `Save Progress button is disabled for ${stepId}`,
+        type: 'result',
+      });
+      throw new Error(`Save Progress button is disabled for ${stepId}`);
+    }
+    
+    // Click the save button
+    store.addThought({
+      message: `Clicking Save Progress button: ${saveButton.textContent?.trim()}`,
+      type: 'action',
+    });
+    
+    const success = await this.smoothClick({
+      selector: saveButtonSelector,
       description: `Save progress button for ${stepId}`
     });
 
-    if (success) {
-      await this.wait(500);
+    if (!success) {
       store.addThought({
-        message: `Successfully saved progress for ${stepId}`,
+        message: `Save Progress button click failed for ${stepId}`,
         type: 'result',
       });
-    } else {
-      // Fallback: try to find by text content
-      store.addThought({
-        message: `Trying alternative approach for ${stepId}...`,
-        type: 'thinking',
-      });
-      
-      const fallbackSuccess = await this.smartClick({
-        text: 'Save Progress',
-        tagName: 'button',
-        description: `Save progress button for ${stepId} (fallback)`
-      });
-      
-      if (fallbackSuccess) {
-        await this.wait(500);
-        store.addThought({
-          message: `Successfully saved progress for ${stepId} (fallback method)`,
-          type: 'result',
-        });
-        return true;
-      }
+      throw new Error(`Failed to click Save Progress button for ${stepId}`);
     }
 
-    return success;
+    await this.wait(500);
+    store.addThought({
+      message: `Successfully saved progress for ${stepId}`,
+      type: 'result',
+    });
+
+    return true;
   }
 
   /**
@@ -1765,6 +1901,314 @@ export class UIInteractionPrimitives {
       hasStatusField: !!statusSelect,
       hasReasoningField: !!reasoningField
     };
+  }
+
+  /**
+   * Add a license to the LicenseForm component
+   * This handles the complete flow: click Add License button -> fill form -> submit
+   */
+  async addLicenseToForm(options: {
+    stepId: string;
+    licenseData: {
+      number: string;
+      state: string;
+      issued: string; // YYYY-MM-DD format
+      expiration: string; // YYYY-MM-DD format
+      status?: string; // License status (optional)
+    };
+    description?: string;
+  }): Promise<boolean> {
+    const { stepId, licenseData } = options;
+    const store = useAgentStore.getState();
+    
+    try {
+      // Step 1: Click the "Add License" button to show the form
+      store.addThought({
+        message: `Opening license form for ${stepId}...`,
+        type: 'action',
+      });
+      
+      // Look for the Add License button
+      const addButtonSelectors = [
+        `button[data-step-id="${stepId}"][data-agent-action="open-add-license-form"]`,
+        `[data-step-id="${stepId}"] button[class*="text-blue-600"]`,
+        `[data-step-id="${stepId}"] button`
+      ];
+      
+      let addButtonSuccess = false;
+      for (const selector of addButtonSelectors) {
+        try {
+          const addSuccess = await this.smartClick({
+            selector: selector,
+            description: 'Add License button'
+          });
+          if (addSuccess) {
+            addButtonSuccess = true;
+            break;
+          }
+        } catch {
+          // Try next selector
+          continue;
+        }
+      }
+      
+      if (!addButtonSuccess) {
+        // Fallback: try to find button by text content
+        const buttons = document.querySelectorAll(`[data-step-id="${stepId}"] button`);
+        for (const button of buttons) {
+          if (button.textContent?.includes('Add License')) {
+            const buttonSelector = this.generateSelectorForElement(button);
+            const success = await this.smoothClick({
+              selector: buttonSelector,
+              description: 'Add License button (fallback)'
+            });
+            if (success) {
+              addButtonSuccess = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!addButtonSuccess) {
+        store.addThought({
+          message: `Could not find Add License button for ${stepId}`,
+          type: 'result',
+        });
+        throw new Error(`Could not find Add License button for ${stepId}`);
+      }
+      
+      // Wait for form to appear
+      await this.wait(1000);
+      
+      // Step 2: Fill out the license form fields
+      store.addThought({
+        message: `Filling license form fields...`,
+        type: 'action',
+      });
+      
+      // Fill License Number
+      const licenseNumberSuccess = await this.fillInput({
+        inputSelector: `[data-step-id="${stepId}"] input[data-agent-field="license-number"]`,
+        text: licenseData.number,
+        description: 'license number field',
+        clearFirst: true
+      });
+      
+      if (!licenseNumberSuccess) {
+        throw new Error(`Could not fill license number field for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Fill State (dropdown) - always set state, even if CA
+      store.addThought({
+        message: `Setting state to ${licenseData.state}...`,
+        type: 'action',
+      });
+      
+      const stateSuccess = await this.selectOption({
+        selectTriggerSelector: `[data-step-id="${stepId}"] [data-agent-trigger="license-state"]`,
+        optionSelector: `[data-agent-option="${licenseData.state}"]`,
+        description: `state selection to ${licenseData.state}`,
+        moveDuration: 800,
+        clickDelay: 200,
+        optionWaitDelay: 1000
+      });
+      
+      if (!stateSuccess) {
+        store.addThought({
+          message: `Could not set state to ${licenseData.state}`,
+          type: 'result',
+        });
+        throw new Error(`Could not set state to ${licenseData.state} for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Fill Issue Date
+      const issueDateSuccess = await this.fillInput({
+        inputSelector: `[data-step-id="${stepId}"] input[data-agent-field="license-issue-date"]`,
+        text: licenseData.issued,
+        description: 'issue date field',
+        clearFirst: true
+      });
+      
+      if (!issueDateSuccess) {
+        store.addThought({
+          message: `Could not fill issue date`,
+          type: 'result',
+        });
+        throw new Error(`Could not fill issue date field for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Fill Expiration Date
+      const expirationDateSuccess = await this.fillInput({
+        inputSelector: `[data-step-id="${stepId}"] input[data-agent-field="license-expiration-date"]`,
+        text: licenseData.expiration,
+        description: 'expiration date field',
+        clearFirst: true
+      });
+      
+      if (!expirationDateSuccess) {
+        store.addThought({
+          message: `Could not fill expiration date`,
+          type: 'result',
+        });
+        throw new Error(`Could not fill expiration date field for ${stepId}`);
+      }
+      
+      await this.wait(500);
+      
+      // Fill Status if available
+      if (licenseData.status) {
+        const statusSuccess = await this.fillInput({
+          inputSelector: `[data-step-id="${stepId}"] input[data-agent-field="license-status"]`,
+          text: licenseData.status,
+          description: 'license status field',
+          clearFirst: true
+        });
+        
+        if (!statusSuccess) {
+          store.addThought({
+            message: `Could not fill license status`,
+            type: 'result',
+          });
+          throw new Error(`Could not fill license status field for ${stepId}`);
+        }
+        
+        await this.wait(500);
+      }
+      
+      // Step 3: Click the "Add License" button to submit
+      store.addThought({
+        message: `Submitting license form...`,
+        type: 'action',
+      });
+      
+      // Wait a bit more to ensure the form is fully rendered and ready
+      store.addThought({
+        message: `Waiting for form to be fully ready...`,
+        type: 'action',
+      });
+      await this.wait(1000);
+      
+      // Look for the submit button with the specific data-agent-action attribute
+      const submitButtonSelector = `[data-step-id="${stepId}"] button[data-agent-action="submit-add-license"]`;
+      
+      store.addThought({
+        message: `Looking for submit button with selector: ${submitButtonSelector}`,
+        type: 'action',
+      });
+      
+      // Check if the submit button exists
+      const submitButton = document.querySelector(submitButtonSelector);
+      if (!submitButton) {
+        // Log all buttons for debugging
+        const allButtons = document.querySelectorAll(`[data-step-id="${stepId}"] button`);
+        const buttonDetails = Array.from(allButtons).map(b => {
+          const text = b.textContent?.trim() || '';
+          const action = b.getAttribute('data-agent-action') || '';
+          const disabled = (b as HTMLButtonElement).disabled;
+          return `"${text}" (action: "${action}", disabled: ${disabled})`;
+        });
+        
+        store.addThought({
+          message: `Submit button not found! Available buttons: ${buttonDetails.join(' | ')}`,
+          type: 'result',
+        });
+        
+        throw new Error(`Could not find submit button with selector: ${submitButtonSelector}`);
+      }
+      
+      // Check if button is disabled
+      const isDisabled = (submitButton as HTMLButtonElement).disabled;
+      if (isDisabled) {
+        store.addThought({
+          message: `Submit button is disabled - checking form validation...`,
+          type: 'result',
+        });
+        
+        // Wait a bit more and try again
+        await this.wait(1000);
+        const recheckButton = document.querySelector(submitButtonSelector) as HTMLButtonElement;
+        if (recheckButton?.disabled) {
+          throw new Error(`Submit button is still disabled after waiting`);
+        }
+      }
+      
+             // Click the submit button
+       store.addThought({
+         message: `Clicking submit button: ${submitButton.textContent?.trim()}`,
+         type: 'action',
+       });
+       
+       const submitSuccess = await this.smoothClick({
+         selector: submitButtonSelector,
+         description: 'Add License submit button'
+       });
+       
+       if (!submitSuccess) {
+         store.addThought({
+           message: `Submit button click failed for ${stepId}`,
+           type: 'result',
+         });
+         throw new Error(`Failed to click submit button for ${stepId}`);
+       }
+       
+       store.addThought({
+         message: `Successfully clicked submit button for ${stepId}`,
+         type: 'result',
+       });
+      
+      // Wait for form submission to complete and verify the form is closed
+      store.addThought({
+        message: `Waiting for license form submission to complete...`,
+        type: 'action',
+      });
+      await this.wait(2000);
+      
+      // Verify that the license was actually added by checking if the form closed
+      const formStillOpen = document.querySelector(`[data-step-id="${stepId}"] input[data-agent-field="license-number"]`);
+      if (formStillOpen) {
+        store.addThought({
+          message: `License form still appears to be open after submission for ${stepId}`,
+          type: 'result',
+        });
+        // Try to close the form by clicking Cancel if available
+        const cancelButton = document.querySelector(`[data-step-id="${stepId}"] button:contains("Cancel")`);
+        if (cancelButton) {
+          (cancelButton as HTMLElement).click();
+          await this.wait(500);
+        }
+        throw new Error(`License form submission failed - form still open for ${stepId}`);
+      } else {
+        store.addThought({
+          message: `License form closed successfully - license appears to have been added`,
+          type: 'result',
+        });
+      }
+      
+      store.addThought({
+        message: `Successfully added license ${licenseData.number} to ${stepId}`,
+        type: 'result',
+      });
+      
+      return true;
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Add License Error:', error);
+      
+      store.addThought({
+        message: `Failed to add license: ${errorMessage}`,
+        type: 'result',
+      });
+      
+      return false;
+    }
   }
 
   /**

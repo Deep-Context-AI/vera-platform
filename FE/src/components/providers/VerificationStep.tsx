@@ -164,10 +164,7 @@ export const VerificationStep: React.FC<VerificationStepProps> = ({
                   <h4 className="font-medium text-gray-900 dark:text-gray-100">
                     {step.name}
                   </h4>
-                  <Badge className={`${statusInfo.color} text-xs`}>
-                    <StatusIcon className="w-3 h-3 mr-1" />
-                    {statusInfo.text}
-                  </Badge>
+
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   {step.description}
@@ -176,9 +173,9 @@ export const VerificationStep: React.FC<VerificationStepProps> = ({
             </div>
           </div>
           <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-            <span>Est. {step.estimatedDuration}</span>
-            <Badge variant={step.priority === 'high' ? 'destructive' : step.priority === 'medium' ? 'secondary' : 'outline'}>
-              {step.priority}
+            <Badge className={`${statusInfo.color} text-xs`}>
+              <StatusIcon className="w-3 h-3 mr-1" />
+              {statusInfo.text}
             </Badge>
           </div>
         </div>
@@ -475,7 +472,7 @@ const ActiveState: React.FC<{
 
         {/* Right side - Special forms */}
         {children && (
-          <div className="flex-1 lg:max-w-md">
+          <div className="flex-1 lg:max-w-md" data-step-id={step.id}>
             {children}
           </div>
         )}
