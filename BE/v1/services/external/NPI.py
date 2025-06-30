@@ -89,21 +89,6 @@ class NPIService:
             primary_taxonomy=npi_data.get('taxonomy_code'),
             specialty=npi_data.get('description'),
             is_active=npi_data.get('status') == 'Active',
-            # Database doesn't have all the detailed fields from external API
-            practice_address=None,
-            mailing_address=None,
-            phone=None,
-            fax=None,
-            license_state=None,
-            license_number=None,
-            secondary_taxonomies=None,
-            enumeration_date=None,
-            last_update_date=None,
-            sole_proprietor=None,
-            authorized_official=None,
-            gender=None,
-            credential=None,
-            address=None
         )
     
     async def comprehensive_npi_lookup(self, request: NPIRequest) -> NPIResponse:
