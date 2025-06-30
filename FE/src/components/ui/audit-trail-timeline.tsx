@@ -255,7 +255,7 @@ export const AuditTrailTimeline: React.FC<AuditTrailTimelineProps> = ({
                       <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Risk Flags:</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {step.data.risk_flags.map((flag, i) => (
+                      {step.data.risk_flags.map((flag: string, i: number) => (
                         <Badge key={i} className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
                           {flag}
                         </Badge>

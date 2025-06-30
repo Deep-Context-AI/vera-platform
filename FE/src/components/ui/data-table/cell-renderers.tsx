@@ -7,7 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
-import { CellRenderContext, CellRenderers } from "./types";
+import { CellRenderContext, CellRenderers, CellRenderer } from "./types";
 
 // Text renderer - basic text display
 const textRenderer = ({ value }: CellRenderContext) => {
@@ -154,7 +154,7 @@ export const cellRenderers: CellRenderers = {
 };
 
 // Helper function to get renderer
-export const getCellRenderer = (rendererType: keyof CellRenderers | Function): any => {
+export const getCellRenderer = (rendererType: keyof CellRenderers | CellRenderer): any => {
   if (typeof rendererType === 'function') {
     return rendererType;
   }

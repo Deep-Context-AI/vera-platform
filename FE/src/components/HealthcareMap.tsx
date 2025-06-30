@@ -79,7 +79,7 @@ const HealthcareMap = () => {
     const dots = generateDots(dimensions.width, dimensions.height);
     
     // Generate connections once
-    const connections = [];
+    const connections: Array<{ from: typeof dots[0], to: typeof dots[0] }> = [];
     for (let i = 0; i < dots.length; i++) {
       const dot1 = dots[i];
       for (let j = i + 1; j < dots.length; j++) {
@@ -94,7 +94,7 @@ const HealthcareMap = () => {
     }
     
     let animationFrameId: number;
-    let startTime = Date.now();
+    const startTime = Date.now();
 
     function drawDots() {
       if (!ctx) return;

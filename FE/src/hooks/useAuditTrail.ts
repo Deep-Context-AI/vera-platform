@@ -24,22 +24,16 @@ interface AuditTrailHookReturn {
 
   // Actions
   startStep: (stepName: string, options?: {
-    reasoning?: string;
-    requestData?: object;
-    processedBy?: string;
-    priority?: 'low' | 'medium' | 'high' | 'critical';
-    stepType?: string;
+    notes?: string;
+    data?: any;
+    changedBy?: string;
   }) => Promise<void>;
 
   completeStep: (stepName: string, options: {
-    status: 'completed' | 'failed' | 'cancelled' | 'requires_review';
-    reasoning?: string;
-    responseData?: object;
-    verificationResult?: 'verified' | 'not_verified' | 'partial' | 'error';
-    confidenceScore?: number;
-    processingDurationMs?: number;
-    riskFlags?: string[];
-    complianceChecks?: string[];
+    status?: 'completed' | 'failed' | 'cancelled' | 'requires_review';
+    notes?: string;
+    data?: any;
+    changedBy?: string;
   }) => Promise<void>;
 
   refreshSteps: () => Promise<void>;
@@ -70,10 +64,10 @@ export function useAuditTrail({
       
       const auditSteps = await auditTrailService.getApplicationAuditTrail(applicationId);
       
-      // Convert array to record keyed by step_name
+      // Convert array to record keyed by step_key
       const stepsRecord: Record<string, AuditTrailStep> = {};
       auditSteps.forEach(step => {
-        stepsRecord[step.step_name] = step;
+        stepsRecord[step.step_key] = step;
       });
       
       setSteps(stepsRecord);
@@ -89,7 +83,20 @@ export function useAuditTrail({
   // Refresh summary from backend
   const refreshSummary = useCallback(async () => {
     try {
-      const summaryData = await auditTrailService.getAuditTrailSummary(applicationId);
+      const stepStatuses = await auditTrailService.getCurrentStepStatuses(applicationId);
+      const auditSteps = await auditTrailService.getApplicationAuditTrail(applicationId);
+      
+      // Create summary from available data
+      const summaryData: AuditTrailSummary = {
+        application_id: applicationId,
+        total_entries: auditSteps.length,
+        unique_steps: Object.keys(stepStatuses).length,
+        latest_activity: auditSteps.length > 0 ? auditSteps[auditSteps.length - 1].timestamp : new Date().toISOString(),
+        current_step_statuses: stepStatuses,
+        overall_status: Object.values(stepStatuses).some(status => status === 'failed') ? 'failed' : 
+                       Object.values(stepStatuses).every(status => status === 'completed') ? 'completed' : 'in_progress'
+      };
+      
       setSummary(summaryData);
     } catch (err) {
       console.error('Error fetching audit trail summary:', err);
@@ -101,11 +108,9 @@ export function useAuditTrail({
   const startStep = useCallback(async (
     stepName: string,
     options: {
-      reasoning?: string;
-      requestData?: object;
-      processedBy?: string;
-      priority?: 'low' | 'medium' | 'high' | 'critical';
-      stepType?: string;
+      notes?: string;
+      data?: any;
+      changedBy?: string;
     } = {}
   ) => {
     try {
@@ -135,14 +140,10 @@ export function useAuditTrail({
   const completeStep = useCallback(async (
     stepName: string,
     options: {
-      status: 'completed' | 'failed' | 'cancelled' | 'requires_review';
-      reasoning?: string;
-      responseData?: object;
-      verificationResult?: 'verified' | 'not_verified' | 'partial' | 'error';
-      confidenceScore?: number;
-      processingDurationMs?: number;
-      riskFlags?: string[];
-      complianceChecks?: string[];
+      status?: 'completed' | 'failed' | 'cancelled' | 'requires_review';
+      notes?: string;
+      data?: any;
+      changedBy?: string;
     }
   ) => {
     try {

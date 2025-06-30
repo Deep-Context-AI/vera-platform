@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAgentRunner } from '@/hooks/useAgentRunner';
 import { useAuditTrailDebug } from '@/hooks/useAuditTrail';
 import { useAuth } from '@/hooks/useAuth';
@@ -120,9 +120,9 @@ export function VerificationTabContent({
 
   // Helper function to get the current user identifier
   // Use "Vera" when agent is active, otherwise use the authenticated user
-  const getCurrentUser = () => {
+  const getCurrentUser = useCallback(() => {
     return agentRunner.isRunning ? 'Vera' : (user?.email || 'Unknown');
-  };
+  }, [agentRunner.isRunning, user?.email]);
 
   // Initialize verification state for all workflow steps
   useEffect(() => {
@@ -147,7 +147,7 @@ export function VerificationTabContent({
     });
     
     setVerificationState(initialState);
-  }, [workflow, auditSteps, user, agentRunner.isRunning]);
+  }, [workflow, auditSteps, user, agentRunner.isRunning, getCurrentUser]);
 
   // Utility function to map audit status to verification status
   const mapAuditStatusToVerification = (auditStatus: string): VerificationStepState['status'] => {

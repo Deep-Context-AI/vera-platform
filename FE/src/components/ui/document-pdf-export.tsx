@@ -4,20 +4,20 @@ import * as React from "react"
 import jsPDF from 'jspdf'
 import { Button } from "@/components/ui/button"
 import { Download, FileText, Loader2 } from "lucide-react"
-import { DocumentTemplate } from "./document-preview"
+
 import type { DocumentData } from "./document-preview"
 
 interface DocumentPDFExportProps {
   document: DocumentData
   variant?: "button" | "icon"
-  size?: "sm" | "md" | "lg"
+  size?: "default" | "sm" | "lg"
   className?: string
 }
 
 export function DocumentPDFExport({ 
   document, 
   variant = "button", 
-  size = "md",
+  size = "default",
   className 
 }: DocumentPDFExportProps) {
   const [isGenerating, setIsGenerating] = React.useState(false)
@@ -43,8 +43,7 @@ export function DocumentPDFExport({
         subject: `${document.type.toUpperCase()} Verification Document`,
         author: 'Vera Platform',
         keywords: `verification, ${document.type}, healthcare, ${document.fileName}`,
-        creator: 'Vera Document Management System',
-        producer: 'Vera Platform PDF Generator'
+        creator: 'Vera Document Management System'
       })
 
       // Configure HTML to PDF conversion
@@ -64,11 +63,6 @@ export function DocumentPDFExport({
           allowTaint: true,
           backgroundColor: '#ffffff',
           removeContainer: true
-        },
-        jsPDF: {
-          unit: 'px',
-          format: 'a4',
-          orientation: 'portrait'
         }
       })
 
@@ -100,7 +94,7 @@ export function DocumentPDFExport({
 
   const buttonSize = {
     sm: "h-8 px-3 text-xs",
-    md: "h-9 px-4 text-sm", 
+    default: "h-9 px-4 text-sm", 
     lg: "h-10 px-6 text-base"
   }
 

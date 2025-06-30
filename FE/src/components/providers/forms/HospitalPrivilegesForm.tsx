@@ -42,14 +42,14 @@ export const HospitalPrivilegesForm: React.FC<HospitalPrivilegesFormProps> = ({
   onUpdatePrivilege,
   isEditable = true
 }) => {
-  const [newPrivilege, setNewPrivilege] = useState({
+  const [newPrivilege, setNewPrivilege] = useState<Omit<HospitalPrivilege, 'id'>>({
     hospitalName: '',
     address: '',
     phone: '',
     department: '',
     issued: '',
     expiration: '',
-    status: 'Active' as const
+    status: 'Active'
   });
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPrivilege, setEditingPrivilege] = useState<string | null>(null);
