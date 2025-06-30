@@ -348,6 +348,7 @@ class DCAResponse(BaseResponse):
     primary_status_code: str = Field(..., description="Primary status code")
     primary_status_description: Optional[str] = Field(None, description="Primary status description")
     secondary_status_code: List[str] = Field(default_factory=list, description="Secondary status codes")
+    issue_date: str = Field(..., description="License issue date (YYYY-MM-DD)")
     expiration_date: str = Field(..., description="License expiration date (YYYY-MM-DD)")
     has_discipline: bool = Field(..., description="Whether the license has disciplinary actions")
     has_public_record_actions: bool = Field(..., description="Whether there are public record actions")

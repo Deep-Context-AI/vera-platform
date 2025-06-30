@@ -159,7 +159,8 @@ class DCAService:
         status_info = self.dca_reference.get_status_info(board_code, primary_status_code)
         primary_status_description = status_info.translated_description if status_info else f"Status {primary_status_code}"
         
-        # Format expiration date
+        # Format issue and expiration dates
+        issue_date = license_data.issue_date.isoformat() if license_data.issue_date else "2010-01-01"
         expiration_date = license_data.expiration_date.isoformat() if license_data.expiration_date else "2025-12-31"
         
         # Convert license_number to int (DCAResponse expects int)
@@ -183,6 +184,7 @@ class DCAService:
             primary_status_code=primary_status_code,
             primary_status_description=primary_status_description,
             secondary_status_code=secondary_status_code,
+            issue_date=issue_date,
             expiration_date=expiration_date,
             has_discipline=has_discipline,
             has_public_record_actions=license_data.has_public_record_actions or False
