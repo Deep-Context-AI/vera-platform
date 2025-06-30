@@ -63,14 +63,14 @@ const SIDEBAR_CONFIGS = {
   ],
   providers: [
     { label: 'Applications', href: '/providers', icon: ICONS.users },
-    { label: 'Committee', href: '/providers/committee', icon: ICONS.gavel },
+    { label: 'Committee', href: '/committee', icon: ICONS.gavel },
   ],
   committee: [
-    { label: 'All Cases', href: '/providers/committee', icon: ICONS.gavel },
-    { label: 'Ready for Review', href: '/providers/committee/ready', icon: ICONS.calendar },
-    { label: 'Under Review', href: '/providers/committee/review', icon: ICONS.fileCheck },
-    { label: 'Approved Cases', href: '/providers/committee/approved', icon: ICONS.shield },
-    { label: 'Committee Schedule', href: '/providers/committee/schedule', icon: ICONS.calendar },
+    { label: 'All Cases', href: '/committee', icon: ICONS.gavel },
+    { label: 'Ready for Review', href: '/committee/ready', icon: ICONS.calendar },
+    { label: 'Under Review', href: '/committee/review', icon: ICONS.fileCheck },
+    { label: 'Approved Cases', href: '/committee/approved', icon: ICONS.shield },
+    { label: 'Committee Schedule', href: '/committee/schedule', icon: ICONS.calendar },
   ],
   inbox: [
     { label: 'All Messages', href: '/inbox', icon: ICONS.mail },
@@ -113,9 +113,7 @@ const SIDEBAR_CONFIGS = {
 const getSidebarConfig = (pathname: string): readonly SidebarItem[] => {
   if (pathname === '/' || pathname.startsWith('/dashboard')) {
     return SIDEBAR_CONFIGS.dashboard;
-  } else if (pathname.startsWith('/providers/committee')) {
-    return SIDEBAR_CONFIGS.committee;
-  } else if (pathname.startsWith('/providers')) {
+  } else if (pathname.startsWith('/committee') || pathname.startsWith('/providers')) {
     return SIDEBAR_CONFIGS.providers;
   } else if (pathname.startsWith('/inbox')) {
     return SIDEBAR_CONFIGS.inbox;
@@ -181,7 +179,7 @@ const DynamicSidebarContent: React.FC = React.memo(() => {
       setIsLoading(false);
       // Add a small delay before showing content for smooth transition
       setTimeout(() => setIsVisible(true), 50);
-    }, 800); // Simulate loading delay
+    }, 50); // Further reduced to 50ms for near-instant loading
     
     return () => clearTimeout(timer);
   }, []);

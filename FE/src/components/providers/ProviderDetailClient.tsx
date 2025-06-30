@@ -518,23 +518,12 @@ export function VerificationTabContent({
                 }}
                 className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
               >
-                <span className="mr-2">🤖</span>
-                AI Assistant Demo - Complete All Steps
+                Complete All Steps
               </button>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Watch the AI assistant automatically work through verification steps
+                Watch Vera automatically work through verification steps
               </p>
             </div>
-            
-            {auditDebug.isDev && (
-              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 space-y-1">
-                <p>API: {auditDebug.currentEndpoint}</p>
-                <p>Practitioner ID: {practitionerId || 'N/A'}</p>
-                <p>Application ID: {applicationId} {propApplicationId ? '(from app)' : '(fallback)'}</p>
-                <p>User: {user?.email || 'Not authenticated'}</p>
-                <p>Workflow: {workflowTemplate} ({workflow.length} steps)</p>
-              </div>
-            )}
           </div>
           {auditLoading ? (
             <div className="flex items-center space-x-4">

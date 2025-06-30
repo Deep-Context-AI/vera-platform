@@ -3,7 +3,7 @@
 
 // Environment-based API endpoints configuration
 const API_ENDPOINTS = {
-  DEV: 'https://mikhailocampo--vera-platform-fastapi-app-dev.modal.run',
+  DEV: 'https://mikhailocampo--vera-platform-fastapi-app.modal.run',
   PROD: 'https://mikhailocampo--vera-platform-fastapi-app.modal.run',
   get CURRENT() {
     // Check if we're in development environment

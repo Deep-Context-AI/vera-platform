@@ -3,6 +3,7 @@ import { Sidebar, SidebarBody } from "@/components/ui/sidebar";
 import DynamicSidebarContent from "@/components/ui/dynamic-sidebar-content";
 import SidebarHeader from "@/components/ui/sidebar-header";
 import FadeInWrapper from "@/components/ui/fade-in-wrapper";
+import { BoltNewBadge } from "@/components/ui/BoltNewBadge";
 import { getSidebarState } from "@/lib/sidebar-server";
 
 export default async function PlatformLayout({
@@ -50,6 +51,9 @@ export default async function PlatformLayout({
           </main>
         </FadeInWrapper>
       </div>
+      
+      {/* Bolt Badge */}
+      <BoltNewBadge position="bottom-right" variant="auto" size="medium" />
     </div>
   );
 }

@@ -33,10 +33,8 @@ const ICONS = {
 const getPageInfo = (pathname: string) => {
   if (pathname === '/' || pathname.startsWith('/dashboard')) {
     return { icon: ICONS.home, name: 'Dashboard' };
-  } else if (pathname.startsWith('/providers')) {
+  } else if (pathname.startsWith('/committee') || pathname.startsWith('/providers')) {
     return { icon: ICONS.users, name: 'Providers' };
-  } else if (pathname.startsWith('/committee')) {
-    return { icon: ICONS.gavel, name: 'Committee' };
   } else if (pathname.startsWith('/inbox')) {
     return { icon: ICONS.mail, name: 'Inbox' };
   } else if (pathname.startsWith('/verification')) {

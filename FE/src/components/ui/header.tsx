@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, User, Sun, Moon, Monitor } from 'lucide-react';
+import { ChevronDown, User, Sun, Moon, Monitor, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
+import { useAuth } from '@/hooks/useAuth';
 
 interface HeaderProps {
   className?: string;
@@ -17,6 +19,8 @@ const Header: React.FC<HeaderProps> = ({ className }) => {
   const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
+  const { signOut } = useAuth();
+  const router = useRouter();
 
   const organizations = [
     "Vera Platform",
@@ -49,6 +53,16 @@ const Header: React.FC<HeaderProps> = ({ className }) => {
     { value: 'dark', label: 'Dark', icon: Moon },
     { value: 'system', label: 'System', icon: Monitor },
   ];
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // Manually redirect to sign-in page after successful sign out
+      router.push('/auth/v1/sign-in');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   return (
     <header className={cn(
@@ -98,25 +112,13 @@ const Header: React.FC<HeaderProps> = ({ className }) => {
           Providers
         </Link>
         <Link
-          href="/inbox"
-          className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-        >
-          Inbox
-        </Link>
-        <Link
-          href="/workflows"
-          className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-        >
-          Workflows
-        </Link>
-        <Link
           href="/settings"
           className="text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
         >
           Settings
         </Link>
         
-        {/* User Avatar with Theme Toggle Popover */}
+        {/* User Avatar with Theme Toggle and Logout Popover */}
         <Popover>
           <PopoverTrigger asChild>
             <button className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-100 dark:focus:ring-offset-neutral-800">
@@ -146,6 +148,18 @@ const Header: React.FC<HeaderProps> = ({ className }) => {
                   </button>
                 );
               })}
+              
+              {/* Separator */}
+              <div className="border-t border-neutral-200 dark:border-neutral-700 my-2" />
+              
+              {/* Log Out Button */}
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/20"
+              >
+                <LogOut className="h-4 w-4" />
+                Log Out
+              </button>
             </div>
           </PopoverContent>
         </Popover>

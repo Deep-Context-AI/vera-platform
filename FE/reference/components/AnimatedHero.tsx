@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Calendar, Shield } from "lucide-react";
-import { Button } from "./ui/Button";
+import { Button } from "@/app/marketing/components/ui/Button";
 import { SpiralAnimation } from "./ui/SpiralAnimation";
 
 function AnimatedHero() {

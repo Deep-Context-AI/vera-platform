@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 
@@ -166,9 +168,11 @@ export const BoltNewBadge: React.FC<BoltNewBadgeProps> = ({
             `}
             loading="lazy"
             decoding="async"
+            width={100}
+            height={100}
           />
         </div>
       </div>
     </a>
   );
-};
+}; 
