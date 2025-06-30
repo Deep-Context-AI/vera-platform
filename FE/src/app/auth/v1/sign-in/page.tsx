@@ -48,11 +48,13 @@ const VeraLoginCard = () => {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className="w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-2xl flex bg-white shadow-2xl"
+      className="w-full max-w-6xl h-[90vh] overflow-hidden rounded-2xl flex bg-white shadow-2xl"
     >
       {/* Left side - Healthcare Network Visualization */}
       <div className="hidden md:block w-1/2 h-full relative overflow-hidden border-r border-gray-100 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        <HealthcareMap />
+        <div className="absolute inset-0 w-full h-full">
+          <HealthcareMap />
+        </div>
           
         {/* Logo and branding overlay */}
         <div className="absolute inset-0 flex flex-col items-center justify-center p-8 z-10 pointer-events-none">
