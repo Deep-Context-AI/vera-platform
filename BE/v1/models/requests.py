@@ -79,7 +79,7 @@ class NPDBAddress(BaseModel):
     line1: str = Field(..., description="Address line 1", max_length=100)
     line2: Optional[str] = Field("", description="Address line 2", max_length=100)
     city: str = Field(..., description="City", max_length=50)
-    state: str = Field(..., description="State abbreviation", min_length=2, max_length=2)
+    state: str = Field(..., description="State", max_length=50)
     zip: str = Field(..., description="ZIP code", max_length=10)
     
     @field_validator('state')
