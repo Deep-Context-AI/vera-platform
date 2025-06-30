@@ -59,11 +59,18 @@ export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProp
       agentRunner.runLicenseFormDemo();
     };
 
+    const handleOpenAICompleteWorkflowDemo = () => {
+      // Get practitioner context from global window object if available
+      const practitionerContext = typeof window !== 'undefined' ? (window as any).__practitionerContext : undefined;
+      agentRunner.runCompleteVerificationWorkflow(practitionerContext);
+    };
+
     // Add event listeners
     window.addEventListener('agent-demo', handleAgentDemo as EventListener);
     window.addEventListener('agent-stop', handleAgentStop);
     window.addEventListener('openai-accordion-demo', handleOpenAIAccordionDemo);
     window.addEventListener('openai-license-demo', handleOpenAILicenseDemo);
+    window.addEventListener('openai-complete-workflow-demo', handleOpenAICompleteWorkflowDemo);
 
     // Cleanup
     return () => {
@@ -71,6 +78,7 @@ export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProp
       window.removeEventListener('agent-stop', handleAgentStop);
       window.removeEventListener('openai-accordion-demo', handleOpenAIAccordionDemo);
       window.removeEventListener('openai-license-demo', handleOpenAILicenseDemo);
+      window.removeEventListener('openai-complete-workflow-demo', handleOpenAICompleteWorkflowDemo);
     };
   }, []);
 

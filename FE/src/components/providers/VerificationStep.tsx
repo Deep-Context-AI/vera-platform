@@ -254,6 +254,9 @@ const NotStartedState: React.FC<{
         onClick={onStart}
         disabled={!canStart || isLoading}
         className="bg-blue-600 hover:bg-blue-700"
+        data-agent-action="start-verification"
+        data-step-id={step.id}
+        data-step-name={step.name}
       >
         <Shield className="w-4 h-4 mr-2" />
         {isLoading ? 'Starting...' : 'Start Verification'}
@@ -346,14 +349,18 @@ const ActiveState: React.FC<{
               value={stepState.status} 
               onValueChange={(value) => onUpdateStatus(value as VerificationStepState['status'])}
             >
-              <SelectTrigger className="w-64">
+              <SelectTrigger 
+                className="w-64"
+                data-agent-field="verification-status"
+                data-step-id={step.id}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="requires_review">Requires Review</SelectItem>
+                <SelectItem value="in_progress" data-agent-option="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed" data-agent-option="completed">Completed</SelectItem>
+                <SelectItem value="failed" data-agent-option="failed">Failed</SelectItem>
+                <SelectItem value="requires_review" data-agent-option="requires-review">Requires Review</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -368,6 +375,8 @@ const ActiveState: React.FC<{
               onChange={(e) => onUpdateReasoning(e.target.value)}
               placeholder="Enter your reasoning, findings, or notes for this verification step..."
               className="w-full h-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              data-agent-field="reasoning-notes"
+              data-step-id={step.id}
             />
           </div>
 
@@ -401,12 +410,17 @@ const ActiveState: React.FC<{
             {/* Upload dialog */}
             <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="w-full">
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  data-agent-action="upload-documents"
+                  data-step-id={step.id}
+                >
                   <Upload className="w-4 h-4 mr-2" />
                   Upload Documents
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-md" data-agent-dialog="upload-documents">
                 <DialogHeader>
                   <DialogTitle>Upload Documents</DialogTitle>
                   <DialogDescription>
@@ -415,7 +429,10 @@ const ActiveState: React.FC<{
                 </DialogHeader>
                 
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
+                  <div 
+                    className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center"
+                    data-upload-zone="true"
+                  >
                     <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                       Drop files here or click to browse
@@ -427,10 +444,14 @@ const ActiveState: React.FC<{
                       onChange={(e) => onFileUpload(e.target.files)}
                       className="hidden"
                       id={`file-upload-${step.id}`}
+                      data-agent-input="file-upload"
+                      data-step-id={step.id}
                     />
                     <label
                       htmlFor={`file-upload-${step.id}`}
                       className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+                      data-agent-action="choose-files"
+                      data-step-id={step.id}
                     >
                       Choose files
                     </label>
@@ -441,6 +462,8 @@ const ActiveState: React.FC<{
                   <Button
                     variant="outline"
                     onClick={() => setUploadDialogOpen(false)}
+                    data-agent-action="close-upload-dialog"
+                    data-step-id={step.id}
                   >
                     Done
                   </Button>
@@ -474,6 +497,8 @@ const ActiveState: React.FC<{
           onClick={onSave}
           disabled={isLoading}
           className="bg-blue-600 hover:bg-blue-700"
+          data-agent-action="save-progress"
+          data-step-id={step.id}
         >
           <CheckCircle className="w-4 h-4 mr-2" />
           {isLoading ? 'Saving...' : 'Save Progress'}

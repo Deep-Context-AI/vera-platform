@@ -827,6 +827,344 @@ export class UIInteractionPrimitives {
 
     return false;
   }
+
+  /**
+   * Find element by text content (case-insensitive)
+   */
+  findElementByText(text: string, tagName?: string): Element | null {
+    const elements = document.querySelectorAll(tagName || '*');
+    const searchText = text.toLowerCase();
+    
+    for (const element of elements) {
+      const elementText = element.textContent?.toLowerCase().trim() || '';
+      if (elementText.includes(searchText)) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find elements by data attribute
+   */
+  findElementsByDataAttribute(attributeName: string, value?: string): Element[] {
+    if (value) {
+      return Array.from(document.querySelectorAll(`[data-${attributeName}="${value}"]`));
+    } else {
+      return Array.from(document.querySelectorAll(`[data-${attributeName}]`));
+    }
+  }
+
+  /**
+   * Smart element finder that tries multiple strategies
+   */
+  findElementSmart(options: {
+    selector?: string;
+    text?: string;
+    dataAttribute?: string;
+    dataValue?: string;
+    tagName?: string;
+    description?: string;
+  }): Element | null {
+    const { selector, text, dataAttribute, dataValue, tagName, description } = options;
+
+    // Strategy 1: Try direct selector
+    if (selector) {
+      try {
+        const element = document.querySelector(selector);
+        if (element) return element;
+      } catch (e) {
+        console.warn(`Invalid selector: ${selector}`, e);
+      }
+    }
+
+    // Strategy 2: Try data attribute
+    if (dataAttribute) {
+      const elements = this.findElementsByDataAttribute(dataAttribute, dataValue);
+      if (elements.length > 0) return elements[0];
+    }
+
+    // Strategy 3: Try text content
+    if (text) {
+      const element = this.findElementByText(text, tagName);
+      if (element) return element;
+    }
+
+    // Strategy 4: Try common button patterns if looking for buttons
+    if (text && (!tagName || tagName === 'button')) {
+      const buttonSelectors = [
+        `button:contains("${text}")`, // This won't work, but let's try alternatives
+        `button[aria-label*="${text}" i]`,
+        `button[title*="${text}" i]`,
+        `[role="button"][aria-label*="${text}" i]`,
+        `[role="button"][title*="${text}" i]`
+      ];
+
+      for (const sel of buttonSelectors) {
+        try {
+          const element = document.querySelector(sel);
+          if (element) return element;
+        } catch (e) {
+          // Invalid selector, continue
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Enhanced click with smart element finding
+   */
+  async smartClick(options: {
+    selector?: string;
+    text?: string;
+    dataAttribute?: string;
+    dataValue?: string;
+    tagName?: string;
+    description?: string;
+    moveDuration?: number;
+    clickDelay?: number;
+  }): Promise<boolean> {
+    const {
+      description = 'element',
+      moveDuration = 800,
+      clickDelay = 200
+    } = options;
+
+    const store = useAgentStore.getState();
+    
+    // Find element using smart strategy
+    const targetElement = this.findElementSmart(options);
+    if (!targetElement) {
+      store.addThought({
+        message: `Could not find element: ${description}`,
+        type: 'result',
+      });
+      return false;
+    }
+
+    // Get a proper selector for the found element
+    const elementSelector = this.generateSelectorForElement(targetElement);
+    
+    // Use the existing smoothClick logic
+    return this.smoothClick({
+      selector: elementSelector,
+      description,
+      moveDuration,
+      clickDelay
+    });
+  }
+
+  /**
+   * Generate a CSS selector for a given element
+   */
+  private generateSelectorForElement(element: Element): string {
+    // Try ID first
+    if (element.id) {
+      return `#${element.id}`;
+    }
+
+    // Try data attributes
+    const dataAttrs = Array.from(element.attributes).filter(attr => attr.name.startsWith('data-'));
+    if (dataAttrs.length > 0) {
+      const attr = dataAttrs[0];
+      return `[${attr.name}="${attr.value}"]`;
+    }
+
+    // Try class if unique enough
+    if (element.className && typeof element.className === 'string') {
+      const classes = element.className.split(' ').filter(c => c.length > 0);
+      if (classes.length > 0) {
+        const classSelector = `.${classes.join('.')}`;
+        if (document.querySelectorAll(classSelector).length === 1) {
+          return classSelector;
+        }
+      }
+    }
+
+    // Try tag + position as last resort
+    const tagName = element.tagName.toLowerCase();
+    const siblings = Array.from(element.parentElement?.children || []).filter(el => el.tagName === element.tagName);
+    const index = siblings.indexOf(element);
+    
+    if (siblings.length === 1) {
+      return tagName;
+    } else {
+      return `${tagName}:nth-of-type(${index + 1})`;
+    }
+  }
+
+  /**
+   * Find verification step elements specifically
+   */
+  findVerificationStepElements(): Array<{
+    stepId: string;
+    stepName: string;
+    element: Element;
+    hasStartButton: boolean;
+    isExpanded: boolean;
+  }> {
+    const accordionTriggers = document.querySelectorAll('[data-accordion-trigger]');
+    
+    return Array.from(accordionTriggers).map(trigger => {
+      const stepId = trigger.getAttribute('data-accordion-trigger') || '';
+      const stepName = trigger.getAttribute('data-step-name') || '';
+      const startButton = document.querySelector(`[data-agent-action="start-verification"][data-step-id="${stepId}"]`);
+      
+      // Check if accordion is expanded by looking for content
+      const content = document.querySelector(`[data-accordion-content="${stepId}"]`);
+      const isExpanded = content ? !content.hasAttribute('data-state') || content.getAttribute('data-state') === 'open' : false;
+      
+      return {
+        stepId,
+        stepName,
+        element: trigger,
+        hasStartButton: !!startButton,
+        isExpanded
+      };
+    });
+  }
+
+  /**
+   * Click on verification step to expand it
+   */
+  async expandVerificationStep(stepId: string): Promise<boolean> {
+    const store = useAgentStore.getState();
+    
+    store.addThought({
+      message: `Expanding verification step: ${stepId}`,
+      type: 'action',
+    });
+
+    const success = await this.smartClick({
+      dataAttribute: 'accordion-trigger',
+      dataValue: stepId,
+      description: `${stepId} verification step`
+    });
+
+    if (success) {
+      // Wait for accordion animation
+      await this.wait(500);
+      
+      store.addThought({
+        message: `Successfully expanded ${stepId} verification step`,
+        type: 'result',
+      });
+    }
+
+    return success;
+  }
+
+  /**
+   * Start verification for a specific step
+   */
+  async startVerificationStep(stepId: string): Promise<boolean> {
+    const store = useAgentStore.getState();
+    
+    store.addThought({
+      message: `Starting verification for step: ${stepId}`,
+      type: 'action',
+    });
+
+    const success = await this.smartClick({
+      dataAttribute: 'agent-action',
+      dataValue: 'start-verification',
+      selector: `[data-step-id="${stepId}"]`,
+      description: `Start verification button for ${stepId}`
+    });
+
+    if (success) {
+      store.addThought({
+        message: `Successfully started verification for ${stepId}`,
+        type: 'result',
+      });
+    }
+
+    return success;
+  }
+
+  /**
+   * Fill verification step form fields
+   */
+  async fillVerificationForm(stepId: string, formData: Record<string, string>): Promise<boolean> {
+    const store = useAgentStore.getState();
+    
+    store.addThought({
+      message: `Filling form for verification step: ${stepId}`,
+      type: 'action',
+    });
+
+    let allSuccess = true;
+
+    for (const [fieldName, value] of Object.entries(formData)) {
+      if (!value) continue;
+
+      // Try to find the field
+      const fieldSelector = `[data-agent-field="${fieldName}"][data-step-id="${stepId}"]`;
+      const fieldElement = document.querySelector(fieldSelector);
+      
+      if (!fieldElement) {
+        store.addThought({
+          message: `Could not find field: ${fieldName} for step ${stepId}`,
+          type: 'result',
+        });
+        allSuccess = false;
+        continue;
+      }
+
+      // Fill the field based on its type
+      if (fieldElement.tagName.toLowerCase() === 'textarea' || 
+          (fieldElement.tagName.toLowerCase() === 'input' && 
+           ['text', 'email', 'tel', 'date'].includes((fieldElement as HTMLInputElement).type))) {
+        
+        const success = await this.fillInput({
+          inputSelector: fieldSelector,
+          text: value,
+          description: `${fieldName} field`
+        });
+        
+        if (!success) allSuccess = false;
+      }
+    }
+
+    if (allSuccess) {
+      store.addThought({
+        message: `Successfully filled all form fields for ${stepId}`,
+        type: 'result',
+      });
+    }
+
+    return allSuccess;
+  }
+
+  /**
+   * Save verification step progress
+   */
+  async saveVerificationStep(stepId: string): Promise<boolean> {
+    const store = useAgentStore.getState();
+    
+    store.addThought({
+      message: `Saving progress for verification step: ${stepId}`,
+      type: 'action',
+    });
+
+    const success = await this.smartClick({
+      dataAttribute: 'agent-action',
+      dataValue: 'save-progress',
+      selector: `[data-step-id="${stepId}"]`,
+      description: `Save progress button for ${stepId}`
+    });
+
+    if (success) {
+      store.addThought({
+        message: `Successfully saved progress for ${stepId}`,
+        type: 'result',
+      });
+    }
+
+    return success;
+  }
 }
 
 // Export a singleton instance

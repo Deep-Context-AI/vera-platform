@@ -14,6 +14,7 @@ export interface UseAgentRunnerReturn {
   runVerificationDemo: () => Promise<void>;
   runAccordionDemo: () => Promise<void>;
   runLicenseFormDemo: () => Promise<void>;
+  runCompleteVerificationWorkflow: (practitionerContext?: any) => Promise<void>;
   executeTask: (task: string) => Promise<void>;
 }
 
@@ -158,6 +159,34 @@ export function useAgentRunner(): UseAgentRunnerReturn {
     }
   }, [isRunning, startAgent, setCurrentTask, addThought]);
 
+  const runCompleteVerificationWorkflow = useCallback(async (practitionerContext?: any) => {
+    console.log('🏥 Hook: Starting complete verification workflow', practitionerContext);
+    if (!isRunning) {
+      startAgent();
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    setCurrentTask('Completing entire verification workflow');
+    
+    try {
+      const result = await agentRunner.completeVerificationWorkflow(practitionerContext);
+      console.log('✅ Hook: Complete verification workflow completed', result);
+      addThought({
+        message: `Complete verification workflow finished: ${result}`,
+        type: 'result',
+      });
+    } catch (error) {
+      console.error('❌ Hook: Complete verification workflow failed', error);
+      addThought({
+        message: 'Complete verification workflow encountered an error.',
+        type: 'result',
+      });
+      console.error('Complete verification workflow error:', error);
+    } finally {
+      setCurrentTask(null);
+    }
+  }, [isRunning, startAgent, setCurrentTask, addThought]);
+
   const executeTask = useCallback(async (task: string) => {
     console.log('🚀 Hook: Executing custom task', task);
     if (!isRunning) {
@@ -195,6 +224,7 @@ export function useAgentRunner(): UseAgentRunnerReturn {
     runVerificationDemo,
     runAccordionDemo,
     runLicenseFormDemo,
+    runCompleteVerificationWorkflow,
     executeTask,
   };
 } 

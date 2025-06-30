@@ -160,6 +160,18 @@ const PractitionerDetail: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  // Store practitioner context globally for agent access
+  useEffect(() => {
+    if (practitioner && typeof window !== 'undefined') {
+      (window as any).__practitionerContext = {
+        practitioner,
+        providerData,
+        applications,
+        providerId
+      };
+    }
+  }, [practitioner, providerData, applications, providerId]);
+
   // Create stable callback for fetching audit trail
   const fetchAuditTrail = useCallback(async () => {
     if (!applicationId || applicationId <= 0) return;
@@ -425,7 +437,7 @@ const PractitionerDetail: React.FC = () => {
     );
   }
 
-  return (
+        return (
     <ProviderDetailClient>
       <div>
         {/* Updated header structure to match UI screenshot */}

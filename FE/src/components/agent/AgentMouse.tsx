@@ -57,19 +57,6 @@ export function AgentMouse() {
         position={portalPosition} 
         currentThought={currentThought} 
       />
-      
-      {/* Debug info showing viewport coordinates */}
-      <div
-        className="absolute text-xs bg-black text-white px-2 py-1 rounded opacity-75 z-[100001]"
-        style={{
-          left: portalPosition.x + 20,
-          top: portalPosition.y + 30,
-        }}
-      >
-        <div>Viewport: ({mousePosition.x}, {mousePosition.y})</div>
-        <div>Portal: ({Math.round(portalPosition.x)}, {Math.round(portalPosition.y)})</div>
-        <div>Content Offset: ({Math.round(contentBounds.left)}, {Math.round(contentBounds.top)})</div>
-      </div>
     </div>
   );
 

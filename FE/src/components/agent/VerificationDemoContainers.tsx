@@ -599,6 +599,7 @@ function AgentControlPanel() {
         />
         <OpenAIAccordionDemoButton />
         <OpenAILicenseFormDemoButton />
+        <OpenAICompleteWorkflowDemoButton />
         <ViewportSnapshotButton />
         <ElementTrackingButton />
         <VisualAlignmentTestButton />
@@ -1465,6 +1466,25 @@ function OpenAILicenseFormDemoButton() {
       title="Demo OpenAI Agent filling license form"
     >
       🤖 AI License Form
+    </button>
+  );
+}
+
+function OpenAICompleteWorkflowDemoButton() {
+  const handleCompleteWorkflowDemo = async () => {
+    console.log('=== OPENAI COMPLETE WORKFLOW DEMO ===');
+    
+    // Trigger via the custom event system
+    window.dispatchEvent(new CustomEvent('openai-complete-workflow-demo'));
+  };
+
+  return (
+    <button
+      onClick={handleCompleteWorkflowDemo}
+      className="px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-sm rounded-lg hover:from-purple-600 hover:to-pink-700 transition-all font-medium"
+      title="Complete the entire verification workflow with AI Agent"
+    >
+      🚀 Complete Workflow
     </button>
   );
 }
