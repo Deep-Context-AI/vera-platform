@@ -228,11 +228,27 @@ export class UISimulator {
   }
 
   /**
+   * Initialize mouse position in the center of the screen
+   */
+  initializeMousePosition(): void {
+    const centerPosition: MousePosition = {
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 2),
+    };
+    
+    console.log('🎯 UISimulator: Initializing mouse position at screen center:', centerPosition);
+    useAgentStore.getState().updateMousePosition(centerPosition);
+    useAgentStore.getState().showMouse();
+  }
+
+  /**
    * Reset the simulator state
    */
   reset(): void {
     this.stopAnimations();
     useAgentStore.getState().setCurrentTarget(null);
+    // Re-initialize mouse position when resetting
+    this.initializeMousePosition();
   }
 
   /**

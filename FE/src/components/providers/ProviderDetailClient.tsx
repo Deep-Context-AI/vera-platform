@@ -30,57 +30,39 @@ interface ProviderDetailClientProps {
 export function ProviderDetailClient({ children }: Omit<ProviderDetailClientProps, 'providerId'>) {
   const agentRunner = useAgentRunner();
 
-  // Set up event listeners for agent demo controls
+  // Set up event listeners for agent controls
   useEffect(() => {
-    const handleAgentDemo = (event: CustomEvent) => {
-      const { action } = event.detail;
-      
-      switch (action) {
-        case 'demo':
-          agentRunner.runDemo();
-          break;
-        case 'verification':
-          agentRunner.runVerificationDemo();
-          break;
-        default:
-          console.warn('Unknown agent demo action:', action);
-      }
-    };
-
     const handleAgentStop = () => {
       agentRunner.stopAgent();
     };
 
-    const handleOpenAIAccordionDemo = () => {
-      agentRunner.runAccordionDemo();
-    };
-
-    const handleOpenAILicenseDemo = () => {
-      agentRunner.runLicenseFormDemo();
-    };
-
-    const handleOpenAICompleteWorkflowDemo = () => {
+    const handleIdentityVerificationWorkflow = () => {
       // Get practitioner context from global window object if available
       const practitionerContext = typeof window !== 'undefined' ? (window as any).__practitionerContext : undefined;
-      agentRunner.runCompleteVerificationWorkflow(practitionerContext);
+      
+      const task = 'Please execute the identity verification workflow for the healthcare provider. Use the identity_verification_workflow tool to complete the entire process.';
+      
+      agentRunner.executeTask(task, practitionerContext ? { 
+        currentPage: 'provider-verification',
+        isAuthenticated: true,
+        practitionerData: practitionerContext
+      } : undefined);
     };
 
     // Add event listeners
-    window.addEventListener('agent-demo', handleAgentDemo as EventListener);
     window.addEventListener('agent-stop', handleAgentStop);
-    window.addEventListener('openai-accordion-demo', handleOpenAIAccordionDemo);
-    window.addEventListener('openai-license-demo', handleOpenAILicenseDemo);
-    window.addEventListener('openai-complete-workflow-demo', handleOpenAICompleteWorkflowDemo);
+    window.addEventListener('openai-accordion-demo', handleIdentityVerificationWorkflow);
+    window.addEventListener('openai-license-demo', handleIdentityVerificationWorkflow);
+    window.addEventListener('openai-complete-workflow-demo', handleIdentityVerificationWorkflow);
 
     // Cleanup
     return () => {
-      window.removeEventListener('agent-demo', handleAgentDemo as EventListener);
       window.removeEventListener('agent-stop', handleAgentStop);
-      window.removeEventListener('openai-accordion-demo', handleOpenAIAccordionDemo);
-      window.removeEventListener('openai-license-demo', handleOpenAILicenseDemo);
-      window.removeEventListener('openai-complete-workflow-demo', handleOpenAICompleteWorkflowDemo);
+      window.removeEventListener('openai-accordion-demo', handleIdentityVerificationWorkflow);
+      window.removeEventListener('openai-license-demo', handleIdentityVerificationWorkflow);
+      window.removeEventListener('openai-complete-workflow-demo', handleIdentityVerificationWorkflow);
     };
-  }, []);
+  }, [agentRunner]);
 
   return (
     <>

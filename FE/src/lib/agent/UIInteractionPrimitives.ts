@@ -866,15 +866,15 @@ export class UIInteractionPrimitives {
     tagName?: string;
     description?: string;
   }): Element | null {
-    const { selector, text, dataAttribute, dataValue, tagName, description } = options;
+    const { selector, text, dataAttribute, dataValue, tagName } = options;
 
     // Strategy 1: Try direct selector
     if (selector) {
       try {
         const element = document.querySelector(selector);
         if (element) return element;
-      } catch (e) {
-        console.warn(`Invalid selector: ${selector}`, e);
+      } catch (error) {
+        console.warn(`Invalid selector: ${selector}`, error);
       }
     }
 
@@ -904,7 +904,7 @@ export class UIInteractionPrimitives {
         try {
           const element = document.querySelector(sel);
           if (element) return element;
-        } catch (e) {
+        } catch {
           // Invalid selector, continue
         }
       }
@@ -934,15 +934,38 @@ export class UIInteractionPrimitives {
 
     const store = useAgentStore.getState();
     
+    console.log('🔍 SmartClick Debug:', { 
+      options, 
+      description,
+      availableElements: options.selector ? document.querySelectorAll(options.selector).length : 'N/A'
+    });
+    
     // Find element using smart strategy
     const targetElement = this.findElementSmart(options);
     if (!targetElement) {
+      // Add more debugging information
+      if (options.selector) {
+        const selectorExists = document.querySelector(options.selector);
+        console.log('🔍 SmartClick Selector Debug:', { 
+          selector: options.selector,
+          exists: !!selectorExists,
+          allMatches: document.querySelectorAll(options.selector).length
+        });
+      }
+      
       store.addThought({
         message: `Could not find element: ${description}`,
         type: 'result',
       });
       return false;
     }
+
+    console.log('🔍 SmartClick Found Element:', { 
+      tagName: targetElement.tagName,
+      id: targetElement.id,
+      className: targetElement.className,
+      textContent: targetElement.textContent?.substring(0, 50)
+    });
 
     // Get a proper selector for the found element
     const elementSelector = this.generateSelectorForElement(targetElement);
@@ -1007,14 +1030,27 @@ export class UIInteractionPrimitives {
   }> {
     const accordionTriggers = document.querySelectorAll('[data-accordion-trigger]');
     
-    return Array.from(accordionTriggers).map(trigger => {
+    console.log('🔍 FindVerificationSteps Debug:', {
+      totalAccordionTriggers: accordionTriggers.length,
+      selectors: Array.from(accordionTriggers).map(el => ({
+        stepId: el.getAttribute('data-accordion-trigger'),
+        stepName: el.getAttribute('data-step-name'),
+        tagName: el.tagName,
+        dataState: el.getAttribute('data-state')
+      }))
+    });
+    
+    const results = Array.from(accordionTriggers).map(trigger => {
       const stepId = trigger.getAttribute('data-accordion-trigger') || '';
       const stepName = trigger.getAttribute('data-step-name') || '';
-      const startButton = document.querySelector(`[data-agent-action="start-verification"][data-step-id="${stepId}"]`);
       
-      // Check if accordion is expanded by looking for content
-      const content = document.querySelector(`[data-accordion-content="${stepId}"]`);
-      const isExpanded = content ? !content.hasAttribute('data-state') || content.getAttribute('data-state') === 'open' : false;
+      // Look for start button within the parent accordion item
+      const parentItem = trigger.closest('[data-slot="accordion-item"]');
+      const startButton = parentItem?.querySelector(`[data-agent-action="start-verification"][data-step-id="${stepId}"]`);
+      
+      // Check if accordion is expanded by looking at trigger's data-state
+      const triggerState = trigger.getAttribute('data-state');
+      const isExpanded = triggerState === 'open';
       
       return {
         stepId,
@@ -1024,6 +1060,9 @@ export class UIInteractionPrimitives {
         isExpanded
       };
     });
+    
+    console.log('🔍 FindVerificationSteps Results:', results);
+    return results;
   }
 
   /**
@@ -1037,20 +1076,44 @@ export class UIInteractionPrimitives {
       type: 'action',
     });
 
+    // Add timing delay for better UX readability
+    await this.wait(800);
+
+    // Use direct selector approach since we know the exact format
     const success = await this.smartClick({
-      dataAttribute: 'accordion-trigger',
-      dataValue: stepId,
+      selector: `[data-accordion-trigger="${stepId}"]`,
       description: `${stepId} verification step`
     });
 
     if (success) {
       // Wait for accordion animation
-      await this.wait(500);
+      await this.wait(1000);
       
       store.addThought({
         message: `Successfully expanded ${stepId} verification step`,
         type: 'result',
       });
+    } else {
+      // Fallback: try to find by step name if direct selector fails
+      store.addThought({
+        message: `Trying alternative approach for ${stepId}...`,
+        type: 'thinking',
+      });
+      
+      const fallbackSuccess = await this.smartClick({
+        dataAttribute: 'step-name',
+        dataValue: stepId.replace('_', ' '),
+        description: `${stepId} verification step (fallback)`
+      });
+      
+      if (fallbackSuccess) {
+        await this.wait(1000);
+        store.addThought({
+          message: `Successfully expanded ${stepId} verification step (fallback method)`,
+          type: 'result',
+        });
+        return true;
+      }
     }
 
     return success;
@@ -1067,18 +1130,42 @@ export class UIInteractionPrimitives {
       type: 'action',
     });
 
+    // Add timing delay for better UX readability
+    await this.wait(800);
+
+    // Use direct selector approach since we know the exact format
     const success = await this.smartClick({
-      dataAttribute: 'agent-action',
-      dataValue: 'start-verification',
-      selector: `[data-step-id="${stepId}"]`,
+      selector: `[data-agent-action="start-verification"][data-step-id="${stepId}"]`,
       description: `Start verification button for ${stepId}`
     });
 
     if (success) {
+      await this.wait(500);
       store.addThought({
         message: `Successfully started verification for ${stepId}`,
         type: 'result',
       });
+    } else {
+      // Fallback: try to find by text content
+      store.addThought({
+        message: `Trying alternative approach for ${stepId}...`,
+        type: 'thinking',
+      });
+      
+      const fallbackSuccess = await this.smartClick({
+        text: 'Start Verification',
+        tagName: 'button',
+        description: `Start verification button for ${stepId} (fallback)`
+      });
+      
+      if (fallbackSuccess) {
+        await this.wait(500);
+        store.addThought({
+          message: `Successfully started verification for ${stepId} (fallback method)`,
+          type: 'result',
+        });
+        return true;
+      }
     }
 
     return success;
@@ -1094,6 +1181,9 @@ export class UIInteractionPrimitives {
       message: `Filling form for verification step: ${stepId}`,
       type: 'action',
     });
+
+    // Add timing delay for better UX readability
+    await this.wait(1000);
 
     let allSuccess = true;
 
@@ -1112,6 +1202,9 @@ export class UIInteractionPrimitives {
         allSuccess = false;
         continue;
       }
+
+      // Add small delay between field fills for better visual tracking
+      await this.wait(500);
 
       // Fill the field based on its type
       if (fieldElement.tagName.toLowerCase() === 'textarea' || 
@@ -1149,21 +1242,232 @@ export class UIInteractionPrimitives {
       type: 'action',
     });
 
+    // Add timing delay for better UX readability
+    await this.wait(800);
+
+    // Use direct selector approach since we know the exact format
     const success = await this.smartClick({
-      dataAttribute: 'agent-action',
-      dataValue: 'save-progress',
-      selector: `[data-step-id="${stepId}"]`,
+      selector: `[data-agent-action="save-progress"][data-step-id="${stepId}"]`,
       description: `Save progress button for ${stepId}`
     });
 
     if (success) {
+      await this.wait(500);
       store.addThought({
         message: `Successfully saved progress for ${stepId}`,
         type: 'result',
       });
+    } else {
+      // Fallback: try to find by text content
+      store.addThought({
+        message: `Trying alternative approach for ${stepId}...`,
+        type: 'thinking',
+      });
+      
+      const fallbackSuccess = await this.smartClick({
+        text: 'Save Progress',
+        tagName: 'button',
+        description: `Save progress button for ${stepId} (fallback)`
+      });
+      
+      if (fallbackSuccess) {
+        await this.wait(500);
+        store.addThought({
+          message: `Successfully saved progress for ${stepId} (fallback method)`,
+          type: 'result',
+        });
+        return true;
+      }
     }
 
     return success;
+  }
+
+  /**
+   * Inspect a verification step to understand its current state and available actions
+   */
+  inspectVerificationStep(stepId: string): {
+    success: boolean;
+    message: string;
+    state: 'not_found' | 'collapsed' | 'expanded';
+    currentStatus?: string;
+    availableActions?: string[];
+    availableFields?: string[];
+    hasStartButton?: boolean;
+    hasSaveButton?: boolean;
+    hasStatusField?: boolean;
+    hasReasoningField?: boolean;
+  } {
+    console.log('🔍 Inspecting verification step:', stepId);
+    
+    // Debug: log all accordion items for troubleshooting
+    console.log('🔍 All accordion items:', document.querySelectorAll('[data-slot="accordion-item"]').length);
+    
+    // Look for the trigger first to understand the structure
+    const accordionTrigger = document.querySelector(`[data-accordion-trigger="${stepId}"]`);
+    if (!accordionTrigger) {
+      console.log('❌ Could not find accordion trigger for:', stepId);
+      return {
+        success: false,
+        message: `Could not find accordion trigger for step: ${stepId}`,
+        state: 'not_found'
+      };
+    }
+    
+    console.log('✅ Found accordion trigger for:', stepId);
+    
+    // Get the parent accordion item to check state
+    const parentItem = accordionTrigger.closest('[data-slot="accordion-item"]');
+    if (!parentItem) {
+      console.log('❌ Could not find parent accordion item for:', stepId);
+      return {
+        success: false,
+        message: `Could not find parent accordion item for step: ${stepId}`,
+        state: 'not_found'
+      };
+    }
+    
+    // Check if accordion is expanded by looking at the trigger's data-state
+    const triggerState = accordionTrigger.getAttribute('data-state');
+    const isExpanded = triggerState === 'open';
+    
+    console.log('🔍 Accordion state for', stepId, ':', { triggerState, isExpanded });
+    
+    if (!isExpanded) {
+      console.log('📁 Step is collapsed:', stepId);
+      return {
+        success: true,
+        message: `Step ${stepId} is collapsed. Need to expand first.`,
+        state: 'collapsed',
+        availableActions: ['expand']
+      };
+    }
+
+         // Look for the content area within the same accordion item
+     const accordionContent = parentItem.querySelector('[data-slot="accordion-content"]');
+     if (!accordionContent) {
+       console.log('❌ Could not find accordion content within item for:', stepId);
+       console.log('🔍 Available content elements in parent:', parentItem.querySelectorAll('[data-slot]').length);
+       console.log('🔍 Parent item HTML:', parentItem.outerHTML.substring(0, 200));
+       return {
+         success: false,
+         message: `Could not find accordion content within item for step: ${stepId}`,
+         state: 'not_found'
+       };
+     }
+     
+     console.log('✅ Found accordion content for:', stepId);
+     console.log('🔍 Content data-state:', accordionContent.getAttribute('data-state'));
+
+    // Look for available buttons and forms within this content
+    const startButton = accordionContent.querySelector(`[data-agent-action="start-verification"][data-step-id="${stepId}"]`);
+    const saveButton = accordionContent.querySelector(`[data-agent-action="save-progress"][data-step-id="${stepId}"]`);
+    const statusSelect = accordionContent.querySelector(`[data-agent-field="verification-status"][data-step-id="${stepId}"]`);
+    const reasoningField = accordionContent.querySelector(`[data-agent-field="reasoning-notes"][data-step-id="${stepId}"]`);
+    
+    // Check current status from the UI badge in the trigger
+    let currentStatus = 'unknown';
+    const statusBadge = accordionTrigger.querySelector('[class*="badge"]');
+    if (statusBadge) {
+      const badgeText = statusBadge.textContent?.toLowerCase() || '';
+      if (badgeText.includes('progress')) currentStatus = 'in_progress';
+      else if (badgeText.includes('completed')) currentStatus = 'completed';
+      else if (badgeText.includes('not started')) currentStatus = 'not_started';
+    }
+    
+    const availableActions: string[] = [];
+    const availableFields: string[] = [];
+    
+    if (startButton) availableActions.push('start');
+    if (saveButton) availableActions.push('save');
+    if (statusSelect) availableFields.push('verification-status');
+    if (reasoningField) availableFields.push('reasoning-notes');
+    
+    // Look for form fields within the content
+    const formFields = accordionContent.querySelectorAll('[data-agent-field]');
+    formFields.forEach(field => {
+      const fieldName = field.getAttribute('data-agent-field');
+      if (fieldName && !availableFields.includes(fieldName)) {
+        availableFields.push(fieldName);
+      }
+    });
+    
+    console.log('✅ Step inspection complete:', {
+      stepId,
+      currentStatus,
+      availableActions,
+      availableFields,
+      hasStartButton: !!startButton,
+      hasSaveButton: !!saveButton,
+      contentFound: !!accordionContent,
+      triggerFound: !!accordionTrigger
+    });
+    
+    return {
+      success: true,
+      message: `Step ${stepId} is expanded. Status: ${currentStatus}. Available actions: ${availableActions.join(', ') || 'none'}. Available fields: ${availableFields.join(', ') || 'none'}`,
+      state: 'expanded',
+      currentStatus,
+      availableActions,
+      availableFields,
+      hasStartButton: !!startButton,
+      hasSaveButton: !!saveButton,
+      hasStatusField: !!statusSelect,
+      hasReasoningField: !!reasoningField
+    };
+  }
+
+  /**
+   * Query DOM elements for discovery and debugging
+   */
+  queryElements(selector: string, description?: string): {
+    success: boolean;
+    count: number;
+    elements: Array<{
+      index: number;
+      tagName: string;
+      id: string;
+      className: string;
+      textContent: string;
+      dataAttributes: Record<string, string>;
+      isVisible: boolean;
+      position: { x: number; y: number };
+    }>;
+    message: string;
+  } {
+    console.log('🔍 Querying elements:', selector);
+    
+    const elements = document.querySelectorAll(selector);
+    const elementInfo = Array.from(elements).map((element, index) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        index,
+        tagName: element.tagName.toLowerCase(),
+        id: element.id || `element-${index}`,
+        className: element.className || '',
+        textContent: element.textContent?.trim().substring(0, 100) || '',
+        dataAttributes: Object.fromEntries(
+          Array.from(element.attributes)
+            .filter(attr => attr.name.startsWith('data-'))
+            .map(attr => [attr.name, attr.value])
+        ),
+        isVisible: rect.width > 0 && rect.height > 0,
+        position: {
+          x: Math.round(rect.left + rect.width / 2),
+          y: Math.round(rect.top + rect.height / 2)
+        }
+      };
+    });
+    
+    const message = `Found ${elements.length} elements matching "${selector}"${description ? ` (${description})` : ''}`;
+    console.log('✅ Query complete:', message);
+    
+    return {
+      success: true,
+      count: elements.length,
+      elements: elementInfo,
+      message
+    };
   }
 }
 

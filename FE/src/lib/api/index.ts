@@ -1,10 +1,34 @@
 // Centralized API client - single entry point for all API operations
 export { ApplicationsAPI } from './applications';
+export { VerificationAPI, verificationHelpers, API_ENDPOINTS } from './verification';
 
-// You can add more API modules here as you create them
-// export { PractitionersAPI } from './practitioners';
-// export { ProvidersAPI } from './providers';
-// export { CommitteeAPI } from './committee';
+// Re-export types for convenience
+export type {
+  NPIRequest,
+  DEAVerificationRequest,
+  ABMSRequest,
+  NPDBRequest,
+  NPDBAddress,
+  ComprehensiveSANCTIONRequest,
+  LADMFRequest,
+  MedicalRequest,
+  DCARequest,
+  MedicareRequest,
+  EducationRequest,
+  HospitalPrivilegesRequest,
+  NPIResponse,
+  NewDEAVerificationResponse,
+  ABMSResponse,
+  NPDBResponse,
+  ComprehensiveSANCTIONResponse,
+  LADMFResponse,
+  MedicalResponse,
+  DCAResponse,
+  MedicareResponse,
+  EducationResponse,
+  HospitalPrivilegesResponse
+} from './verification';
+
 
 // Re-export types for convenience
 export type {
