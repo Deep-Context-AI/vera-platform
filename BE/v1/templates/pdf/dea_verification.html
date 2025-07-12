@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEA Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>DEA Verification Report</h1>
+        <p class="subtitle">Drug Enforcement Administration Registration Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+    </div>
+
+    <div class="info-section">
+        <h2>Registration Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">DEA Number:</div>
+                <div class="info-value">{{ number }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Registration Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if current_status == 'ACTIVE' %}status-success{% else %}status-warning{% endif %}">
+                        {{ current_status }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Payment Status:</div>
+                <div class="info-value">{{ paid_status }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Expiration Date:</div>
+                <div class="info-value">{{ expiration }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Practitioner Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Name:</div>
+                <div class="info-value">{{ practitioner.First_name }} {% if practitioner.Middle_name %}{{ practitioner.Middle_name }} {% endif %}{{ practitioner.Last_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Title:</div>
+                <div class="info-value">{{ practitioner.Title }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Registered Address</h2>
+        <div class="info-item">
+            <div class="info-label">Address:</div>
+            <div class="info-value">
+                {{ registeredAddress.street }}<br>
+                {{ registeredAddress.city }}, {{ registeredAddress.state }} {{ registeredAddress.zip }}
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Authorization Details</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Business Activity Code:</div>
+                <div class="info-value">{{ business_activity_code }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Schedule Type:</div>
+                <div class="info-value">{{ drug_schedule_type }}</div>
+            </div>
+        </div>
+        
+        <div class="info-item">
+            <div class="info-label">Authorized Drug Schedules:</div>
+            <div class="info-value">
+                {% for schedule in drug_schedules %}
+                    <span class="status-badge status-success">{{ schedule }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {% if has_restrictions == 'YES' %}
+    <div class="info-section">
+        <h2>Restrictions</h2>
+        <div class="info-item">
+            <div class="info-label">Has Restrictions:</div>
+            <div class="info-value">
+                <span class="status-badge status-warning">{{ has_restrictions }}</span>
+            </div>
+        </div>
+        {% if restriction_details %}
+        <div class="info-item">
+            <div class="info-label">Restriction Details:</div>
+            <div class="info-value">
+                <ul>
+                {% for detail in restriction_details %}
+                    <li>{{ detail }}</li>
+                {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Overall Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-error{% endif %}">
+                        {{ status.upper() }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This verification report is generated from official DEA registry data and is valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The DEA registration status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Header
+from typing import Optional
 
 from v1.models.requests import (
     NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
@@ -52,11 +53,15 @@ async def search_npi_post(request: NPIRequest) -> NPIResponse:
     response_model=NewDEAVerificationResponse,
     tags=["DEA"],
     summary="DEA verification",
-    description="Verify DEA practitioner with first name, last name, and DEA number (required), other fields optional"
+    description="Verify DEA practitioner with first name, last name, and DEA number (required), other fields optional. Optionally generate PDF document."
 )
-async def verify_dea_practitioner(request: DEAVerificationRequest) -> NewDEAVerificationResponse:
+async def verify_dea_practitioner(
+    request: DEAVerificationRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> NewDEAVerificationResponse:
     """Verify DEA practitioner - requires first_name, last_name, and dea_number, other fields optional"""
-    return await dea_service.verify_dea_practitioner(request)
+    return await dea_service.verify_dea_practitioner(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # ABMS Endpoints
 @router.post(

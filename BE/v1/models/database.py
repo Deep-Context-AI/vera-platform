@@ -289,9 +289,8 @@ class SanctionMatchData(BaseModel):
     status: Optional[str] = Field(None, description="Status of sanction")
     matched: Optional[bool] = Field(None, description="Whether a match was found")
     duration: Optional[str] = Field(None, description="Duration of sanction")
-    source_url: Optional[str] = Field(None, description="URL to source documentation")
+    document_url: Optional[str] = Field(None, description="URL to supporting documentation")
     description: Optional[str] = Field(None, description="Description of sanction")
-    document_link: Optional[str] = Field(None, description="Link to supporting documents")
     exclusion_type: Optional[str] = Field(None, description="Type of exclusion")
     reinstatement_date: Optional[str] = Field(None, description="Reinstatement date if applicable")
 

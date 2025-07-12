@@ -19,6 +19,11 @@ class BaseResponse(BaseModel):
     class Config:
         use_enum_values = True
 
+class DocumentableResponse(BaseResponse):
+    """Base response class for services that can generate PDF documents"""
+    document_url: Optional[str] = Field(None, description="URL to generated PDF document")
+    document_generated_at: Optional[datetime] = Field(None, description="Timestamp when document was generated")
+
 class NPIResponse(BaseResponse):
     """Response model for NPI lookup"""
     npi: Optional[str] = Field(None, description="National Provider Identifier")
@@ -120,7 +125,7 @@ class ABMSNotes(BaseModel):
     psv_compliance: List[str] = Field(..., description="PSV compliance organizations")
     copyright: str = Field(..., description="Copyright notice")
 
-class ABMSResponse(BaseResponse):
+class ABMSResponse(DocumentableResponse):
     """Response model for ABMS lookup"""
     profile: Optional[ABMSProfile] = Field(None, description="Physician profile information")
     notes: Optional[ABMSNotes] = Field(None, description="Additional notes and compliance information")
@@ -174,7 +179,7 @@ class NPDBReportSummary(BaseModel):
     summary_date: str = Field(..., description="Summary date")
     report_types: Dict[str, NPDBReportType] = Field(..., description="Report types")
 
-class NPDBResponse(BaseResponse):
+class NPDBResponse(DocumentableResponse):
     """Response model for NPDB verification"""
     name: str = Field(..., description="Practitioner name")
     query_response_type: str = Field(..., description="Query response type")
@@ -210,8 +215,7 @@ class SanctionMatch(BaseModel):
     date: Optional[str] = Field(None, description="Date of the sanction")
     description: Optional[str] = Field(None, description="Description of the sanction")
     type: Optional[str] = Field(None, description="Type of sanction")
-    source_url: Optional[str] = Field(None, description="URL to source documentation")
-    document_link: Optional[str] = Field(None, description="Link to supporting documents")
+    document_url: Optional[str] = Field(None, description="URL to supporting documentation")
 
 class SanctionSummary(BaseModel):
     """Summary of sanctions check"""
@@ -219,7 +223,7 @@ class SanctionSummary(BaseModel):
     matches_found: int = Field(..., description="Number of matches found")
     flagged_for_review: bool = Field(..., description="Whether manual review is required")
 
-class ComprehensiveSANCTIONResponse(BaseResponse):
+class ComprehensiveSANCTIONResponse(DocumentableResponse):
     """Comprehensive response model for sanctions check"""
     provider: ProviderInfo = Field(..., description="Provider information")
     checked_on: datetime = Field(default_factory=datetime.utcnow, description="Timestamp of the check")
@@ -283,7 +287,7 @@ class RegisteredAddress(BaseModel):
     state: str = Field(..., description="State")
     zip: str = Field(..., description="ZIP code")
 
-class NewDEAVerificationResponse(BaseResponse):
+class NewDEAVerificationResponse(DocumentableResponse):
     """New response model for DEA verification matching the updated structure"""
     number: str = Field(..., description="DEA registration number")
     practitioner: Practitioner = Field(..., description="Practitioner information")
@@ -328,7 +332,7 @@ class MedicalVerifications(BaseModel):
     managed_care: ManagedCareVerification = Field(..., description="Managed Care verification results")
     orp: ORPVerification = Field(..., description="ORP verification results")
 
-class MedicalResponse(BaseResponse):
+class MedicalResponse(DocumentableResponse):
     """Response model for Medi-Cal Managed Care + ORP verification"""
     npi: str = Field(..., description="National Provider Identifier")
     provider_name: str = Field(..., description="Provider name")
@@ -336,7 +340,7 @@ class MedicalResponse(BaseResponse):
     verifications: MedicalVerifications = Field(..., description="Verification results")
     notes: str = Field(..., description="Additional notes about the verification")
 
-class DCAResponse(BaseResponse):
+class DCAResponse(DocumentableResponse):
     """Response model for DCA (Department of Consumer Affairs) CA license verification"""
     board_name: str = Field(..., description="Name of the medical board")
     board_code: str = Field(..., description="Board code identifier")
@@ -380,7 +384,7 @@ class MedicareDataSources(BaseModel):
     ffs_provider_enrollment: Optional[FFSProviderEnrollment] = Field(None, description="FFS Provider Enrollment results")
     ordering_referring_provider: Optional[OrderingReferringProvider] = Field(None, description="Ordering/Referring Provider results")
 
-class MedicareResponse(BaseResponse):
+class MedicareResponse(DocumentableResponse):
     """Response model for Medicare enrollment verification"""
     verification_result: str = Field(..., description="Overall verification result (verified, not_verified)")
     npi: str = Field(..., description="National Provider Identifier")

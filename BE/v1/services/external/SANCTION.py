@@ -321,8 +321,7 @@ class SANCTIONService:
                     date=sanction_match.date,
                     description=sanction_match.description,
                     type=sanction_match.type or sanction_match.exclusion_type,
-                    source_url=sanction_match.source_url,
-                    document_link=sanction_match.document_link
+                    document_url=sanction_match.document_url
                 )
                 sanctions.append(match)
                 
