@@ -1,6 +1,6 @@
 # MODAL TESTING RULES
 Endpoint for testing
--  https://mikhailocampo--vera-platform-fastapi-app-dev.modal.run
+-  https://mikhailocampo--vera-platform-v2-fastapi-app-dev.modal.run
 NOTE: Do NOT deploy the modal application. If the service endpoint is down because the initial request says the modal http endpoint is stopped, then use `modal serve main.py`
 
 

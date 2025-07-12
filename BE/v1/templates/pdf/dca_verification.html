@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCA License Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>DCA License Verification Report</h1>
+        <p class="subtitle">California Department of Consumer Affairs License Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-warning{% endif %}">
+                        {{ status|upper }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Board Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Board Name:</div>
+                <div class="info-value">{{ board_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Board Code:</div>
+                <div class="info-value">{{ board_code }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>License Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">License Number:</div>
+                <div class="info-value">{{ license_number }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">License Type:</div>
+                <div class="info-value">{{ license_type }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">License Type Name:</div>
+                <div class="info-value">{{ license_type_name or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">License Type Rank:</div>
+                <div class="info-value">{{ license_type_rank }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Rank Description:</div>
+                <div class="info-value">{{ license_type_rank_description or 'N/A' }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>License Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Primary Status Code:</div>
+                <div class="info-value">{{ primary_status_code }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Primary Status Description:</div>
+                <div class="info-value">{{ primary_status_description or 'N/A' }}</div>
+            </div>
+        </div>
+        
+        {% if secondary_status_code %}
+        <div class="info-item">
+            <div class="info-label">Secondary Status Codes:</div>
+            <div class="info-value">
+                {% for code in secondary_status_code %}
+                    <span class="status-badge status-warning">{{ code }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>License Dates</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Issue Date:</div>
+                <div class="info-value">{{ issue_date }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Expiration Date:</div>
+                <div class="info-value">{{ expiration_date }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Disciplinary Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Has Discipline:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if has_discipline %}status-error{% else %}status-success{% endif %}">
+                        {% if has_discipline %}YES{% else %}NO{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Has Public Record Actions:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if has_public_record_actions %}status-warning{% else %}status-success{% endif %}">
+                        {% if has_public_record_actions %}YES{% else %}NO{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if has_discipline or has_public_record_actions %}
+    <div class="info-section">
+        <h2>Disciplinary Actions Notice</h2>
+        <div class="info-item">
+            <div class="info-value">
+                <p><strong>⚠️ Important:</strong> This license has associated disciplinary actions or public record actions. Please review the full disciplinary history through the California Department of Consumer Affairs website or contact the relevant board directly for complete details.</p>
+                
+                {% if has_discipline %}
+                <p><strong>Disciplinary Actions:</strong> This license has been subject to disciplinary actions by the licensing board.</p>
+                {% endif %}
+                
+                {% if has_public_record_actions %}
+                <p><strong>Public Record Actions:</strong> This license has public record actions on file.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This DCA license verification report is generated from mocked California Department of Consumer Affairs data and is not valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The license status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

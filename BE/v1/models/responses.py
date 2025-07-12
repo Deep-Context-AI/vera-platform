@@ -24,7 +24,7 @@ class DocumentableResponse(BaseResponse):
     document_url: Optional[str] = Field(None, description="URL to generated PDF document")
     document_generated_at: Optional[datetime] = Field(None, description="Timestamp when document was generated")
 
-class NPIResponse(BaseResponse):
+class NPIResponse(DocumentableResponse):
     """Response model for NPI lookup"""
     npi: Optional[str] = Field(None, description="National Provider Identifier")
     provider_name: Optional[str] = Field(None, description="Provider name or Organization name")
@@ -35,8 +35,31 @@ class NPIResponse(BaseResponse):
     specialty: Optional[str] = Field(None, description="Primary specialty description")
     secondary_taxonomies: Optional[List[Dict[str, Any]]] = Field(None, description="Secondary taxonomy codes and descriptions")
     
+    # License information
+    license_state: Optional[str] = Field(None, description="State where license is issued")
+    license_number: Optional[str] = Field(None, description="License number")
+    
+    # Address information
+    practice_address: Optional[Dict[str, Any]] = Field(None, description="Practice address")
+    mailing_address: Optional[Dict[str, Any]] = Field(None, description="Mailing address")
+    phone: Optional[str] = Field(None, description="Phone number")
+    fax: Optional[str] = Field(None, description="Fax number")
+    
     # Status and dates
     is_active: Optional[bool] = Field(None, description="Whether the NPI is active")
+    enumeration_date: Optional[str] = Field(None, description="Date when NPI was enumerated")
+    last_update_date: Optional[str] = Field(None, description="Last update date")
+    
+    # Individual provider fields
+    gender: Optional[str] = Field(None, description="Gender (for individual providers)")
+    credential: Optional[str] = Field(None, description="Professional credential")
+    sole_proprietor: Optional[str] = Field(None, description="Sole proprietor status")
+    
+    # Organization provider fields
+    authorized_official: Optional[Dict[str, Any]] = Field(None, description="Authorized official (for organizations)")
+    
+    # Legacy field for backward compatibility
+    address: Optional[Dict[str, Any]] = Field(None, description="Legacy address field")
 
 class DEAResponse(BaseResponse):
     """Response model for DEA lookup"""
@@ -239,7 +262,7 @@ class LADMFMatchedRecord(BaseModel):
     last_known_residence: str = Field(..., description="ZIP Code of last known address")
     record_status: str = Field(..., description="e.g., Confirmed, Tentative")
 
-class LADMFResponse(BaseResponse):
+class LADMFResponse(DocumentableResponse):
     """Response model for LADMF (Limited Access Death Master File) verification"""
     match_found: bool = Field(..., description="Whether a record was found in LADMF")
     matched_record: Optional[LADMFMatchedRecord] = Field(None, description="Details of the matched death record")

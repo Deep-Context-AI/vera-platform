@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LADMF Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>LADMF Verification Report</h1>
+        <p class="subtitle">Limited Access Death Master File Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Summary</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Death Record Found:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if match_found %}status-warning{% else %}status-success{% endif %}">
+                        {% if match_found %}YES{% else %}NO{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Match Confidence:</div>
+                <div class="info-value">
+                    <span class="status-badge 
+                        {% if match_confidence == 'high' %}status-warning
+                        {% elif match_confidence == 'medium' %}status-warning
+                        {% elif match_confidence == 'low' %}status-warning
+                        {% else %}status-success
+                        {% endif %}">
+                        {{ match_confidence.upper() }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Date:</div>
+                <div class="info-value">{{ verification_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') if verification_timestamp else 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Data Source:</div>
+                <div class="info-value">{{ source }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% if matched_record %}
+    <div class="info-section">
+        <h2>Death Record Details</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Full Name:</div>
+                <div class="info-value">{{ matched_record.full_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Date of Birth:</div>
+                <div class="info-value">{{ matched_record.date_of_birth }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Date of Death:</div>
+                <div class="info-value">
+                    <span class="status-badge status-warning">{{ matched_record.date_of_death }}</span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Social Security Number:</div>
+                <div class="info-value">{{ matched_record.social_security_number }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Additional Record Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">State of SSN Issue:</div>
+                <div class="info-value">{{ matched_record.state_of_issue }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Last Known Residence:</div>
+                <div class="info-value">{{ matched_record.last_known_residence }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Record Status:</div>
+                <div class="info-value">
+                    <span class="status-badge 
+                        {% if matched_record.record_status == 'Confirmed' %}status-warning
+                        {% elif matched_record.record_status == 'Tentative' %}status-warning
+                        {% else %}status-info
+                        {% endif %}">
+                        {{ matched_record.record_status }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="info-section">
+        <h2>No Death Record Found</h2>
+        <div class="info-item">
+            <div class="info-label">Result:</div>
+            <div class="info-value">
+                <span class="status-badge status-success">NO DEATH RECORD FOUND</span>
+            </div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Interpretation:</div>
+            <div class="info-value">
+                No death record was found in the Limited Access Death Master File for the submitted individual information. This suggests the individual may be alive or their death record may not be available in the LADMF database.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="info-section">
+        <h2>Verification Notes</h2>
+        <div class="info-item">
+            <div class="info-label">Notes:</div>
+            <div class="info-value">{{ notes }}</div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Overall Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-error{% endif %}">
+                        {{ status.upper() }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Important Information</h2>
+        <div class="info-item">
+            <div class="info-label">LADMF Overview:</div>
+            <div class="info-value">
+                The Limited Access Death Master File (LADMF) is maintained by the Social Security Administration (SSA) and contains death record information. Access to this database is restricted and regulated under federal law.
+            </div>
+        </div>
+        
+        {% if match_found %}
+        <div class="info-item">
+            <div class="info-label">⚠️ Death Record Alert:</div>
+            <div class="info-value">
+                <strong>A death record has been found for the submitted individual.</strong> This requires immediate attention and further investigation. Please verify this information through additional sources and take appropriate action according to your organization's policies.
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="info-item">
+            <div class="info-label">Verification Limitations:</div>
+            <div class="info-value">
+                <ul>
+                    <li>LADMF records may not include all deaths</li>
+                    <li>There may be delays in reporting deaths to the database</li>
+                    <li>False positives can occur due to name similarities</li>
+                    <li>Additional verification through other sources is recommended</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This verification report is generated from the Limited Access Death Master File (LADMF) and is valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. Death records in the LADMF may be updated or corrected after the generation of this report.</p>
+        
+        <p><strong>Legal Notice:</strong> Access to and use of LADMF data is subject to federal regulations. This information must be handled in accordance with applicable privacy laws and organizational policies.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

@@ -10,6 +10,7 @@
         <h1>DEA Verification Report</h1>
         <p class="subtitle">Drug Enforcement Administration Registration Verification</p>
         <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
     </div>
 
     <div class="info-section">

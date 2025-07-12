@@ -80,9 +80,13 @@ class DEAService:
                     response_dict = response.model_dump()
                     
                     # Generate PDF document
+                    # Use practitioner_id as practitioner_id if available, otherwise use DEA number
+                    practitioner_id = str(dea_data.practitioner_id) if dea_data.practitioner_id else request.dea_number
+                    
                     document_url = await pdf_service.generate_pdf_document(
                         template_name="dea_verification.html",
                         data=response_dict,
+                        practitioner_id=practitioner_id,
                         user_id=user_id,
                         filename_prefix="dea_verification"
                     )

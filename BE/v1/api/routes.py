@@ -41,11 +41,15 @@ db_service = DatabaseService()
     response_model=NPIResponse,
     tags=["NPI"],
     summary="Search NPI by criteria (POST)",
-    description="Search for National Provider Identifier using detailed search criteria via POST request"
+    description="Search for National Provider Identifier using detailed search criteria via POST request. Optionally generate PDF document."
 )
-async def search_npi_post(request: NPIRequest) -> NPIResponse:
+async def search_npi_post(
+    request: NPIRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> NPIResponse:
     """Search for NPI using detailed criteria via POST"""
-    return await npi_service.lookup_npi(request)
+    return await npi_service.lookup_npi(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # DEA Endpoints
 @router.post(
@@ -69,11 +73,15 @@ async def verify_dea_practitioner(
     response_model=ABMSResponse,
     tags=["ABMS"],
     summary="Lookup board certification",
-    description="Retrieve board certification information by physician details"
+    description="Retrieve board certification information by physician details. Optionally generate PDF document."
 )
-async def get_board_certification(request: ABMSRequest) -> ABMSResponse:
+async def get_board_certification(
+    request: ABMSRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> ABMSResponse:
     """Lookup board certification information"""
-    return await abms_service.lookup_board_certification(request)
+    return await abms_service.lookup_board_certification(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # NPDB Endpoints
 @router.post(
@@ -81,11 +89,15 @@ async def get_board_certification(request: ABMSRequest) -> ABMSResponse:
     response_model=NPDBResponse,
     tags=["NPDB"],
     summary="Verify practitioner in NPDB",
-    description="Perform comprehensive NPDB verification with detailed practitioner information"
+    description="Perform comprehensive NPDB verification with detailed practitioner information. Optionally generate PDF document."
 )
-async def verify_npdb_practitioner(request: NPDBRequest) -> NPDBResponse:
+async def verify_npdb_practitioner(
+    request: NPDBRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> NPDBResponse:
     """Verify practitioner in NPDB with comprehensive information"""
-    return await npdb_service.verify_practitioner(request)
+    return await npdb_service.verify_practitioner(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # Sanctions Endpoints
 @router.post(
@@ -93,11 +105,15 @@ async def verify_npdb_practitioner(request: NPDBRequest) -> NPDBResponse:
     response_model=ComprehensiveSANCTIONResponse,
     tags=["Sanctions"],
     summary="Comprehensive sanctions check",
-    description="Perform comprehensive sanctions check across multiple sources including OIG LEIE, SAM.gov, State Medicaid, and Medical Boards"
+    description="Perform comprehensive sanctions check across multiple sources including OIG LEIE, SAM.gov, State Medicaid, and Medical Boards. Optionally generate PDF document."
 )
-async def comprehensive_sanctions_check(request: ComprehensiveSANCTIONRequest) -> ComprehensiveSANCTIONResponse:
+async def comprehensive_sanctions_check(
+    request: ComprehensiveSANCTIONRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> ComprehensiveSANCTIONResponse:
     """Perform comprehensive sanctions check with detailed practitioner information"""
-    return await sanction_service.comprehensive_sanctions_check(request)
+    return await sanction_service.comprehensive_sanctions_check(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # LADMF Endpoints
 @router.post(
@@ -105,11 +121,15 @@ async def comprehensive_sanctions_check(request: ComprehensiveSANCTIONRequest) -
     response_model=LADMFResponse,
     tags=["LADMF"],
     summary="Verify death record in LADMF",
-    description="Verify if an individual is deceased using the Limited Access Death Master File (SSA LADMF)"
+    description="Verify if an individual is deceased using the Limited Access Death Master File (SSA LADMF). Optionally generate PDF document."
 )
-async def verify_death_record(request: LADMFRequest) -> LADMFResponse:
+async def verify_death_record(
+    request: LADMFRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> LADMFResponse:
     """Verify death record in LADMF with individual's information"""
-    return await ladmf_service.verify_death_record(request)
+    return await ladmf_service.verify_death_record(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # MEDICAL Endpoints
 @router.post(
@@ -117,11 +137,15 @@ async def verify_death_record(request: LADMFRequest) -> LADMFResponse:
     response_model=MedicalResponse,
     tags=["Medical"],
     summary="Medi-Cal Managed Care + ORP verification",
-    description="Perform combined verification against Medi-Cal Managed Care and ORP (Other Recognized Provider) networks"
+    description="Perform combined verification against Medi-Cal Managed Care and ORP (Other Recognized Provider) networks. Optionally generate PDF document."
 )
-async def verify_medical_provider(request: MedicalRequest) -> MedicalResponse:
+async def verify_medical_provider(
+    request: MedicalRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> MedicalResponse:
     """Verify provider in both Medi-Cal Managed Care and ORP systems"""
-    return await medical_service.verify_provider(request)
+    return await medical_service.verify_provider(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # DCA Endpoints
 @router.post(
@@ -129,11 +153,15 @@ async def verify_medical_provider(request: MedicalRequest) -> MedicalResponse:
     response_model=DCAResponse,
     tags=["DCA"],
     summary="DCA CA license verification",
-    description="Verify California license through Department of Consumer Affairs (DCA)"
+    description="Verify California license through Department of Consumer Affairs (DCA). Optionally generate PDF document."
 )
-async def verify_dca_license(request: DCARequest) -> DCAResponse:
+async def verify_dca_license(
+    request: DCARequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> DCAResponse:
     """Verify CA license through DCA with provider information"""
-    return await dca_service.verify_license(request)
+    return await dca_service.verify_license(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # MEDICARE Endpoints
 @router.post(
@@ -141,11 +169,15 @@ async def verify_dca_license(request: DCARequest) -> DCAResponse:
     response_model=MedicareResponse,
     tags=["Medicare"],
     summary="Medicare enrollment verification",
-    description="Verify if a provider is enrolled in Medicare and eligible to bill or order/refer"
+    description="Verify if a provider is enrolled in Medicare and eligible to bill or order/refer. Optionally generate PDF document."
 )
-async def verify_medicare_provider(request: MedicareRequest) -> MedicareResponse:
+async def verify_medicare_provider(
+    request: MedicareRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> MedicareResponse:
     """Verify provider Medicare enrollment status across FFS and O&R datasets"""
-    return await medicare_service.verify_provider(request)
+    return await medicare_service.verify_provider(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # EDUCATION Endpoints
 @router.post(

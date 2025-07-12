@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medi-Cal Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>Medi-Cal Verification Report</h1>
+        <p class="subtitle">Medi-Cal Managed Care + ORP Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-warning{% endif %}">
+                        {{ status|upper }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Date:</div>
+                <div class="info-value">{{ verification_date }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Provider Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">NPI:</div>
+                <div class="info-value">{{ npi }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Provider Name:</div>
+                <div class="info-value">{{ provider_name }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Managed Care Verification</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Match Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if verifications.managed_care.match_status == 'verified' %}status-success{% else %}status-warning{% endif %}">
+                        {{ verifications.managed_care.match_status|upper }}
+                    </span>
+                </div>
+            </div>
+            {% if verifications.managed_care.match_status == 'verified' %}
+            <div class="info-item">
+                <div class="info-label">Effective Date:</div>
+                <div class="info-value">{{ verifications.managed_care.effective_date or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Last Updated:</div>
+                <div class="info-value">{{ verifications.managed_care.last_updated or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Source File:</div>
+                <div class="info-value">{{ verifications.managed_care.source_file or 'N/A' }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if verifications.managed_care.plan_participation %}
+        <div class="info-item">
+            <div class="info-label">Plan Participation:</div>
+            <div class="info-value">
+                {% for plan in verifications.managed_care.plan_participation %}
+                    <span class="status-badge status-success">{{ plan }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if verifications.managed_care.address %}
+        <div class="info-item">
+            <div class="info-label">Provider Address:</div>
+            <div class="info-value">
+                {{ verifications.managed_care.address.line1 }}<br>
+                {{ verifications.managed_care.address.city }}, {{ verifications.managed_care.address.state }} {{ verifications.managed_care.address.zip }}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if verifications.managed_care.match_status != 'verified' and verifications.managed_care.reason %}
+        <div class="info-item">
+            <div class="info-label">Reason:</div>
+            <div class="info-value">{{ verifications.managed_care.reason }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>ORP (Other Recognized Provider) Verification</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Match Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if verifications.orp.match_status == 'verified' %}status-success{% else %}status-warning{% endif %}">
+                        {{ verifications.orp.match_status|upper }}
+                    </span>
+                </div>
+            </div>
+            {% if verifications.orp.match_status == 'verified' %}
+            <div class="info-item">
+                <div class="info-label">Provider Status:</div>
+                <div class="info-value">{{ verifications.orp.status or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Enrollment Date:</div>
+                <div class="info-value">{{ verifications.orp.enrollment_date or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Last Updated:</div>
+                <div class="info-value">{{ verifications.orp.last_updated or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Source File:</div>
+                <div class="info-value">{{ verifications.orp.source_file or 'N/A' }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if verifications.orp.match_status != 'verified' and verifications.orp.reason %}
+        <div class="info-item">
+            <div class="info-label">Reason:</div>
+            <div class="info-value">{{ verifications.orp.reason }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Summary</h2>
+        <div class="info-item">
+            <div class="info-value">
+                <p><strong>Verification Results:</strong></p>
+                <ul>
+                    <li>Managed Care: 
+                        {% if verifications.managed_care.match_status == 'verified' %}
+                            ✓ Verified
+                        {% else %}
+                            ✗ Not Verified
+                        {% endif %}
+                    </li>
+                    <li>ORP (Other Recognized Provider): 
+                        {% if verifications.orp.match_status == 'verified' %}
+                            ✓ Verified
+                        {% else %}
+                            ✗ Not Verified
+                        {% endif %}
+                    </li>
+                </ul>
+                
+                {% if verifications.managed_care.match_status == 'verified' or verifications.orp.match_status == 'verified' %}
+                    <p><strong>✓ Provider Found:</strong> The provider has been successfully verified in at least one Medi-Cal system.</p>
+                {% else %}
+                    <p><strong>✗ Provider Not Found:</strong> The provider could not be verified in either Medi-Cal system.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if notes %}
+    <div class="info-section">
+        <h2>Additional Notes</h2>
+        <div class="info-item">
+            <div class="info-value">{{ notes }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This Medi-Cal verification report is generated from mocked Medi-Cal Managed Care and ORP data and is not valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The Medi-Cal enrollment status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

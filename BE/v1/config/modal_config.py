@@ -18,7 +18,7 @@ modal_image = modal.Image.debian_slim() \
 
 # Create Modal app for async processing
 app = modal.App(
-    "vera-platform", 
+    "vera-platform-v2", 
     image=modal_image,
     secrets=[
         modal.Secret.from_name("openai"),

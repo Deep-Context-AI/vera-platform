@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medicare Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>Medicare Verification Report</h1>
+        <p class="subtitle">Medicare Enrollment Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-warning{% endif %}">
+                        {{ status|upper }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Result:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if verification_result == 'verified' %}status-success{% else %}status-warning{% endif %}">
+                        {{ verification_result|upper }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Provider Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">NPI:</div>
+                <div class="info-value">{{ npi }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Provider Name:</div>
+                <div class="info-value">{{ full_name or 'N/A' }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% if data_sources.ffs_provider_enrollment %}
+    <div class="info-section">
+        <h2>FFS Provider Enrollment</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Found in Database:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if data_sources.ffs_provider_enrollment.found %}status-success{% else %}status-warning{% endif %}">
+                        {% if data_sources.ffs_provider_enrollment.found %}YES{% else %}NO{% endif %}
+                    </span>
+                </div>
+            </div>
+            {% if data_sources.ffs_provider_enrollment.found %}
+            <div class="info-item">
+                <div class="info-label">Enrollment Status:</div>
+                <div class="info-value">{{ data_sources.ffs_provider_enrollment.enrollment_status or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Enrollment Type:</div>
+                <div class="info-value">{{ data_sources.ffs_provider_enrollment.enrollment_type or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Specialty:</div>
+                <div class="info-value">{{ data_sources.ffs_provider_enrollment.specialty or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Reassignment:</div>
+                <div class="info-value">{{ data_sources.ffs_provider_enrollment.reassignment or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Last Updated:</div>
+                <div class="info-value">{{ data_sources.ffs_provider_enrollment.last_updated or 'N/A' }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if data_sources.ffs_provider_enrollment.practice_location %}
+        <div class="info-item">
+            <div class="info-label">Practice Location:</div>
+            <div class="info-value">{{ data_sources.ffs_provider_enrollment.practice_location }}</div>
+        </div>
+        {% endif %}
+        
+        {% if not data_sources.ffs_provider_enrollment.found and data_sources.ffs_provider_enrollment.reason %}
+        <div class="info-item">
+            <div class="info-label">Reason:</div>
+            <div class="info-value">{{ data_sources.ffs_provider_enrollment.reason }}</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if data_sources.ordering_referring_provider %}
+    <div class="info-section">
+        <h2>Ordering/Referring Provider</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Found in Database:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if data_sources.ordering_referring_provider.found %}status-success{% else %}status-warning{% endif %}">
+                        {% if data_sources.ordering_referring_provider.found %}YES{% else %}NO{% endif %}
+                    </span>
+                </div>
+            </div>
+            {% if data_sources.ordering_referring_provider.found %}
+            <div class="info-item">
+                <div class="info-label">Last Name:</div>
+                <div class="info-value">{{ data_sources.ordering_referring_provider.last_name or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">First Name:</div>
+                <div class="info-value">{{ data_sources.ordering_referring_provider.first_name or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">NPI:</div>
+                <div class="info-value">{{ data_sources.ordering_referring_provider.npi or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Specialty:</div>
+                <div class="info-value">{{ data_sources.ordering_referring_provider.specialty or 'N/A' }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Eligible to Order/Refer:</div>
+                <div class="info-value">
+                    {% if data_sources.ordering_referring_provider.eligible_to_order_or_refer is not none %}
+                        <span class="status-badge {% if data_sources.ordering_referring_provider.eligible_to_order_or_refer %}status-success{% else %}status-error{% endif %}">
+                            {% if data_sources.ordering_referring_provider.eligible_to_order_or_refer %}YES{% else %}NO{% endif %}
+                        </span>
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Last Updated:</div>
+                <div class="info-value">{{ data_sources.ordering_referring_provider.last_updated or 'N/A' }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if not data_sources.ordering_referring_provider.found and data_sources.ordering_referring_provider.reason %}
+        <div class="info-item">
+            <div class="info-label">Reason:</div>
+            <div class="info-value">{{ data_sources.ordering_referring_provider.reason }}</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="info-section">
+        <h2>Verification Summary</h2>
+        <div class="info-item">
+            <div class="info-value">
+                {% if verification_result == 'verified' %}
+                    <p><strong>✓ Verified:</strong> The provider has been successfully verified in the Medicare system based on the requested verification sources.</p>
+                {% elif verification_result == 'not_verified' %}
+                    <p><strong>✗ Not Verified:</strong> The provider could not be verified in the Medicare system based on the requested verification sources.</p>
+                {% else %}
+                    <p><strong>⚠️ Partial Verification:</strong> The provider was found in some but not all requested verification sources.</p>
+                {% endif %}
+                
+                <p><strong>Data Sources Checked:</strong></p>
+                <ul>
+                    {% if data_sources.ffs_provider_enrollment %}
+                        <li>FFS Provider Enrollment: {% if data_sources.ffs_provider_enrollment.found %}✓ Found{% else %}✗ Not Found{% endif %}</li>
+                    {% endif %}
+                    {% if data_sources.ordering_referring_provider %}
+                        <li>Ordering/Referring Provider: {% if data_sources.ordering_referring_provider.found %}✓ Found{% else %}✗ Not Found{% endif %}</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This Medicare verification report is generated from mocked Medicare enrollment data and is not valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The Medicare enrollment status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

@@ -28,7 +28,8 @@ class PDFService:
         self, 
         template_name: str, 
         data: Dict[str, Any], 
-        user_id: str,
+        practitioner_id: str,
+        user_id: Optional[str] = None,
         filename_prefix: str = "document"
     ) -> str:
         """
@@ -37,7 +38,8 @@ class PDFService:
         Args:
             template_name: Name of the template file (e.g., 'dea_verification.html')
             data: Data to populate the template
-            user_id: User ID for organizing documents
+            practitioner_id: Practitioner ID for organizing documents
+            user_id: User ID who invoked the call (included in document content)
             filename_prefix: Prefix for the generated filename
             
         Returns:
@@ -64,14 +66,14 @@ class PDFService:
             filename = f"{filename_prefix}_{timestamp}_{document_id}.pdf"
             
             # Render HTML template
-            html_content = self._render_template(template_name, data)
+            html_content = self._render_template(template_name, data, user_id)
             
             # Generate PDF from HTML
             pdf_content = self._generate_pdf_from_html(html_content, HTML, CSS)
             
             # Upload to Supabase storage
             document_url = await self._upload_to_supabase(
-                pdf_content, user_id, filename
+                pdf_content, practitioner_id, filename
             )
             
             logger.info(f"Successfully generated and uploaded PDF: {document_url}")
@@ -84,13 +86,14 @@ class PDFService:
                 service_name="PDF Service"
             )
     
-    def _render_template(self, template_name: str, data: Dict[str, Any]) -> str:
+    def _render_template(self, template_name: str, data: Dict[str, Any], user_id: Optional[str] = None) -> str:
         """
         Render Jinja2 template with provided data
         
         Args:
             template_name: Name of the template file
             data: Data to populate the template
+            user_id: User ID who invoked the call (optional)
             
         Returns:
             Rendered HTML content
@@ -102,7 +105,8 @@ class PDFService:
             template_data = {
                 **data,
                 'generated_at': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-                'document_id': str(uuid.uuid4())[:8].upper()
+                'document_id': str(uuid.uuid4())[:8].upper(),
+                'invoked_by_user_id': user_id
             }
             
             return template.render(**template_data)
@@ -290,7 +294,7 @@ class PDFService:
     async def _upload_to_supabase(
         self, 
         pdf_content: bytes, 
-        user_id: str, 
+        practitioner_id: str, 
         filename: str
     ) -> str:
         """
@@ -298,15 +302,15 @@ class PDFService:
         
         Args:
             pdf_content: PDF content as bytes
-            user_id: User ID for organizing documents
+            practitioner_id: Practitioner ID for organizing documents
             filename: Name of the file
             
         Returns:
             Public URL to the uploaded document
         """
         try:
-            # Create file path: user_id/filename
-            file_path = f"{user_id}/{filename}"
+            # Create file path: practitioner_id/filename
+            file_path = f"{practitioner_id}/{filename}"
             
             logger.info(f"Uploading PDF to Supabase storage: {file_path}")
             

@@ -11,6 +11,7 @@ from v1.models.responses import (
 from v1.models.database import SanctionCheckModelEnhanced, PractitionerEnhanced
 from v1.services.database import get_supabase_client
 from v1.services.practitioner_service import practitioner_service
+from v1.services.pdf_service import pdf_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -66,12 +67,14 @@ class SANCTIONService:
                 service_name="Sanctions Registry"
             )
 
-    async def comprehensive_sanctions_check(self, request: ComprehensiveSANCTIONRequest) -> ComprehensiveSANCTIONResponse:
+    async def comprehensive_sanctions_check(self, request: ComprehensiveSANCTIONRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> ComprehensiveSANCTIONResponse:
         """
         Perform comprehensive sanctions check through database lookup
         
         Args:
             request: ComprehensiveSANCTIONRequest containing detailed practitioner information
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             ComprehensiveSANCTIONResponse with comprehensive sanctions check results
@@ -95,6 +98,37 @@ class SANCTIONService:
             
             # Build response from database data
             response = self._build_comprehensive_response_from_db_record(sanction_data, request)
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id:
+                try:
+                    logger.info(f"Generating PDF document for sanctions check: {full_name}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document
+                    # Use practitioner_id from database if available, otherwise use NPI
+                    practitioner_id = str(sanction_data.practitioner_id) if sanction_data.practitioner_id else request.npi
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="sanctions_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="sanctions_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
             
             logger.info(f"Comprehensive sanctions check completed for: {full_name}")
             return response
