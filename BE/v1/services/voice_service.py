@@ -21,7 +21,7 @@ class VoiceCallRequest:
     purpose: str = "education_verification"
     caller_name: str = "Vera Platform"
     system_instruction: Optional[str] = None
-    voice_name: str = "Puck"
+    voice_name: str = "Kore"
     max_duration_minutes: int = 10
 
 @dataclass

@@ -23,7 +23,7 @@ class CallRequest:
     purpose: str = "education_verification"
     caller_name: str = "Vera Platform"
     system_instruction: Optional[str] = None
-    voice_name: str = "Puck"
+    voice_name: str = "Kore"
     max_duration_minutes: int = 10
 
 @dataclass
@@ -164,7 +164,7 @@ class TwilioService:
             purpose="test",
             caller_name="Vera Platform Test",
             system_instruction="You are a test voice assistant. Simply say 'Hi, this is a test call from Vera Platform. Have a great day!' and then end the call.",
-            voice_name="Puck",
+            voice_name="Kore",
             max_duration_minutes=2
         )
         
@@ -197,7 +197,7 @@ class TwilioService:
             purpose="education_verification",
             caller_name="Vera Platform Education Verification",
             system_instruction=system_instruction,
-            voice_name="Puck",
+            voice_name="Kore",
             max_duration_minutes=10
         )
         

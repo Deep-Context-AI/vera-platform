@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from dataclasses import dataclass
 
 from v1.models.requests import (
     NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
@@ -31,21 +32,30 @@ from v1.services.external.MEDICARE import medicare_service
 from v1.services.external.EDUCATION import education_service
 from v1.services.external.HOSPITAL_PRIVILEGES import hospital_privileges_service
 from v1.services.database import DatabaseService
+db_service = DatabaseService()
 from v1.services.audit_trail_service import audit_trail_service
 from v1.services.voice_service import voice_service, VoiceCallRequest as VoiceRequest
 from v1.services.voice.audio_utils import VoiceSessionManager, AudioChunk
-from v1.services.voice.gemini_voice_service import GeminiVoiceService, GeminiVoiceConfig
+from v1.services.voice.gemini_voice_service import GeminiVoiceService
 from v1.services.twilio_service import twilio_service
 
 # Create router
 router = APIRouter()
 
-# Initialize database service
-db_service = DatabaseService()
+# Track active WebSocket sessions
+active_websocket_sessions: Dict[str, "TwilioWebSocketHandler"] = {}
 
-# WebSocket session management
 logger = logging.getLogger(__name__)
-active_websocket_sessions: Dict[str, Dict[str, Any]] = {}
+
+
+@dataclass
+class SessionManager:
+    """Simple session manager for Gemini voice service"""
+    session_id: str
+    call_sid: str
+    phone_number: str = "unknown"
+    call_purpose: str = "test"
+
 
 class TwilioWebSocketHandler:
     """Handles WebSocket connections from Twilio media streams"""
@@ -58,24 +68,21 @@ class TwilioWebSocketHandler:
         self.session_manager: Optional[VoiceSessionManager] = None
         self.gemini_service: Optional[GeminiVoiceService] = None
         self.is_active = False
-        
+        self.message_count = 0  # Track total messages received
+        self.phone_number = "unknown"
+        self.call_purpose = "test"
+
     async def handle_connection(self):
         """Handle the WebSocket connection lifecycle"""
         try:
+            # Accept the connection
             await self.websocket.accept()
             logger.info(f"WebSocket connection accepted for session: {self.session_id}")
             
-            # Initialize services
-            await self._initialize_services()
+            # Add to active sessions
+            active_websocket_sessions[self.session_id] = self
             
-            # Store session in global registry
-            active_websocket_sessions[self.session_id] = {
-                "handler": self,
-                "start_time": time.time(),
-                "status": "connected"
-            }
-            
-            # Handle messages
+            # Start message processing
             await self._message_loop()
             
         except WebSocketDisconnect:
@@ -83,73 +90,80 @@ class TwilioWebSocketHandler:
         except Exception as e:
             logger.error(f"Error in WebSocket handler: {e}")
         finally:
+            # Clean up
             await self._cleanup()
-    
+
     async def _initialize_services(self):
-        """Initialize Gemini and session management services"""
+        """Initialize voice services"""
         try:
-            # Get call context from TwilioService
-            call_context = twilio_service.get_call_context(self.session_id)
-            
-            # Use call context or default values
-            if call_context:
-                voice_name = call_context.get("voice_name", "Puck")
-                system_instruction = call_context.get("system_instruction") or self._get_default_system_instruction(call_context.get("purpose", "test"))
-                self.call_purpose = call_context.get("purpose", "test")
-                self.phone_number = call_context.get("phone_number", "unknown")
-            else:
-                voice_name = "Puck"
-                system_instruction = self._get_default_system_instruction("test")
-                self.call_purpose = "test"
-                self.phone_number = "unknown"
-                logger.warning(f"No call context found for session: {self.session_id}")
-            
-            # Initialize Gemini service with dynamic configuration
-            config = GeminiVoiceConfig(
-                model_name="gemini-2.0-flash-live-001",
-                voice_name=voice_name,
-                system_instruction=system_instruction
-            )
-            
-            self.gemini_service = GeminiVoiceService(config)
-            await self.gemini_service.initialize()
+            # Initialize Gemini voice service
+            self.gemini_service = GeminiVoiceService()
+            if not await self.gemini_service.initialize():
+                raise Exception("Failed to initialize Gemini service")
             
             # Set up callbacks
             self.gemini_service.set_callbacks(
                 on_audio_received=self._on_gemini_audio_received,
                 on_turn_complete=self._on_gemini_turn_complete,
-                on_interrupted=self._on_gemini_interrupted,
                 on_error=self._on_gemini_error
             )
+            
+            # Initialize voice session manager
+            self.session_manager = VoiceSessionManager(
+                session_id=self.session_id,
+                call_sid=self.call_sid,
+                phone_number=self.phone_number
+            )
+            
+            # Create simple session manager for Gemini service
+            simple_session_manager = SessionManager(
+                session_id=self.session_id,
+                call_sid=self.call_sid,
+                phone_number=self.phone_number,
+                call_purpose=self.call_purpose
+            )
+            
+            # Start Gemini session
+            if not await self.gemini_service.start_session(simple_session_manager):
+                raise Exception("Failed to start Gemini session")
             
             logger.info(f"Services initialized for session: {self.session_id}, purpose: {self.call_purpose}")
             
         except Exception as e:
             logger.error(f"Failed to initialize services: {e}")
             raise
-    
+
     async def _message_loop(self):
         """Main message processing loop"""
-        while True:
-            try:
+        try:
+            while True:
                 # Receive message from Twilio
                 message = await self.websocket.receive_text()
-                await self._handle_twilio_message(message)
+                self.message_count += 1
+                logger.debug(f"WebSocket message #{self.message_count} received: {len(message)} chars")
                 
-            except WebSocketDisconnect:
-                logger.info("WebSocket disconnected")
-                break
-            except Exception as e:
-                logger.error(f"Error in message loop: {e}")
-                break
+                try:
+                    data = json.loads(message)
+                    await self._handle_twilio_message(data)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON message: {e}")
+                    logger.error(f"Raw message: {message}")
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
+                    
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected after {self.message_count} messages")
+        except Exception as e:
+            logger.error(f"Error in message loop after {self.message_count} messages: {e}")
     
-    async def _handle_twilio_message(self, message: str):
-        """Handle incoming message from Twilio WebSocket"""
+    async def _handle_twilio_message(self, data: Dict[str, Any]):
+        """Handle incoming messages from Twilio WebSocket"""
         try:
-            data = json.loads(message)
             event_type = data.get("event")
-            
-            # logger.info(f"Received Twilio event: {event_type}")
+            if event_type == "media":
+                logger.info(f"Received Twilio media event")
+            else:
+                logger.debug(f"Received Twilio event: {event_type}")
             
             if event_type == "connected":
                 logger.info("Twilio WebSocket connected")
@@ -162,116 +176,115 @@ class TwilioWebSocketHandler:
                 
                 logger.info(f"Twilio media stream started for call: {self.call_sid}, stream: {self.stream_sid}")
                 
-                # Initialize session manager
-                if self.call_sid:
-                    self.session_manager = VoiceSessionManager(
-                        self.session_id,
-                        self.call_sid,
-                        self.phone_number
-                    )
-                    
-                    # Start Gemini session
-                    await self.gemini_service.start_session(self.session_manager)
-                    
-                    # Send initial greeting
-                    await self.gemini_service.send_initial_greeting()
-                    
-                    self.is_active = True
+                # Initialize services now that we have call information
+                await self._initialize_services()
+                
+                # Mark session as active
+                self.is_active = True
+                logger.info(f"Session fully initialized: is_active={self.is_active}")
                 
             elif event_type == "media":
-                # Process incoming audio
-                if self.session_manager and self.is_active:
-                    media_data = data.get("media", {})
-                    payload = media_data.get("payload")
-                    
-                    if payload:
-                        timestamp = time.time()
-                        audio_chunk = await self.session_manager.process_twilio_audio(payload, timestamp)
-                        
-                        # Send to Gemini
-                        await self.gemini_service.send_audio_chunk(audio_chunk)
+                # Handle media events using the simplified method
+                await self._handle_media_event(data)
                         
             elif event_type == "stop":
                 logger.info("Twilio media stream stopped")
                 self.is_active = False
                 
+                # End the Gemini session
                 if self.gemini_service:
                     await self.gemini_service.end_session()
+                    
+            else:
+                logger.debug(f"Unhandled Twilio event type: {event_type}")
                 
         except Exception as e:
             logger.error(f"Error handling Twilio message: {e}")
+            logger.error(f"Message data: {data}")
     
     async def _on_gemini_audio_received(self, audio_chunk: AudioChunk):
         """Handle audio received from Gemini"""
         try:
-            if not self.is_active or not self.stream_sid:
-                return
-                
-            # Send audio back to Twilio
-            media_message = {
-                "event": "media",
-                "streamSid": self.stream_sid,  # Use stream_sid, not call_sid!
-                "media": {
-                    "payload": audio_chunk.to_base64()
+            # Send audio to Twilio in the correct format
+            if self.stream_sid:
+                media_message = {
+                    "event": "media",
+                    "streamSid": self.stream_sid,
+                    "media": {
+                        "payload": audio_chunk.to_base64()
+                    }
                 }
-            }
-            
-            await self.websocket.send_text(json.dumps(media_message))
-            logger.info(f"Sent audio to Twilio: {len(audio_chunk.data)} bytes, format: {audio_chunk.format}")
+                await self.websocket.send_text(json.dumps(media_message))
+                logger.info(f"Sent audio to Twilio: {len(audio_chunk.data)} bytes, format: {audio_chunk.format}")
+            else:
+                logger.warning("Cannot send audio - no stream_sid available")
             
         except Exception as e:
             logger.error(f"Error sending audio to Twilio: {e}")
-    
+
     async def _on_gemini_turn_complete(self):
         """Handle Gemini turn completion"""
-        logger.info("Gemini turn completed")
+        logger.info(f"Gemini turn completed - session still active: {self.is_active}, message count: {self.message_count}")
         
-        # For test calls, end after first response
-        if self.call_purpose == "test":
-            logger.info("Test call completed, ending call")
-            self.is_active = False
-            
-            # Send a mark message to indicate completion
-            if self.stream_sid:
-                mark_message = {
-                    "event": "mark",
-                    "streamSid": self.stream_sid,
-                    "mark": {
-                        "name": "call_completed"
-                    }
-                }
-                await self.websocket.send_text(json.dumps(mark_message))
-    
-    async def _on_gemini_interrupted(self):
-        """Handle Gemini interruption"""
-        logger.info("Gemini was interrupted")
-        if self.session_manager:
-            await self.session_manager.clear_buffers()
-    
+        # Continue listening for user input instead of ending the call
+        logger.info("Turn completed - continuing to listen for user input")
+
     async def _on_gemini_error(self, error: Exception):
         """Handle Gemini error"""
         logger.error(f"Gemini error: {error}")
-        self.is_active = False
-    
-    def _get_default_system_instruction(self, purpose: str) -> str:
-        """Get default system instruction based on call purpose"""
-        instructions = {
-            "test": "You are a test voice assistant. Simply say 'Hi, this is a test call from Vera Platform. Have a great day!' and then end the call.",
-            "education_verification": """You are a professional voice assistant for education verification calls. 
-            Speak clearly and concisely. Keep responses brief and to the point. 
-            You are calling to verify education credentials. Be polite and professional.""",
-            "hospital_privileges": """You are a professional voice assistant for hospital privileges verification calls.
-            Speak clearly and concisely. Keep responses brief and to the point.
-            You are calling to verify hospital privileges and credentials. Be polite and professional."""
-        }
         
-        return instructions.get(purpose, instructions["test"])
-    
-    async def _cleanup(self):
-        """Clean up resources"""
+        # Don't disable the session for recoverable errors like API signature issues
+        # Only disable for critical errors that indicate the session is fundamentally broken
+        error_message = str(error).lower()
+        
+        if any(keyword in error_message for keyword in [
+            "connection", "network", "timeout", "authentication", "authorization"
+        ]):
+            # Critical errors that require session restart
+            logger.error("Critical Gemini error - disabling session")
+            self.is_active = False
+        else:
+            # Recoverable errors (like API signature issues) - log but continue
+            logger.warning(f"Recoverable Gemini error: {error}")
+
+    async def _handle_media_event(self, data: Dict[str, Any]):
+        """Handle media events from Twilio"""
         try:
+            if not self.session_manager or not self.is_active:
+                logger.warning(f"Received media event but session not ready - session_manager: {self.session_manager is not None}, is_active: {self.is_active}")
+                return
+            
+            # Log incoming audio processing
+            media_payload = data.get("media", {}).get("payload", "")
+            if media_payload:
+                logger.info(f"Processing incoming audio from user: {len(media_payload)} chars")
+            
+            # Process the audio chunk
+            audio_chunk = await self.session_manager.process_twilio_audio(
+                media_payload,
+                float(data.get("media", {}).get("timestamp", 0))
+            )
+            
+            # Send to Gemini
+            if self.gemini_service:
+                await self.gemini_service.send_audio_chunk(audio_chunk)
+                logger.info(f"Sent user audio to Gemini: {len(audio_chunk.data)} bytes")
+                
+        except Exception as e:
+            logger.error(f"Error handling media event: {e}")
+
+    async def _cleanup(self):
+        """Cleanup resources"""
+        try:
+            # End Gemini session
             if self.gemini_service:
                 await self.gemini_service.end_session()
+            
+            # Save session audio for debugging
+            if self.session_manager:
+                logger.info("Saving session audio for debugging...")
+                result = await self.session_manager.save_session_audio()
+                logger.info(f"Audio save result: {result}")
             
             # Remove from active sessions
             if self.session_id in active_websocket_sessions:
@@ -841,6 +854,111 @@ async def make_education_verification_call(
         logger.error(f"Education verification call failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/voice/debug/audio/{session_id}")
+async def get_voice_debug_audio(session_id: str):
+    """Get debug audio files for a voice session"""
+    try:
+        import modal
+        from datetime import datetime
+        
+        # Get the voice debug volume
+        debug_volume = modal.Volume.from_name("voice-debug-audio")
+        
+        # Try to find the session directory
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        session_dir = f"voice_debug/{today}/{session_id}"
+        
+        # List files in the session directory
+        try:
+            files = list(debug_volume.listdir(f"/{session_dir}"))
+            
+            # Get metadata if it exists
+            metadata_path = f"/{session_dir}/session_metadata.json"
+            metadata = None
+            
+            if "session_metadata.json" in [f.name for f in files]:
+                with debug_volume.open(metadata_path, "r") as f:
+                    metadata = json.loads(f.read())
+            
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "storage_path": session_dir,
+                "files": [{"name": f.name, "size": f.size} for f in files],
+                "metadata": metadata
+            }
+            
+        except Exception as e:
+            return {
+                "status": "not_found",
+                "message": f"Session audio not found: {e}",
+                "session_id": session_id
+            }
+            
+    except Exception as e:
+        logger.error(f"Error retrieving debug audio: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@router.get("/voice/debug/audio/{session_id}/download/{filename}")
+async def download_voice_debug_audio(session_id: str, filename: str):
+    """Download a specific debug audio file"""
+    try:
+        import modal
+        import tempfile
+        import os
+        from fastapi.responses import FileResponse
+        from datetime import datetime
+        
+        # Get the voice debug volume
+        debug_volume = modal.Volume.from_name("voice-debug-audio")
+        
+        # Construct file path
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        session_dir = f"voice_debug/{today}/{session_id}"
+        file_path = f"/{session_dir}/{filename}"
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Download from volume - use the correct path format
+            debug_volume.get_file(file_path, temp_path)
+            
+            # Determine media type based on filename
+            if filename.endswith('.json'):
+                media_type = "application/json"
+            elif filename.endswith('.raw'):
+                media_type = "audio/raw"
+            else:
+                media_type = "application/octet-stream"
+            
+            return FileResponse(
+                path=temp_path,
+                filename=filename,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}",
+                    "X-Session-ID": session_id
+                }
+            )
+            
+        except Exception as download_error:
+            # Clean up temp file if download failed
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise download_error
+            
+    except Exception as e:
+        logger.error(f"Error downloading debug audio: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 # WebSocket endpoint for Twilio media streams
 @router.websocket("/media-stream/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
@@ -864,10 +982,11 @@ async def websocket_health_check():
 async def get_active_websocket_sessions():
     """Get information about active WebSocket sessions"""
     session_info = {}
-    for session_id, session_data in active_websocket_sessions.items():
+    for session_id, handler in active_websocket_sessions.items():
         session_info[session_id] = {
-            "start_time": session_data["start_time"],
-            "status": session_data["status"],
-            "duration": time.time() - session_data["start_time"]
+            "session_id": session_id,
+            "call_sid": handler.call_sid,
+            "is_active": handler.is_active,
+            "message_count": handler.message_count
         }
     return {"active_sessions": session_info}
