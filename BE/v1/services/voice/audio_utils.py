@@ -122,6 +122,15 @@ class AudioConverter:
             # 1. Decode base64 from Twilio
             mulaw_data = base64.b64decode(twilio_payload)
             
+            # Check for problematic patterns
+            if len(mulaw_data) > 0:
+                # Check for repeating patterns that indicate silence/noise
+                if all(b == mulaw_data[0] for b in mulaw_data):
+                    logger.debug(f"⚠️ Repeating μ-law pattern detected: {hex(mulaw_data[0])}")
+            else:
+                logger.error("No μ-law data after base64 decode")
+                raise AudioConversionError("Empty μ-law data")
+            
             # 2. Convert μ-law to linear PCM (16-bit)
             pcm_data = audioop.ulaw2lin(mulaw_data, self.SAMPLE_WIDTH)
             
@@ -137,7 +146,7 @@ class AudioConverter:
             
             self.sequence_counter += 1
             
-            return AudioChunk(
+            result = AudioChunk(
                 data=pcm_16khz,
                 format=AudioFormat.GEMINI_PCM,
                 sample_rate=self.GEMINI_INPUT_SAMPLE_RATE,
@@ -145,8 +154,12 @@ class AudioConverter:
                 sequence_id=self.sequence_counter
             )
             
+            return result
+            
         except Exception as e:
             logger.error(f"Error converting Twilio to Gemini audio: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise AudioConversionError(f"Failed to convert Twilio audio: {e}")
     
     def gemini_to_twilio(self, gemini_data: bytes, timestamp: float) -> AudioChunk:
@@ -337,18 +350,36 @@ class VoiceSessionManager:
     async def process_twilio_audio(self, audio_payload: str, timestamp: float) -> AudioChunk:
         """Process incoming audio from Twilio and convert to Gemini format"""
         try:
-            logger.debug(f"Processing Twilio audio payload: {len(audio_payload)} chars")
-            
             # Record raw Twilio audio for debugging
             if self.audio_recording_enabled:
                 raw_audio = base64.b64decode(audio_payload)
+                
+                # Only log if audio contains meaningful data
+                if len(raw_audio) > 0:
+                    non_zero_raw = sum(1 for b in raw_audio if b != 0)
+                    raw_silence = (len(raw_audio) - non_zero_raw) / len(raw_audio) * 100
+                    
+                    # Only log voice data, not silence
+                    if raw_silence < 90:
+                        logger.debug(f"🎤 Raw audio: {len(raw_audio)} bytes, {non_zero_raw} non-zero bytes")
+                
                 self.recorded_input_audio.extend(raw_audio)
-                logger.debug(f"Recorded {len(raw_audio)} bytes of raw Twilio audio")
             
             # Convert Twilio audio to Gemini format
-            logger.debug("Converting Twilio audio to Gemini format")
-            gemini_chunk = self.audio_converter.twilio_to_gemini(audio_payload, timestamp)
-            logger.debug(f"Converted to Gemini format: {len(gemini_chunk.data)} bytes")
+            try:
+                gemini_chunk = self.audio_converter.twilio_to_gemini(audio_payload, timestamp)
+                
+                # Only log conversion results for voice data
+                if len(gemini_chunk.data) > 0:
+                    non_zero_converted = sum(1 for b in gemini_chunk.data if b != 0)
+                    converted_silence = (len(gemini_chunk.data) - non_zero_converted) / len(gemini_chunk.data) * 100
+                    
+                    if converted_silence < 90:
+                        logger.debug(f"🔄 Converted: {len(gemini_chunk.data)} bytes, {non_zero_converted} non-zero bytes")
+                
+            except Exception as conv_error:
+                logger.error(f"Audio conversion failed: {conv_error}")
+                raise
             
             # Record converted audio sent to Gemini
             if self.audio_recording_enabled:
@@ -360,11 +391,12 @@ class VoiceSessionManager:
             # Update conversation state
             self.conversation_state.update_activity(timestamp)
             
-            logger.debug(f"Successfully processed Twilio audio: {len(gemini_chunk.data)} bytes")
             return gemini_chunk
             
         except Exception as e:
             logger.error(f"Error processing Twilio audio: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     
     async def process_gemini_audio(self, audio_data: bytes, timestamp: float) -> AudioChunk:

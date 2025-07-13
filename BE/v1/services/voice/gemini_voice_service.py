@@ -90,6 +90,8 @@ class GeminiVoiceService:
             self.state = GeminiSessionState.CONNECTING
             self.session_start_time = asyncio.get_event_loop().time()
             
+            logger.info(f"🚀 Starting Gemini Live session for call: {session_manager.call_sid}")
+            
             # Initialize voice session manager
             self.voice_session_manager = VoiceSessionManager(
                 session_id=session_manager.session_id,
@@ -99,27 +101,37 @@ class GeminiVoiceService:
             
             # Connect to Gemini Live API
             config = self._build_live_config()
+            logger.info(f"📋 Gemini Live config: model={self.config.model_name}, voice={self.config.voice_name}")
+            
             self._session_context_manager = self.client.aio.live.connect(
                 model=self.config.model_name,
                 config=config
             )
             
             # Start the session using the context manager
+            logger.info("🔗 Establishing Gemini Live connection...")
             self.session = await self._session_context_manager.__aenter__()
+            logger.info("✅ Gemini Live session established")
             
             self.state = GeminiSessionState.CONNECTED
             logger.info(f"Gemini Live session started for call: {session_manager.call_sid}")
             
             # Start response handler
-            asyncio.create_task(self._handle_gemini_responses())
+            logger.info("🎧 Starting Gemini response handler task...")
+            response_task = asyncio.create_task(self._handle_gemini_responses())
+            logger.info(f"📡 Response handler task created: {response_task}")
             
             # Send initial greeting
+            logger.info("👋 Sending initial greeting to Gemini...")
             await self.send_initial_greeting()
+            logger.info("✅ Initial greeting sent")
             
             return True
             
         except Exception as e:
             logger.error(f"Failed to start Gemini session: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             self.state = GeminiSessionState.ERROR
             if self.on_error:
                 await self.on_error(e)
@@ -136,17 +148,94 @@ class GeminiVoiceService:
             return False
             
         try:
-            # Just send it - let Gemini handle VAD and turn management
-            await self.session.send_realtime_input(
-                audio=types.Blob(
-                    data=audio_chunk.data,
-                    mime_type="audio/pcm;rate=16000"
-                )
+            # Quick analysis of audio content
+            non_zero_bytes = sum(1 for b in audio_chunk.data if b != 0) if len(audio_chunk.data) > 0 else 0
+            silence_percentage = (len(audio_chunk.data) - non_zero_bytes) / len(audio_chunk.data) * 100 if len(audio_chunk.data) > 0 else 100
+            
+            # Only log if audio contains meaningful data (less than 90% silence)
+            if silence_percentage < 90:
+                logger.info(f"🎤 Sending VOICE audio to Gemini: {len(audio_chunk.data)} bytes, {non_zero_bytes} non-zero bytes ({100-silence_percentage:.1f}% signal)")
+            else:
+                logger.debug(f"🔇 Sending silence to Gemini: {len(audio_chunk.data)} bytes, {silence_percentage:.1f}% silence")
+            
+            # Create the blob for Gemini
+            audio_blob = types.Blob(
+                data=audio_chunk.data,
+                mime_type="audio/pcm;rate=16000"
             )
+            
+            # Send to Gemini Live API
+            await self.session.send_realtime_input(audio=audio_blob)
+            
             return True
             
         except Exception as e:
             logger.error(f"Error sending audio chunk to Gemini: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Check if this is a recoverable error
+            error_str = str(e).lower()
+            if "signature" in error_str or "invalid" in error_str:
+                logger.warning("Gemini API signature/validation error - continuing session")
+            else:
+                logger.error("Critical Gemini error - may need to restart session")
+                
+            if self.on_error:
+                await self.on_error(e)
+            return False
+
+    async def send_raw_audio_chunk(self, audio_chunk: AudioChunk) -> bool:
+        """Send raw Twilio audio chunk to Gemini with proper format conversion"""
+        if self.state != GeminiSessionState.CONNECTED:
+            logger.debug(f"Cannot send audio chunk in state: {self.state}")
+            return False
+            
+        if not self.session:
+            logger.error("No active Gemini session")
+            return False
+            
+        try:
+            logger.info(f"📡 Converting and sending audio to Gemini:")
+            logger.info(f"  - Input format: {audio_chunk.format} (μ-law)")
+            logger.info(f"  - Input sample rate: {audio_chunk.sample_rate}Hz")
+            logger.info(f"  - Input data length: {len(audio_chunk.data)} bytes")
+            
+            # Convert μ-law to PCM since Gemini expects PCM format
+            import audioop
+            
+            # Step 1: Convert μ-law to linear PCM (16-bit)
+            pcm_data = audioop.ulaw2lin(audio_chunk.data, 2)  # 2 = 16-bit
+            logger.info(f"  - After μ-law->PCM conversion: {len(pcm_data)} bytes")
+            
+            # Step 2: Resample from 8kHz to 16kHz (Gemini expects 16kHz)
+            pcm_16khz, _ = audioop.ratecv(
+                pcm_data,
+                2,  # 16-bit = 2 bytes
+                1,  # mono
+                8000,  # input sample rate (Twilio)
+                16000,  # output sample rate (Gemini)
+                None  # no state
+            )
+            logger.info(f"  - After resampling to 16kHz: {len(pcm_16khz)} bytes")
+            
+            # Step 3: Create blob with correct format for Gemini
+            audio_blob = types.Blob(
+                data=pcm_16khz,
+                mime_type="audio/pcm;rate=16000"  # Gemini's expected format
+            )
+            
+            logger.info("📤 Sending converted PCM audio to Gemini Live API...")
+            await self.session.send_realtime_input(audio=audio_blob)
+            logger.info("✅ Successfully sent converted audio to Gemini")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error converting and sending audio to Gemini: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
             if self.on_error:
                 await self.on_error(e)
             return False
@@ -158,17 +247,28 @@ class GeminiVoiceService:
             return False
             
         try:
+            logger.info("📝 Preparing initial greeting for Gemini...")
+            
             # Use send_client_content for text-to-audio conversion
+            greeting_content = {
+                "role": "user", 
+                "parts": [{"text": "Hello! Please respond with audio and only 'hi'"}]
+            }
+            
+            logger.info(f"💬 Sending greeting: {greeting_content}")
+            
             await self.session.send_client_content(
-                turns={"role": "user", "parts": [{"text": "Hello! Please respond with audio and introduce yourself as Vera, a professional voice assistant helping with education verification calls."}]},
+                turns=greeting_content,
                 turn_complete=True
             )
             
-            logger.info("Initial greeting sent to Gemini")
+            logger.info("✅ Initial greeting sent to Gemini successfully")
             return True
             
         except Exception as e:
-            logger.error(f"Error sending initial greeting: {e}")
+            logger.error(f"❌ Error sending initial greeting: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             if self.on_error:
                 await self.on_error(e)
             return False
@@ -190,43 +290,123 @@ class GeminiVoiceService:
         return True
 
     async def _handle_gemini_responses(self):
-        """Handle responses from Gemini Live API"""
-        try:
-            async for response in self.session.receive():
-                await self._process_gemini_response(response)
-        except Exception as e:
-            logger.error(f"Error in Gemini response handler: {e}")
-            self.state = GeminiSessionState.ERROR
-            if self.on_error:
-                await self.on_error(e)
+        """Continuously read and process responses from Gemini Live API.
+
+        In some cases the underlying ``session.receive()`` async generator finishes
+        without raising an exception (for example when the server thinks the turn
+        is complete but keeps the connection open).  Previously we exited the
+        handler permanently in that situation which meant **no further Gemini
+        responses were ever processed** even though we kept streaming user audio.
+
+        We now wrap the ``async for`` loop inside an outer ``while`` so that we
+        automatically resume reading if the generator terminates while the
+        session is still logically connected.  This makes the handler resilient
+        to benign stream closures that happen after each turn and prevents the
+        "stuck after first response" behaviour the logs in dump.txt revealed.
+        """
+
+        logger.info("Starting Gemini response handler...")
+        response_count = 0
+
+        while self.state == GeminiSessionState.CONNECTED and self.session:
+            try:
+                last_heartbeat = asyncio.get_event_loop().time()
+
+                # The inner loop will automatically break if the stream closes
+                async for response in self.session.receive():
+                    response_count += 1
+                    current_time = asyncio.get_event_loop().time()
+
+                    logger.info(
+                        f"📨 Gemini response #{response_count} received at {current_time:.2f}s"
+                    )
+
+                    await self._process_gemini_response(response)
+
+                    # Emit a heartbeat every ~5 s so we know the task is alive
+                    if current_time - last_heartbeat > 5.0:
+                        logger.info(
+                            f"💓 Gemini response handler heartbeat – {response_count} responses so far"
+                        )
+                        last_heartbeat = current_time
+
+                # If we get here **without** hitting an exception the async
+                # generator ended cleanly.  That usually means the server sent
+                # a GO_AWAY or closed the stream after a turn.  We'll simply
+                # restart the receive loop unless the session has been marked
+                # inactive in the meantime.
+                if self.state == GeminiSessionState.CONNECTED:
+                    logger.warning(
+                        "Gemini receive stream ended unexpectedly – restarting listener"
+                    )
+                    # Small pause to avoid a tight reconnect loop in pathological cases
+                    await asyncio.sleep(0.1)
+
+            except Exception as e:
+                logger.error(
+                    f"Error in Gemini response handler after {response_count} responses: {e}"
+                )
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+                self.state = GeminiSessionState.ERROR
+                if self.on_error:
+                    await self.on_error(e)
+                break  # Abort outer while – caller will decide what to do
+
+        logger.info(
+            f"Gemini response handler terminated after processing {response_count} responses"
+        )
 
     async def _process_gemini_response(self, response):
         """Process individual response from Gemini"""
         try:
-            # Handle audio output
+            logger.debug(f"=== GEMINI RESPONSE DEBUG ===")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response attributes: {dir(response)}")
+            
+            processed_audio = False  # ensure we don't send the same chunk twice
+
+            # 1) Top-level `data` attribute (seen with some server messages)
             if hasattr(response, 'data') and response.data:
-                if self.voice_session_manager:
-                    # Convert Gemini audio to Twilio format
-                    timestamp = asyncio.get_event_loop().time()
-                    twilio_chunk = await self.voice_session_manager.process_gemini_audio(
-                        response.data, timestamp
-                    )
-                    
-                    # Send to callback
-                    if self.on_audio_received:
-                        await self.on_audio_received(twilio_chunk)
+                logger.info(f"🎵 Received audio data from Gemini: {len(response.data)} bytes (top-level)")
+
+                await self._forward_gemini_audio(response.data)
+                processed_audio = True
 
             # Handle server content (transcriptions, turn completion, etc.)
             if hasattr(response, 'server_content') and response.server_content:
                 server_content = response.server_content
+                logger.debug(f"Server content received: {type(server_content)}")
+                logger.debug(f"Server content attributes: {dir(server_content)}")
                 
-                # Log transcriptions
+                # Check for audio data in model_turn parts
                 if hasattr(server_content, 'model_turn') and server_content.model_turn:
                     model_turn = server_content.model_turn
+                    logger.debug(f"Model turn received: {type(model_turn)}")
+                    
                     if hasattr(model_turn, 'parts'):
-                        for part in model_turn.parts:
+                        logger.debug(f"Model turn has {len(model_turn.parts)} parts")
+                        for i, part in enumerate(model_turn.parts):
+                            logger.debug(f"Part {i}: {type(part)}")
+                            
+                            # Check for text content
                             if hasattr(part, 'text') and part.text:
-                                logger.info(f"Gemini speech transcribed: '{part.text.strip()}'")
+                                logger.info(f"💬 Gemini speech transcribed: '{part.text.strip()}'")
+                            
+                            # Check for audio data in parts
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                inline_data = part.inline_data
+                                if hasattr(inline_data, 'mime_type') and 'audio' in inline_data.mime_type:
+                                    if hasattr(inline_data, 'data') and inline_data.data:
+                                        logger.info(f"🎵 Found audio in model_turn part {i}: {len(inline_data.data)} bytes, mime_type: {inline_data.mime_type}")
+                                        
+                                        if not processed_audio:
+                                            await self._forward_gemini_audio(inline_data.data)
+                                            processed_audio = True
+                            
+                            if not hasattr(part, 'text') and not hasattr(part, 'inline_data'):
+                                logger.debug(f"Part {i} has no text or inline_data")
 
                 # Handle turn completion
                 if hasattr(server_content, 'turn_complete') and server_content.turn_complete:
@@ -235,11 +415,53 @@ class GeminiVoiceService:
                     
                     if self.on_turn_complete:
                         await self.on_turn_complete()
+                        logger.debug("Turn complete callback executed")
+                    else:
+                        logger.warning("No turn complete callback available")
+                else:
+                    logger.debug("No turn completion in server content")
+            else:
+                logger.debug("No server content in response")
+                
+            # Handle other response types
+            if hasattr(response, 'tool_call') and response.tool_call:
+                logger.debug(f"Tool call received: {response.tool_call}")
+                
+            if hasattr(response, 'client_content') and response.client_content:
+                logger.debug(f"Client content received: {response.client_content}")
+                
+            logger.debug(f"=== END GEMINI RESPONSE DEBUG ===")
 
         except Exception as e:
             logger.error(f"Error processing Gemini response: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             if self.on_error:
                 await self.on_error(e)
+
+    async def _forward_gemini_audio(self, gemini_audio: bytes):
+        """Helper to convert Gemini PCM to Twilio μ-law and forward via callback."""
+        if not self.voice_session_manager:
+            logger.warning("⚠️ No voice session manager available – dropping audio")
+            return
+
+        try:
+            timestamp = asyncio.get_event_loop().time()
+            twilio_chunk = await self.voice_session_manager.process_gemini_audio(
+                gemini_audio, timestamp
+            )
+
+            logger.info(
+                f"🔄 Converted Gemini audio to Twilio format: {len(twilio_chunk.data)} bytes"
+            )
+
+            if self.on_audio_received:
+                await self.on_audio_received(twilio_chunk)
+                logger.info("📤 Audio sent to Twilio callback")
+            else:
+                logger.warning("⚠️ No audio callback available")
+        except Exception as e:
+            logger.error(f"Error forwarding Gemini audio: {e}")
 
     def _build_live_config(self) -> types.LiveConnectConfig:
         """Build configuration for Gemini Live API"""

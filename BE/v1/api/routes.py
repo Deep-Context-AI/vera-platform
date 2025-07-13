@@ -160,10 +160,10 @@ class TwilioWebSocketHandler:
         """Handle incoming messages from Twilio WebSocket"""
         try:
             event_type = data.get("event")
-            if event_type == "media":
-                logger.info(f"Received Twilio media event")
-            else:
-                logger.debug(f"Received Twilio event: {event_type}")
+            
+            # Only log non-media events and important media events
+            if event_type != "media":
+                logger.info(f"📞 Twilio event: {event_type}")
             
             if event_type == "connected":
                 logger.info("Twilio WebSocket connected")
@@ -174,21 +174,21 @@ class TwilioWebSocketHandler:
                 self.call_sid = start_data.get("callSid")
                 self.stream_sid = start_data.get("streamSid")  # This is what we need for audio!
                 
-                logger.info(f"Twilio media stream started for call: {self.call_sid}, stream: {self.stream_sid}")
+                logger.info(f"🎬 Twilio media stream started for call: {self.call_sid}, stream: {self.stream_sid}")
                 
                 # Initialize services now that we have call information
                 await self._initialize_services()
                 
                 # Mark session as active
                 self.is_active = True
-                logger.info(f"Session fully initialized: is_active={self.is_active}")
+                logger.info(f"✅ Session fully initialized: is_active={self.is_active}")
                 
             elif event_type == "media":
                 # Handle media events using the simplified method
                 await self._handle_media_event(data)
                         
             elif event_type == "stop":
-                logger.info("Twilio media stream stopped")
+                logger.info("🛑 Twilio media stream stopped")
                 self.is_active = False
                 
                 # End the Gemini session
@@ -201,7 +201,9 @@ class TwilioWebSocketHandler:
         except Exception as e:
             logger.error(f"Error handling Twilio message: {e}")
             logger.error(f"Message data: {data}")
-    
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
     async def _on_gemini_audio_received(self, audio_chunk: AudioChunk):
         """Handle audio received from Gemini"""
         try:
@@ -254,24 +256,70 @@ class TwilioWebSocketHandler:
                 logger.warning(f"Received media event but session not ready - session_manager: {self.session_manager is not None}, is_active: {self.is_active}")
                 return
             
-            # Log incoming audio processing
-            media_payload = data.get("media", {}).get("payload", "")
-            if media_payload:
-                logger.info(f"Processing incoming audio from user: {len(media_payload)} chars")
+            # Extract media data
+            media_data = data.get("media", {})
+            media_payload = media_data.get("payload", "")
+            media_timestamp = media_data.get("timestamp", 0)
             
-            # Process the audio chunk
-            audio_chunk = await self.session_manager.process_twilio_audio(
-                media_payload,
-                float(data.get("media", {}).get("timestamp", 0))
-            )
+            # Check if payload is empty
+            if not media_payload:
+                logger.warning("Empty media payload received")
+                return
             
-            # Send to Gemini
+            # Check if payload is changing (detect repeated payloads)
+            if not hasattr(self, '_last_payload_hash'):
+                self._last_payload_hash = hash(media_payload)
+                self._payload_repeat_count = 0
+                logger.info(f"🎵 First audio payload received: {len(media_payload)} chars")
+            else:
+                current_hash = hash(media_payload)
+                if current_hash == self._last_payload_hash:
+                    self._payload_repeat_count += 1
+                    # Only log every 50 repeated payloads to reduce noise
+                    if self._payload_repeat_count % 50 == 0:
+                        logger.warning(f"🔄 Repeated payload detected! Count: {self._payload_repeat_count}")
+                else:
+                    if self._payload_repeat_count > 0:
+                        logger.info(f"🆕 New audio payload after {self._payload_repeat_count} repeats")
+                    self._last_payload_hash = current_hash
+                    self._payload_repeat_count = 0
+                    logger.info(f"🎤 New audio payload: {len(media_payload)} chars")
+            
+            # Send RAW Twilio audio directly to Gemini (no processing)
             if self.gemini_service:
-                await self.gemini_service.send_audio_chunk(audio_chunk)
-                logger.info(f"Sent user audio to Gemini: {len(audio_chunk.data)} bytes")
+                try:
+                    # Create a simple audio chunk with raw data
+                    import base64
+                    raw_audio_data = base64.b64decode(media_payload)
+                    
+                    # Create AudioChunk with raw Twilio data
+                    from v1.services.voice.audio_utils import AudioChunk, AudioFormat
+                    raw_audio_chunk = AudioChunk(
+                        data=raw_audio_data,
+                        format=AudioFormat.TWILIO_MULAW,  # Keep original format
+                        sample_rate=8000,  # Twilio's sample rate
+                        timestamp=float(media_timestamp),
+                        sequence_id=getattr(self, '_sequence_counter', 0)
+                    )
+                    
+                    # Increment sequence counter
+                    self._sequence_counter = getattr(self, '_sequence_counter', 0) + 1
+                    
+                    logger.info(f"📡 Sending RAW Twilio audio to Gemini: {len(raw_audio_data)} bytes, format: μ-law 8kHz")
+                    
+                    success = await self.gemini_service.send_raw_audio_chunk(raw_audio_chunk)
+                    if not success:
+                        logger.error(f"❌ Failed to send raw audio to Gemini")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating raw audio chunk: {e}")
+            else:
+                logger.error("No Gemini service available to send audio")
                 
         except Exception as e:
             logger.error(f"Error handling media event: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     async def _cleanup(self):
         """Cleanup resources"""
