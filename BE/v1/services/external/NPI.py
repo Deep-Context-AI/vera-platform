@@ -87,6 +87,7 @@ class NPIService:
             npi=npi_data.get('number'),
             provider_name=provider_name,
             provider_type=npi_data.get('type'),
+            practitioner_id=npi_data.get('practitioner_id'),
             primary_taxonomy=npi_data.get('taxonomy_code'),
             specialty=npi_data.get('description'),
             is_active=npi_data.get('status') == 'Active',
@@ -131,8 +132,8 @@ class NPIService:
                 response_dict = response.model_dump()
                 
                 # Generate PDF document
-                # Use NPI as practitioner_id for organizing documents
-                practitioner_id = response.npi or "unknown_npi"
+                # Use practitioner_id from database if available, otherwise use NPI
+                practitioner_id = str(response.practitioner_id) if response.practitioner_id else (response.npi or "unknown_npi")
                 
                 document_url = await pdf_service.generate_pdf_document(
                     template_name="npi_verification.html",

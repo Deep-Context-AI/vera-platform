@@ -3,7 +3,7 @@
 
 // Environment-based API endpoints configuration
 const API_ENDPOINTS = {
-  DEV: 'https://mikhailocampo--vera-platform-fastapi-app.modal.run',
+  DEV: 'https://mikhailocampo--vera-platform-v2-fastapi-app-dev.modal.run',
   PROD: 'https://mikhailocampo--vera-platform-fastapi-app.modal.run',
   get CURRENT() {
     // Check if we're in development environment
@@ -19,7 +19,7 @@ interface BaseResponse {
   message: string;
 }
 
-// Request interfaces based on the Python models
+// Request interfaces based on the Python models - EXACTLY matching backend
 export interface NPIRequest {
   npi?: string;
   first_name?: string;
@@ -134,38 +134,47 @@ export interface HospitalPrivilegesRequest {
 // Response interfaces (simplified - actual responses will have more fields)
 export interface NPIResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface NewDEAVerificationResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface ABMSResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface NPDBResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface ComprehensiveSANCTIONResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface LADMFResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface MedicalResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface DCAResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface MedicareResponse extends BaseResponse {
   data?: any;
+  document_url?: string; 
 }
 
 export interface EducationResponse extends BaseResponse {
@@ -180,14 +189,30 @@ export interface HospitalPrivilegesResponse extends BaseResponse {
 async function apiCall<T>(
   endpoint: string,
   method: 'GET' | 'POST' = 'POST',
-  data?: any
+  data?: any,
+  additionalHeaders?: Record<string, string>,
+  queryParams?: Record<string, string>
 ): Promise<T> {
-  const url = `${API_ENDPOINTS.CURRENT}${endpoint}`;
+  let url = `${API_ENDPOINTS.CURRENT}${endpoint}`;
+  
+  // Add query parameters if provided
+  if (queryParams && Object.keys(queryParams).length > 0) {
+    const searchParams = new URLSearchParams();
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, value);
+      }
+    });
+    if (searchParams.toString()) {
+      url += `?${searchParams.toString()}`;
+    }
+  }
   
   const config: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...additionalHeaders,
     },
   };
 
@@ -223,7 +248,7 @@ export class VerificationAPI {
   /**
    * NPI (National Provider Identifier) Search
    */
-  static async searchNPI(request: NPIRequest): Promise<NPIResponse> {
+  static async searchNPI(request: NPIRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<NPIResponse> {
     // Validate at least one search criterion
     if (!request.npi && !request.first_name && !request.last_name && !request.organization_name) {
       throw new Error('At least one search criterion must be provided: npi, first_name/last_name, or organization_name');
@@ -234,37 +259,80 @@ export class VerificationAPI {
       throw new Error('NPI must be exactly 10 digits');
     }
 
-    // Validate state format if provided
-    if (request.state && request.state.length !== 2) {
-      throw new Error('State must be 2-letter abbreviation');
+    // Clean the request object to match backend exactly
+    const cleanRequest: NPIRequest = {
+      ...request
+    };
+
+    // Normalize state to uppercase 2-letter format (backend expects this)
+    if (cleanRequest.state) {
+      if (cleanRequest.state.length > 2) {
+        // Convert full state name to abbreviation
+        const stateAbbreviations: Record<string, string> = {
+          'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR', 'california': 'CA',
+          'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE', 'florida': 'FL', 'georgia': 'GA',
+          'hawaii': 'HI', 'idaho': 'ID', 'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA',
+          'kansas': 'KS', 'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+          'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS', 'missouri': 'MO',
+          'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+          'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH',
+          'oklahoma': 'OK', 'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+          'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT', 'vermont': 'VT',
+          'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV', 'wisconsin': 'WI', 'wyoming': 'WY'
+        };
+        
+        const stateKey = cleanRequest.state.toLowerCase();
+        if (stateAbbreviations[stateKey]) {
+          cleanRequest.state = stateAbbreviations[stateKey];
+        } else {
+          throw new Error('Invalid state name or abbreviation');
+        }
+      } else if (cleanRequest.state.length === 2) {
+        cleanRequest.state = cleanRequest.state.toUpperCase();
+      } else {
+        throw new Error('State must be 2-letter abbreviation or full state name');
+      }
     }
 
-    return apiCall<NPIResponse>('/v1/npi/search', 'POST', {
-      ...request,
-      state: request.state?.toUpperCase()
-    });
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<NPIResponse>('/v1/npi/search', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * DEA Verification
    */
-  static async verifyDEA(request: DEAVerificationRequest): Promise<NewDEAVerificationResponse> {
+  static async verifyDEA(request: DEAVerificationRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<NewDEAVerificationResponse> {
     // Validate DEA number format
     if (request.dea_number.length !== 9 || 
         !/^[A-Z]{2}\d{7}$/.test(request.dea_number.toUpperCase())) {
       throw new Error('DEA number must be 2 letters followed by 7 digits');
     }
 
-    return apiCall<NewDEAVerificationResponse>('/v1/dea/verify', 'POST', {
-      ...request,
+    // Clean the request object to match backend exactly
+    const cleanRequest: DEAVerificationRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
       dea_number: request.dea_number.toUpperCase()
-    });
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<NewDEAVerificationResponse>('/v1/dea/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * ABMS (American Board of Medical Specialties) Certification Lookup
    */
-  static async lookupABMSCertification(request: ABMSRequest): Promise<ABMSResponse> {
+  static async lookupABMSCertification(request: ABMSRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<ABMSResponse> {
     // Validate NPI number
     if (request.npi_number.length !== 10 || !/^\d+$/.test(request.npi_number)) {
       throw new Error('NPI number must be exactly 10 digits');
@@ -275,16 +343,30 @@ export class VerificationAPI {
       throw new Error('State must be 2-letter abbreviation');
     }
 
-    return apiCall<ABMSResponse>('/v1/abms/certification', 'POST', {
-      ...request,
-      state: request.state.toUpperCase()
-    });
+    // Clean the request object to match backend exactly
+    const cleanRequest: ABMSRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      state: request.state.toUpperCase(),
+      npi_number: request.npi_number,
+      ...(request.middle_name && { middle_name: request.middle_name }),
+      ...(request.active_state_medical_license && { active_state_medical_license: request.active_state_medical_license }),
+      ...(request.specialty && { specialty: request.specialty })
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<ABMSResponse>('/v1/abms/certification', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * NPDB (National Practitioner Data Bank) Verification
    */
-  static async verifyNPDB(request: NPDBRequest): Promise<NPDBResponse> {
+  static async verifyNPDB(request: NPDBRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<NPDBResponse> {
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(request.date_of_birth)) {
       throw new Error('Date of birth must be in YYYY-MM-DD format');
@@ -306,21 +388,40 @@ export class VerificationAPI {
       throw new Error('DEA number must be 2 letters followed by 7 digits');
     }
 
-    return apiCall<NPDBResponse>('/v1/npdb/verify', 'POST', {
-      ...request,
+    // Clean the request object to match backend exactly
+    const cleanRequest: NPDBRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      date_of_birth: request.date_of_birth,
+      ssn_last4: request.ssn_last4,
       address: {
-        ...request.address,
-        state: request.address.state.toUpperCase()
+        line1: request.address.line1,
+        city: request.address.city,
+        state: request.address.state.toUpperCase(),
+        zip: request.address.zip,
+        ...(request.address.line2 && { line2: request.address.line2 })
       },
+      npi_number: request.npi_number,
+      license_number: request.license_number,
       state_of_license: request.state_of_license.toUpperCase(),
-      dea_number: request.dea_number?.toUpperCase()
-    });
+      ...(request.upin && { upin: request.upin }),
+      ...(request.dea_number && { dea_number: request.dea_number.toUpperCase() }),
+      ...(request.organization_name && { organization_name: request.organization_name })
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<NPDBResponse>('/v1/npdb/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * Comprehensive Sanctions Check
    */
-  static async comprehensiveSanctionsCheck(request: ComprehensiveSANCTIONRequest): Promise<ComprehensiveSANCTIONResponse> {
+  static async comprehensiveSanctionsCheck(request: ComprehensiveSANCTIONRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<ComprehensiveSANCTIONResponse> {
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(request.date_of_birth)) {
       throw new Error('Date of birth must be in YYYY-MM-DD format');
@@ -336,16 +437,30 @@ export class VerificationAPI {
       throw new Error('SSN last 4 digits must be exactly 4 digits');
     }
 
-    return apiCall<ComprehensiveSANCTIONResponse>('/v1/sanctioncheck', 'POST', {
-      ...request,
-      license_state: request.license_state.toUpperCase()
-    });
+    // Clean the request object to match backend exactly
+    const cleanRequest: ComprehensiveSANCTIONRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      date_of_birth: request.date_of_birth,
+      npi: request.npi,
+      license_number: request.license_number,
+      license_state: request.license_state.toUpperCase(),
+      ssn_last4: request.ssn_last4
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<ComprehensiveSANCTIONResponse>('/v1/sanctioncheck', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * LADMF (Limited Access Death Master File) Verification
    */
-  static async verifyLADMF(request: LADMFRequest): Promise<LADMFResponse> {
+  static async verifyLADMF(request: LADMFRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<LADMFResponse> {
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(request.date_of_birth)) {
       throw new Error('Date of birth must be in YYYY-MM-DD format');
@@ -356,35 +471,79 @@ export class VerificationAPI {
       throw new Error('Social Security Number must be exactly 9 digits');
     }
 
-    return apiCall<LADMFResponse>('/v1/ladmf/verify', 'POST', request);
+    // Clean the request object to match backend exactly
+    const cleanRequest: LADMFRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      date_of_birth: request.date_of_birth,
+      social_security_number: request.social_security_number,
+      ...(request.middle_name && { middle_name: request.middle_name })
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<LADMFResponse>('/v1/ladmf/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * Medical (Medi-Cal Managed Care + ORP) Verification
    */
-  static async verifyMedical(request: MedicalRequest): Promise<MedicalResponse> {
+  static async verifyMedical(request: MedicalRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<MedicalResponse> {
     // Validate NPI
     if (request.npi.length !== 10 || !/^\d+$/.test(request.npi)) {
       throw new Error('NPI must be exactly 10 digits');
     }
 
-    return apiCall<MedicalResponse>('/v1/medical/verify', 'POST', {
-      ...request,
-      state: request.state?.toUpperCase()
-    });
+    // Clean the request object to match backend exactly
+    const cleanRequest: MedicalRequest = {
+      npi: request.npi,
+      first_name: request.first_name,
+      last_name: request.last_name,
+      ...(request.license_type && { license_type: request.license_type }),
+      ...(request.taxonomy_code && { taxonomy_code: request.taxonomy_code }),
+      ...(request.provider_type && { provider_type: request.provider_type }),
+      ...(request.city && { city: request.city }),
+      ...(request.state && { state: request.state.toUpperCase() }),
+      ...(request.zip && { zip: request.zip })
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<MedicalResponse>('/v1/medical/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * DCA (Department of Consumer Affairs) CA License Verification
    */
-  static async verifyDCALicense(request: DCARequest): Promise<DCAResponse> {
-    return apiCall<DCAResponse>('/v1/dca/verify', 'POST', request);
+  static async verifyDCALicense(request: DCARequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<DCAResponse> {
+    // Clean the request object to match backend exactly
+    const cleanRequest: DCARequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      license_number: request.license_number
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<DCAResponse>('/v1/dca/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * Medicare Enrollment Verification
    */
-  static async verifyMedicare(request: MedicareRequest): Promise<MedicareResponse> {
+  static async verifyMedicare(request: MedicareRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<MedicareResponse> {
     // Validate NPI
     if (request.npi.length !== 10 || !/^\d+$/.test(request.npi)) {
       throw new Error('NPI must be exactly 10 digits');
@@ -408,13 +567,29 @@ export class VerificationAPI {
       throw new Error('At least one verification source must be provided');
     }
 
-    return apiCall<MedicareResponse>('/v1/medicare/verify', 'POST', request);
+    // Clean the request object to match backend exactly
+    const cleanRequest: MedicareRequest = {
+      provider_verification_type: request.provider_verification_type,
+      npi: request.npi,
+      first_name: request.first_name,
+      last_name: request.last_name,
+      verification_sources: request.verification_sources,
+      ...(request.specialty && { specialty: request.specialty })
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<MedicareResponse>('/v1/medicare/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * Education Verification with Transcript Generation
    */
-  static async verifyEducation(request: EducationRequest): Promise<EducationResponse> {
+  static async verifyEducation(request: EducationRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<EducationResponse> {
     // Validate graduation year
     if (request.graduation_year < 1900 || request.graduation_year > 2030) {
       throw new Error('Graduation year must be between 1900 and 2030');
@@ -435,13 +610,29 @@ export class VerificationAPI {
       throw new Error(`degree_type must be one of: ${allowedDegrees.join(', ')}`);
     }
 
-    return apiCall<EducationResponse>('/v1/education/verify', 'POST', request);
+    // Clean the request object to match backend exactly
+    const cleanRequest: EducationRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      institution: request.institution,
+      degree_type: request.degree_type,
+      graduation_year: request.graduation_year,
+      verification_type: request.verification_type
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<EducationResponse>('/v1/education/verify', 'POST', cleanRequest, headers, queryParams);
   }
 
   /**
    * Hospital Privileges Verification with Transcript Generation
    */
-  static async verifyHospitalPrivileges(request: HospitalPrivilegesRequest): Promise<HospitalPrivilegesResponse> {
+  static async verifyHospitalPrivileges(request: HospitalPrivilegesRequest, headers?: Record<string, string>, generatePdf?: boolean): Promise<HospitalPrivilegesResponse> {
     // Validate NPI number
     if (request.npi_number.length !== 10 || !/^\d+$/.test(request.npi_number)) {
       throw new Error('NPI number must be exactly 10 digits');
@@ -453,13 +644,23 @@ export class VerificationAPI {
       throw new Error(`Verification type must be one of: ${allowedTypes.join(', ')}`);
     }
 
-    return apiCall<HospitalPrivilegesResponse>('/v1/hospital-privileges/verify', 'POST', {
-      ...request,
-      verification_type: request.verification_type.toLowerCase(),
-      specialty: request.specialty.split(' ').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-      ).join(' ') // Title case
-    });
+    // Clean the request object to match backend exactly
+    const cleanRequest: HospitalPrivilegesRequest = {
+      first_name: request.first_name,
+      last_name: request.last_name,
+      npi_number: request.npi_number,
+      hospital_name: request.hospital_name,
+      specialty: request.specialty,
+      verification_type: request.verification_type.toLowerCase()
+    };
+
+    // Prepare query parameters
+    const queryParams: Record<string, string> = {};
+    if (generatePdf) {
+      queryParams.generate_pdf = 'true';
+    }
+
+    return apiCall<HospitalPrivilegesResponse>('/v1/hospital-privileges/verify', 'POST', cleanRequest, headers, queryParams);
   }
 }
 
@@ -479,7 +680,7 @@ export const verificationHelpers = {
     return VerificationAPI.searchNPI({ 
       first_name: firstName, 
       last_name: lastName,
-      state: state?.toUpperCase()
+      ...(state && { state: state.toUpperCase() })
     });
   },
 

@@ -29,6 +29,7 @@ class NPIResponse(DocumentableResponse):
     npi: Optional[str] = Field(None, description="National Provider Identifier")
     provider_name: Optional[str] = Field(None, description="Provider name or Organization name")
     provider_type: Optional[str] = Field(None, description="Provider type (Individual/Organization)")
+    practitioner_id: Optional[int] = Field(None, description="Internal practitioner ID from database")
     
     # Taxonomy and specialty information
     primary_taxonomy: Optional[str] = Field(None, description="Primary taxonomy code")

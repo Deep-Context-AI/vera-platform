@@ -10,32 +10,54 @@ class BaseRequest(BaseModel):
 class NPIRequest(BaseRequest):
     """Request model for NPI (National Provider Identifier) lookup"""
     # Search criteria - at least one must be provided
-    npi: Optional[str] = Field(None, description="10-digit National Provider Identifier", min_length=10, max_length=10)
-    first_name: Optional[str] = Field(None, description="Provider's first name", min_length=1, max_length=50)
-    last_name: Optional[str] = Field(None, description="Provider's last name", min_length=1, max_length=50)
-    organization_name: Optional[str] = Field(None, description="Organization name", min_length=2, max_length=200)
+    npi: Optional[str] = Field(None, description="10-digit National Provider Identifier", max_length=10)
+    first_name: Optional[str] = Field(None, description="Provider's first name", max_length=50)
+    last_name: Optional[str] = Field(None, description="Provider's last name", max_length=50)
+    organization_name: Optional[str] = Field(None, description="Organization name", max_length=200)
     
     # Optional address fields for more specific searches
     city: Optional[str] = Field(None, description="City", max_length=50)
-    state: Optional[str] = Field(None, description="State abbreviation", min_length=2, max_length=2)
+    state: Optional[str] = Field(None, description="State abbreviation", max_length=2)
     postal_code: Optional[str] = Field(None, description="ZIP/Postal code", max_length=10)
     
     @field_validator('npi')
     def validate_npi(cls, v: str):
-        if v and not v.isdigit():
+        if v and v.strip() and not v.isdigit():
             raise ValueError('NPI must contain only digits')
+        if v and v.strip() and len(v.strip()) != 10:
+            raise ValueError('NPI must be exactly 10 digits')
+        return v
+    
+    @field_validator('first_name', 'last_name')
+    def validate_name_fields(cls, v):
+        if v and v.strip() and len(v.strip()) < 1:
+            raise ValueError('Name fields must have at least 1 character when provided')
+        return v
+    
+    @field_validator('organization_name')
+    def validate_organization_name(cls, v):
+        if v and v.strip() and len(v.strip()) < 2:
+            raise ValueError('Organization name must have at least 2 characters when provided')
         return v
     
     @field_validator('state')
     def validate_state(cls, v):
-        if v:
+        if v and v.strip():
+            if len(v.strip()) != 2:
+                raise ValueError('State must be 2-letter abbreviation when provided')
             return v.upper()
         return v
     
     @model_validator(mode='after')
     def validate_search_criteria(self):
         """Ensure at least one search criterion is provided"""
-        if not any([self.npi, self.first_name, self.last_name, self.organization_name]):
+        # Check if any field has a non-empty value
+        has_npi = self.npi and self.npi.strip()
+        has_first_name = self.first_name and self.first_name.strip()
+        has_last_name = self.last_name and self.last_name.strip()
+        has_organization_name = self.organization_name and self.organization_name.strip()
+        
+        if not any([has_npi, has_first_name, has_last_name, has_organization_name]):
             raise ValueError('At least one search criterion must be provided: npi, first_name/last_name, or organization_name')
         return self
 
@@ -160,7 +182,7 @@ class MedicalRequest(BaseRequest):
     taxonomy_code: Optional[str] = Field(None, description="Provider taxonomy code", max_length=20)
     provider_type: Optional[str] = Field(None, description="Provider type/specialty", max_length=100)
     city: Optional[str] = Field(None, description="Provider city", max_length=50)
-    state: Optional[str] = Field(None, description="Provider state", min_length=2, max_length=2)
+    state: Optional[str] = Field(None, description="Provider state", max_length=2)
     zip: Optional[str] = Field(None, description="Provider ZIP code", max_length=10)
     
     @field_validator('npi')
@@ -171,7 +193,11 @@ class MedicalRequest(BaseRequest):
     
     @field_validator('state')
     def validate_state(cls, v):
-        return v.upper()
+        if v and v.strip():
+            if len(v.strip()) != 2:
+                raise ValueError('State must be 2-letter abbreviation when provided')
+            return v.upper()
+        return v
 
 class DCARequest(BaseRequest):
     """Request model for DCA (Department of Consumer Affairs) CA license verification"""
