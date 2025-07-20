@@ -316,3 +316,7 @@ class AuditTrailRecordRequest(BaseRequest):
         if v not in allowed_statuses:
             raise ValueError(f'Status must be one of: {", ".join(allowed_statuses)}')
         return v
+
+class VeraRequest(BaseModel):
+    application_id: int = Field(..., description="Application ID", gt=0)
+    requested_verifications: List[str] = Field(..., description="List of verifications to request", min_items=1)

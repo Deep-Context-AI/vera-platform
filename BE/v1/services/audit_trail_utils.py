@@ -13,52 +13,9 @@ from functools import wraps
 
 from v1.services.audit_trail_service import audit_trail_service
 from v1.models.database import AuditTrailStatus
+from v1.services.engine.verifications.models import VerificationSteps
 
 logger = logging.getLogger(__name__)
-
-class VerificationSteps:
-    """Predefined verification step names and types"""
-    
-    # Step names (matching AuditTrailStepName enum)
-    NPI_VERIFICATION = "npi_verification"
-    DEA_VERIFICATION = "dea_verification"
-    ABMS_CERTIFICATION = "abms_certification"
-    DCA_LICENSE = "dca_license"
-    MEDICARE_ENROLLMENT = "medicare_enrollment"
-    NPDB_CHECK = "npdb_check"
-    SANCTIONS_CHECK = "sanctions_check"
-    LADMF_CHECK = "ladmf_check"
-    MEDICAL_VERIFICATION = "medical_verification"
-    EDUCATION_VERIFICATION = "education_verification"
-    HOSPITAL_PRIVILEGES = "hospital_privileges"
-    FINAL_REVIEW = "final_review"
-    APPLICATION_SUBMITTED = "application_submitted"
-    APPLICATION_APPROVED = "application_approved"
-    APPLICATION_REJECTED = "application_rejected"
-    
-    # Step types (for categorization)
-    TYPES = {
-        NPI_VERIFICATION: "external_database_lookup",
-        DEA_VERIFICATION: "external_database_lookup", 
-        ABMS_CERTIFICATION: "external_database_lookup",
-        DCA_LICENSE: "external_database_lookup",
-        MEDICARE_ENROLLMENT: "external_database_lookup",
-        NPDB_CHECK: "external_database_lookup",
-        SANCTIONS_CHECK: "external_database_lookup",
-        LADMF_CHECK: "external_database_lookup",
-        MEDICAL_VERIFICATION: "external_database_lookup",
-        EDUCATION_VERIFICATION: "ai_generated_verification",
-        HOSPITAL_PRIVILEGES: "ai_generated_verification",
-        FINAL_REVIEW: "manual_review",
-        APPLICATION_SUBMITTED: "workflow_step",
-        APPLICATION_APPROVED: "workflow_step",
-        APPLICATION_REJECTED: "workflow_step"
-    }
-    
-    @classmethod
-    def get_step_type(cls, step_name: str) -> str:
-        """Get the step type for a given step name"""
-        return cls.TYPES.get(step_name, "unknown")
 
 # Convenience functions for common verification patterns
 async def log_verification_started(
@@ -93,7 +50,6 @@ async def log_verification_completed(
     reasoning: Optional[str] = None,
     response_data: Optional[Dict[str, Any]] = None,
     match_found: Optional[bool] = None,
-    confidence_score: Optional[float] = None,
     **kwargs
 ) -> None:
     """Log that a verification step has completed successfully"""
@@ -107,7 +63,6 @@ async def log_verification_completed(
             reasoning=reasoning,
             response_data=response_data,
             match_found=match_found,
-            confidence_score=confidence_score,
             **kwargs
         )
     except Exception as e:
@@ -179,6 +134,48 @@ async def log_verification_requires_review(
         )
     except Exception as e:
         logger.error(f"Failed to log verification review requirement for {step_name}: {e}")
+
+async def log_pseudonymization_action(
+    application_id: int,
+    step_name: str,
+    fields_pseudonymized: List[str],
+    processed_by: str,
+    strategy: str = "deterministic pseudonymization (HMAC + Faker)",
+    success: bool = True,
+    error_message: Optional[str] = None,
+    **kwargs,
+) -> None:
+    """Log a pseudonymization event (success or failure) to the audit trail.
+    
+    Processed By: Represents the USER AGENT that performed the pseudonymization action e.g, Vera OR human-user-ID
+
+    This helper records *that* pseudonymization occurred, *which* fields were
+    masked, *how* (high-level strategy), and *why/when/who* – without storing
+    the raw PII, masked values, or secret seed.
+    """
+    try:
+        step_type = VerificationSteps.get_step_type(step_name)
+        status = AuditTrailStatus.COMPLETED if success else AuditTrailStatus.FAILED
+
+        data: Dict[str, Any] = {
+            "action": "pseudonymization",
+            "fields_pseudonymized": fields_pseudonymized,
+            "strategy": strategy,
+            "step_type": step_type,
+        }
+        if not success and error_message:
+            data["error_message"] = error_message
+
+        await audit_trail_service.record_change(
+            application_id=application_id,
+            step_key=step_name,
+            status=status,
+            data=data,
+            changed_by=processed_by,
+            notes=kwargs.get("notes"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to log pseudonymization action for {step_name}: {e}")
 
 # Wrapper function for automatic tracking
 async def track_verification_step(
@@ -473,8 +470,6 @@ async def track_npi_verification(application_id: int, npi_request, npi_service_f
     return await track_verification_step(
         application_id=application_id,
         step_name=VerificationSteps.NPI_VERIFICATION,
-        step_type=VerificationSteps.EXTERNAL_API,
-        func=npi_service_func,
         reasoning="Verifying National Provider Identifier",
         request_data=npi_request.dict() if hasattr(npi_request, 'dict') else str(npi_request),
         processed_by="npi_service",
@@ -486,8 +481,6 @@ async def track_dea_verification(application_id: int, dea_request, dea_service_f
     return await track_verification_step(
         application_id=application_id,
         step_name=VerificationSteps.DEA_VERIFICATION,
-        step_type=VerificationSteps.DATABASE_LOOKUP,
-        func=dea_service_func,
         reasoning="Verifying DEA registration",
         request_data=dea_request.dict() if hasattr(dea_request, 'dict') else str(dea_request),
         processed_by="dea_service",
@@ -499,8 +492,6 @@ async def track_education_verification(application_id: int, education_request, e
     return await track_verification_step(
         application_id=application_id,
         step_name=VerificationSteps.EDUCATION_VERIFICATION,
-        step_type=VerificationSteps.AI_GENERATED,
-        func=education_service_func,
         reasoning="Verifying educational credentials with AI-generated response",
         request_data=education_request.dict() if hasattr(education_request, 'dict') else str(education_request),
         processed_by="education_service",

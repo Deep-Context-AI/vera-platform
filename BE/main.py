@@ -6,6 +6,7 @@ import modal
 
 from v1.config.modal_config import app, modal_image
 from v1.api.routes import router as v1_router
+from v1.api.vera_routes import router as vera_router
 from v1.exceptions.api import (
     ValidationException,
     NotFoundException,
@@ -46,7 +47,8 @@ def fastapi_app():
 
     # Include v1 router
     app.include_router(v1_router, prefix="/v1")
-
+    app.include_router(vera_router, prefix="/vera")
+    
     @app.get("/")
     async def root():
         return {"message": "Vera Platform API", "version": "1.0.0"}
