@@ -320,3 +320,4 @@ class AuditTrailRecordRequest(BaseRequest):
 class VeraRequest(BaseModel):
     application_id: int = Field(..., description="Application ID", gt=0)
     requested_verifications: List[str] = Field(..., description="List of verifications to request", min_items=1)
+    requester: str = Field(..., description="Who is requesting the verifications. Accepts either raw user ID or user email")

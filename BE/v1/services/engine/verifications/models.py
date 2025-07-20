@@ -1,11 +1,25 @@
 # Pydantic models for verification steps
 
 from enum import Enum
-from typing import Optional, Union, Any
+from typing import Optional, Union, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field, ConfigDict
 from google.genai.types import GenerateContentResponseUsageMetadata
 
 from v1.models.context import ApplicationContext
+
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from v1.services.database import DatabaseService
+
+# Function to rebuild the model when DatabaseService is available
+def rebuild_verification_models():
+    """Call this function to rebuild models after DatabaseService is imported"""
+    try:
+        from v1.services.database import DatabaseService
+        VerificationStepRequest.model_rebuild()
+    except ImportError:
+        # DatabaseService not available yet
+        pass
 
 class VerificationSteps(str, Enum):
     """Predefined verification step names and types"""
@@ -46,6 +60,7 @@ class VerificationMetadata(BaseModel):
     model: Optional[str] = Field(default=None, description="The model used to generate the response")
     response_time: Optional[float] = Field(default=None, description="The time taken to generate the response in seconds")
     document_url: Optional[str] = Field(default=None)
+    reasoning: Optional[str] = Field(default=None, description="The reasoning for the decision separate from LLM reasoning")
     error: Optional[Any] = Field(default=None)
     
     # Allow arbitrary types for the error field
@@ -57,9 +72,18 @@ class LLMResponse(BaseModel):
     decision: VerificationStepDecision
 
 class VerificationStepRequest(BaseModel):
-    # Input base model for verification steps ensuring ApplicationContext is passed in
-    # Necessary for all verification steps to subclass this
+    """
+    Input base model for verification steps ensuring ApplicationContext is passed in.
+    Necessary for all verification steps to subclass this.
+    
+    Now includes a database service for clean database operations without
+    coupling verification logic to database implementation details.
+    """
     application_context: ApplicationContext
+    requester: str
+    db_service: "DatabaseService" = Field(exclude=True)  # Exclude from serialization
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 class VerificationStepResponse(BaseModel):
     # Base case for all verification steps should return REQUIRES_REVIEW
@@ -71,7 +95,6 @@ class VerificationStepResponse(BaseModel):
     def from_exception(cls, exception: Exception) -> "VerificationStepResponse":
         """Use for infra-related exceptions that are not business-logic exceptions"""
         return cls(
-            reasoning=f"Error: {exception}",
             decision=VerificationStepDecision.REQUIRES_REVIEW,
             metadata=VerificationMetadata(
                 status=VerificationStepMetadataEnum.FAILED,
@@ -88,14 +111,13 @@ class VerificationStepResponse(BaseModel):
         This information should store the non-pseudonymized values that were used during the verification step.
         """
         return cls(
-            reasoning=reasoning,
             decision=VerificationStepDecision.REQUIRES_REVIEW,
             metadata=VerificationMetadata(
-                status=metadata_status
+                status=metadata_status,
+                reasoning=reasoning,
             )
         )
 
 class UserAgent(str, Enum):
     VERA_AI = "vera-ai"
-    
     

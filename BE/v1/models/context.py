@@ -1,8 +1,11 @@
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from datetime import datetime
-from supabase import Client
+
+# Avoid circular imports
+if TYPE_CHECKING:
+    from v1.services.database import DatabaseService
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +28,15 @@ class ApplicationContext(BaseModel):
     address: Address
     
     @classmethod
-    async def load_from_db(cls, db: Client, application_id: int) -> "ApplicationContext":
-        """Type-safe factory method to load context from database"""
+    async def load_from_db(cls, db_service: "DatabaseService", application_id: int) -> "ApplicationContext":
+        """Type-safe factory method to load context from database using DatabaseService"""
         # Build the select columns for the join
         columns = [
             'id', 'created_at', 'npi_number',
             'practitioners!inner(first_name, last_name, home_address)'
         ]
         try:
-            response = db.schema('vera').table('applications') \
+            response = db_service.supabase.schema('vera').table('applications') \
                 .select(','.join(columns)) \
                 .eq('id', application_id) \
                 .execute()

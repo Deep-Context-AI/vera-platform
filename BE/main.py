@@ -1,8 +1,7 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import uvicorn
 import modal
+import logging
 
 from v1.config.modal_config import app, modal_image
 from v1.api.routes import router as v1_router
@@ -21,6 +20,9 @@ from v1.exceptions.api import (
 @modal.concurrent(max_inputs=100)
 @modal.asgi_app()
 def fastapi_app():
+    # Configure logging to suppress httpx logs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    
     # Create FastAPI app inside the function
     app = FastAPI(
         title="Vera Platform API",

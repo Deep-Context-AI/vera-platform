@@ -1,15 +1,39 @@
 import os
 import logging
-from typing import Generator, Optional
+import json
+from typing import Generator, Optional, Union, Dict, Any
 from supabase import create_client, Client
 from functools import lru_cache
 from datetime import datetime
+from pydantic import BaseModel
+
 from v1.models.responses import (
     ResponseStatus,
     InboxEmailResponse, InboxListResponse, InboxStatsResponse, EmailActionResponse
 )
 
 logger = logging.getLogger(__name__)
+
+def _serialize_for_json(obj: Any) -> Any:
+    """
+    Recursively serialize objects for JSON storage, converting datetime objects to ISO strings.
+    
+    Args:
+        obj: Object to serialize
+        
+    Returns:
+        JSON-serializable object
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: _serialize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_serialize_for_json(item) for item in obj]
+    elif isinstance(obj, BaseModel):
+        return _serialize_for_json(obj.model_dump(exclude_unset=True))
+    else:
+        return obj
 
 @lru_cache()
 def get_supabase_client() -> Client:
@@ -57,10 +81,30 @@ def get_db() -> Generator[Client, None, None]:
         pass
 
 class DatabaseService:
-    """Service for database operations using Supabase"""
+    """
+    Comprehensive database service layer for all database operations.
     
-    def __init__(self):
-        self.supabase = self._get_supabase_client()
+    This service encapsulates all database interactions including:
+    - Audit trail operations (events, step states, invocations)
+    - User management
+    - Inbox email operations
+    - Any other database operations
+    
+    Benefits:
+    - Centralized database logic
+    - Easy to test and mock
+    - Consistent error handling
+    - Single point of database connection management
+    """
+    
+    def __init__(self, client: Optional[Client] = None):
+        """
+        Initialize the database service.
+        
+        Args:
+            client: Optional Supabase client. If not provided, will create one.
+        """
+        self.supabase = client or self._get_supabase_client()
     
     def _get_supabase_client(self) -> Client:
         """Initialize Supabase client"""
@@ -76,7 +120,304 @@ class DatabaseService:
             logger.error(f"Failed to initialize Supabase client: {e}")
             raise
 
-    # Inbox Email Methods
+    # ==========================================
+    # AUDIT TRAIL OPERATIONS
+    # ==========================================
+    
+    async def log_event(
+        self,
+        application_id: int,
+        actor_id: str,
+        action: str,
+        created_at: Optional[datetime] = None,
+        source: Optional[str] = None,
+        notes: Optional[str] = None,
+        prevent_duplicates: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Log an event to the audit trail.
+        
+        Args:
+            application_id: ID of the application
+            actor_id: ID of the actor performing the action
+            action: Description of the action
+            created_at: When the event occurred (defaults to now)
+            source: Source system or component
+            notes: Additional notes
+            prevent_duplicates: Whether to prevent duplicates
+            
+        Returns:
+            Dict containing the created audit trail record
+            
+        Raises:
+            Exception: If logging fails
+        """
+        try:
+            # Check for existing duplicate if prevention is enabled
+            if prevent_duplicates:
+                existing_response = self.supabase.schema('vera').table('audit_trail_v2') \
+                    .select('*') \
+                    .eq('application_id', application_id) \
+                    .eq('actor_id', actor_id) \
+                    .eq('action', action) \
+                    .execute()
+                
+                if existing_response.data:
+                    logger.info(f"Duplicate event found for {action} for application {application_id}")
+                    return existing_response.data[0]
+            
+            # Create new event if no duplicate found or prevention is disabled
+            event_data = {
+                'application_id': application_id,
+                'actor_id': actor_id,
+                'action': action,
+                'created_at': (created_at or datetime.now()).isoformat(),
+                'source': source,
+                'notes': notes,
+            }
+        
+            response = self.supabase.schema('vera').table('audit_trail_v2') \
+                .insert(event_data) \
+                .execute()
+        
+            if not response.data:
+                raise Exception("Failed to save audit trail event")
+            
+            logger.info(f"Logged event: {action} for application {application_id}")
+            return response.data[0]
+            
+        except Exception as e:
+            logger.error(f"Error saving audit trail event: {e}")
+            raise e
+
+    async def log_step_state(
+        self,
+        application_id: int,
+        step_key: str,  # Changed from enum to string for flexibility
+        decision: str,  # Changed from enum to string for flexibility
+        decided_by: str,
+        decided_at: Optional[datetime] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Log a step state change.
+        
+        Args:
+            application_id: ID of the application
+            step_key: Key identifying the verification step
+            decision: Decision made for this step
+            decided_by: Who made the decision
+            decided_at: When the decision was made (defaults to now)
+            notes: Additional notes
+            
+        Returns:
+            Dict containing the created step state record
+            
+        Raises:
+            Exception: If logging fails
+        """
+        try:
+            step_data = {
+                'application_id': application_id,
+                'step_key': step_key,
+                'decision': decision,
+                'decided_by': decided_by,
+                'decided_at': (decided_at or datetime.now()).isoformat(),
+                'notes': notes,
+            }
+            
+            response = self.supabase.schema('vera').table('step_state') \
+                .insert(step_data) \
+                .execute()
+            
+            if not response.data:
+                raise Exception("Failed to save step state")
+                
+            logger.info(f"Logged step state: {step_key} -> {decision} for application {application_id}")
+            return response.data[0]
+            
+        except Exception as e:
+            logger.error(f"Error saving step state: {e}")
+            raise e
+
+    async def save_invocation(
+        self,
+        application_id: int,
+        step_key: str,
+        invocation_type: str,
+        status: str,
+        created_by: str,
+        request_json: Optional[Union[Dict[str, Any], BaseModel]] = None,
+        response_json: Optional[Union[Dict[str, Any], BaseModel]] = None,
+        metadata: Optional[Union[Dict[str, Any], BaseModel]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """
+        Save an audit trail invocation.
+        
+        Args:
+            application_id: ID of the application
+            step_key: Key identifying the verification step
+            invocation_type: Type of invocation (External API, LLM, Manual Upload, etc.)
+            status: Status of the invocation
+            created_by: Who created this invocation
+            request_json: Request data (dict or Pydantic model)
+            response_json: Response data (dict or Pydantic model)
+            metadata: Additional metadata (dict or Pydantic model)
+            created_at: When the invocation was created (defaults to now)
+            
+        Returns:
+            Dict containing the created invocation record
+            
+        Raises:
+            Exception: If saving fails
+        """
+        try:
+            # Serialize all JSON data to handle datetime objects and Pydantic models
+            serialized_request_json = _serialize_for_json(request_json) if request_json else None
+            serialized_response_json = _serialize_for_json(response_json) if response_json else None
+            serialized_metadata = _serialize_for_json(metadata) if metadata else None
+            
+            invocation_data = {
+                'application_id': application_id,
+                'step_key': step_key,
+                'invocation_type': invocation_type,
+                'status': status,
+                'created_by': created_by,
+                'created_at': (created_at or datetime.now()).isoformat(),
+                'request_json': serialized_request_json,
+                'response_json': serialized_response_json,
+                'metadata': serialized_metadata,
+            }
+            
+            response = self.supabase.schema('vera').table('invocations') \
+                .insert(invocation_data) \
+                .execute()
+            
+            if not response.data:
+                raise Exception("Failed to save audit trail invocation")
+                
+            logger.info(f"Saved invocation: {invocation_type} for step {step_key} in application {application_id}")
+            return response.data[0]
+            
+        except Exception as e:
+            logger.error(f"Error saving audit trail invocation: {e}")
+            raise e
+
+    # ==========================================
+    # USER MANAGEMENT OPERATIONS
+    # ==========================================
+    
+    async def get_user_from_id_or_email(self, user_id_or_email: str) -> str:
+        """
+        Get a user ID from their ID or email.
+        
+        Args:
+            user_id_or_email: User ID or email to look up
+            
+        Returns:
+            str: User ID
+            
+        Raises:
+            Exception: If user not found
+        """
+        try:
+            # Check if input looks like an email (contains @ symbol)
+            if '@' in user_id_or_email:
+                # Try by email first
+                response = self.supabase.schema('vera').table('users') \
+                    .select('*') \
+                    .eq('email', user_id_or_email) \
+                    .execute()
+                
+                if response.data:
+                    return response.data[0]['id']
+            else:
+                # Looks like a UUID, try by ID first
+                try:
+                    response = self.supabase.schema('vera').table('users') \
+                        .select('*') \
+                        .eq('id', user_id_or_email) \
+                        .execute()
+                    
+                    if response.data:
+                        return response.data[0]['id']
+                except Exception as uuid_error:
+                    # If UUID query fails due to type error, ignore and try email
+                    logger.debug(f"UUID lookup failed, trying email: {uuid_error}")
+                
+                # If UUID lookup didn't work, try as email (fallback)
+                response = self.supabase.schema('vera').table('users') \
+                    .select('*') \
+                    .eq('email', user_id_or_email) \
+                    .execute()
+                
+                if response.data:
+                    return response.data[0]['id']
+            
+            # If neither worked, raise an exception
+            raise Exception(f"User not found - tried both ID and email lookup for: {user_id_or_email}")
+            
+        except Exception as e:
+            logger.error(f"Error getting user from ID or email: {e}")
+            raise e
+
+    # ==========================================
+    # CONVENIENCE METHODS
+    # ==========================================
+    
+    async def get_application_context(self, application_id: int) -> Dict[str, Any]:
+        """
+        Get application context data.
+        
+        Args:
+            application_id: ID of the application
+            
+        Returns:
+            Dict containing application context
+        """
+        try:
+            response = self.supabase.schema('vera').table('applications') \
+                .select('*') \
+                .eq('id', application_id) \
+                .execute()
+            
+            if not response.data:
+                raise Exception(f"Application {application_id} not found")
+                
+            return response.data[0]
+            
+        except Exception as e:
+            logger.error(f"Error getting application context: {e}")
+            raise e
+
+    async def get_audit_trail_for_application(self, application_id: int) -> list[Dict[str, Any]]:
+        """
+        Get all audit trail events for an application.
+        
+        Args:
+            application_id: ID of the application
+            
+        Returns:
+            List of audit trail events
+        """
+        try:
+            response = self.supabase.schema('vera').table('audit_trail_v2') \
+                .select('*') \
+                .eq('application_id', application_id) \
+                .order('created_at', desc=True) \
+                .execute()
+            
+            return response.data or []
+            
+        except Exception as e:
+            logger.error(f"Error getting audit trail: {e}")
+            raise e
+
+    # ==========================================
+    # INBOX EMAIL OPERATIONS (keeping existing)
+    # ==========================================
+
     async def get_inbox_emails(
         self, 
         page: int = 1, 
@@ -391,3 +732,20 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error deleting email {email_id}: {e}")
             raise Exception(f"Failed to delete email: {str(e)}")
+
+
+# ==========================================
+# FACTORY FUNCTION FOR CREATING SERVICE
+# ==========================================
+
+def create_database_service(client: Optional[Client] = None) -> DatabaseService:
+    """
+    Factory function to create a DatabaseService instance.
+    
+    Args:
+        client: Optional Supabase client. If not provided, will create one.
+        
+    Returns:
+        DatabaseService: Configured database service instance
+    """
+    return DatabaseService(client)

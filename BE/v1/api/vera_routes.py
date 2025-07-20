@@ -1,8 +1,10 @@
 import modal
 import logging
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
+from supabase import Client
 
+from v1.services.database import get_db, create_database_service
 from v1.models.requests import VeraRequest
 from v1.services.engine.processor import JobRunner
 from v1.services.engine.registry import get_all_verification_steps
@@ -17,7 +19,7 @@ async def health():
     return {"status": "healthy", "service": "vera-verification-engine"}
 
 @router.post("/verify_application")
-async def verify_application(request: VeraRequest):
+async def verify_application(request: VeraRequest, db: Client = Depends(get_db)):
     """
     Verify an application by running requested verification steps
     
@@ -38,6 +40,17 @@ async def verify_application(request: VeraRequest):
                 detail="At least one verification step must be requested"
             )
         
+        # Get the requesting user from the database using DatabaseService
+        try:
+            db_service = create_database_service(db)
+            user_id = await db_service.get_user_from_id_or_email(request.requester)
+        except Exception as e:
+            logger.error(f"Error getting user from ID or email: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid requester ID or email: {request.requester}"
+            )
+        
         # Compare requested_verifications to available_steps
         available_steps = get_all_verification_steps()
         for step in request.requested_verifications:
@@ -53,7 +66,7 @@ async def verify_application(request: VeraRequest):
         
         # Execute the verification job
         logger.info("Executing verification job via Modal")
-        call: modal.FunctionCall = await runner.process_job.spawn.aio(request)
+        call: modal.FunctionCall = await runner.process_job.spawn.aio(request, user_id)
         
         # Log completion
         logger.info(f"Verification request completed for application {request.application_id}")
@@ -90,7 +103,7 @@ async def get_verification_status(
     try:
         logger.info(f"Getting verification status for application {application_id}")
         
-        # TODO: Implement status checking from audit trail
+        # TODO: Implement status checking from audit trail using DatabaseService
         # For now, return a placeholder response
         return {
             "application_id": application_id,

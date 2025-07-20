@@ -1,8 +1,11 @@
 from typing import Dict, Any, Callable
 from pydantic import BaseModel
 
-from v1.services.engine.verifications.models import VerificationSteps, VerificationStepRequest, VerificationStepResponse
+from v1.services.engine.verifications.models import VerificationSteps, VerificationStepRequest, VerificationStepResponse, rebuild_verification_models
 from v1.services.engine.verifications.npi import verify_npi
+
+# Rebuild the VerificationStepRequest model to resolve forward references
+rebuild_verification_models()
 
 
 class VerificationStep(BaseModel):
