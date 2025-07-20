@@ -18,6 +18,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 from typing import List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "pseudonymize_generic",
@@ -35,6 +38,7 @@ __all__ = [
     "pseudonymize_health_plan_beneficiary_number",
     "pseudonymize_account_number",
     "pseudonymize_certificate_license_number",
+    "pseudonymize_text_with_pii_detection",
 ]
 
 # ---------------------------------------------------------------------------
@@ -147,6 +151,10 @@ def pseudonymize_name(full_name: str, secret_seed: str, *, gender: Optional[str]
 # Additional Safe Harbor helpers
 # ---------------------------------------------------------------------------
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from v1.services.pii_detection_service import PIIDetectionService
 from faker import Faker
 import datetime
 
@@ -294,4 +302,99 @@ def pseudonymize_certificate_license_number(cert_lic_num: str, secret_seed: str)
     """Return a fake certificate/license number (deterministic)."""
     faker = _faker_for(secret_seed, cert_lic_num, "certificate_license_number")
     # Generates a common format for licenses or certificates
-    return faker.bothify(text='????#####', letters='ABCDEFGHJKLMNPQRSTUVWXYZ') # Example: ABCA12345 
+    return faker.bothify(text='????#####', letters='ABCDEFGHJKLMNPQRSTUVWXYZ') # Example: ABCA12345
+
+
+async def pseudonymize_text_with_pii_detection(
+    text: str,
+    secret_seed: str,
+    pii_detection_service: "PIIDetectionService",
+) -> str:
+    """
+    Detect PII in text and replace with pseudonymized values.
+    
+    Args:
+        text: The text to pseudonymize
+        secret_seed: Secret seed for deterministic pseudonymization
+        pii_detection_service: PII detection service instance
+        
+    Returns:
+        Text with detected PII replaced by pseudonymized values
+    """
+    try:
+        # Detect PII in the text
+        detected_pii = await pii_detection_service.detect_pii_in_text(text)
+        
+        # If no PII detected, return original text
+        if not detected_pii:
+            logger.info(f"PII detection service invoked but no PII detected")
+            return text
+        
+        pseudonymized_text = text
+        
+        # Replace detected PII with pseudonymized values
+        pii_replacements = {}
+        for pii_type, pii_values in detected_pii.items():
+            for pii_value in pii_values:
+                if not pii_value or not isinstance(pii_value, str) or len(pii_value.strip()) == 0:
+                    continue
+                    
+                # Skip empty lists or very short values that might be noise
+                if len(pii_value.strip()) < 2:
+                    continue
+                    
+                # Choose appropriate pseudonymization function based on PII type
+                if pii_type in ['firstname', 'lastname', 'ln', 'fn']:
+                    pseudo_value = pseudonymize_name(pii_value, secret_seed)
+                elif pii_type in ['phonenumber', 'telephone_number', 'fax_number']:
+                    pseudo_value = pseudonymize_phone_number(pii_value, secret_seed)
+                elif pii_type in ['email', 'email_address']:
+                    pseudo_value = pseudonymize_email(pii_value, secret_seed)
+                elif pii_type in ['ip', 'ipv4', 'ipv6', 'internet_protocol_address']:
+                    pseudo_value = pseudonymize_ip(pii_value, secret_seed)
+                elif pii_type in ['url', 'urls']:
+                    pseudo_value = pseudonymize_url(pii_value, secret_seed)
+                elif pii_type in ['date', 'dob', 'dobss', 'birthdate', 'admission_date', 'discharge_date', 'death_date']:
+                    pseudo_value = pseudonymize_date(pii_value, secret_seed)
+                elif pii_type in ['ssn', 'social_security_number']:
+                    pseudo_value = pseudonymize_ssn(pii_value, secret_seed)
+                elif pii_type in ['street', 'city', 'state', 'county', 'precinct']:
+                    pseudo_value = pseudonymize_address(pii_value, secret_seed)
+                elif pii_type in ['zipcode', 'zip', 'postal_code']:
+                    pseudo_value = pseudonymize_zip_code(pii_value, secret_seed)
+                elif pii_type in ['accountnumber', 'account_number', 'medical_record_number', 'health_plan_number']:
+                    pseudo_value = pseudonymize_account_number(pii_value, secret_seed)
+                elif pii_type in ['creditcardnumber', 'certificate_number', 'license_number']:
+                    pseudo_value = pseudonymize_certificate_license_number(pii_value, secret_seed)
+                elif pii_type in ['vehiclevrm', 'vehicle_identifiers']:
+                    pseudo_value = pseudonymize_license_plate(pii_value, secret_seed)
+                elif pii_type in ['mac', 'mac_address', 'device_identifiers']:
+                    pseudo_value = pseudonymize_generic(pii_value, secret_seed)
+                elif pii_type in ['age']:
+                    # For age, just use generic pseudonymization
+                    pseudo_value = pseudonymize_generic(pii_value, secret_seed)
+                elif pii_type in ['jobtitle', 'jobarea']:
+                    # For job titles, use generic pseudonymization
+                    pseudo_value = pseudonymize_generic(pii_value, secret_seed)
+                else:
+                    # Use generic pseudonymization for other types
+                    pseudo_value = pseudonymize_generic(pii_value, secret_seed)
+                
+                # Store the replacement for logging
+                pii_replacements[pii_value] = pseudo_value
+                
+                # Replace all occurrences of the PII value with the pseudonymized value
+                pseudonymized_text = pseudonymized_text.replace(pii_value, pseudo_value)
+        
+        # Log the pseudonymization details
+        if pii_replacements:
+            logger.info(f"Pseudonymized {len(pii_replacements)} PII values: {list(pii_replacements.keys())}")
+        else:
+            logger.info("No PII values were pseudonymized (all detected values were filtered out)")
+        
+        return pseudonymized_text
+        
+    except Exception as e:
+        # If pseudonymization fails, return original text
+        # Don't expose PII in error logs
+        return text 

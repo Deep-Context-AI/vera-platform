@@ -10,6 +10,7 @@ from v1.services.engine.verifications.models import (
     VerificationStepResponse, VerificationStepDecision, VerificationStepMetadataEnum, VerificationMetadata,
     LLMResponse, UserAgent, VerificationSteps, VerificationStepRequest
 )
+from v1.services.pii_detection_service import pii_detection_service
 import os
 import logging
 
@@ -164,6 +165,66 @@ async def verify_npdb(request: VerificationStepRequest):
                     llm_npdb_response.subject_identification.home_address.state = addr_parts[2]
                     llm_npdb_response.subject_identification.home_address.zip = addr_parts[3]
         
+        # Pseudonymize report descriptions to remove detected PII
+        pii_pseudonymization_results = []
+        if npdb_response and npdb_response.report_summary and npdb_response.report_summary.report_types:
+            for report_type_key, report_type in llm_npdb_response.report_summary.report_types.items():
+                if report_type.details:
+                    for i, detail in enumerate(report_type.details):
+                        # First, pseudonymize known structured fields
+                        original_action_date = detail.action_date
+                        if detail.action_date and detail.action_date not in ["Unknown", "N/A"]:
+                            try:
+                                detail.action_date = pseudo.pseudonymize_date(detail.action_date, secret_seed)
+                            except Exception as e:
+                                logger.warning(f"Failed to pseudonymize action_date: {e}")
+                        
+                        # Then pseudonymize the description text for detected PII
+                        if detail.description:
+                            original_description = detail.description
+                            try:
+                                # Pseudonymize any detected PII in the description
+                                pseudonymized_description = await pseudo.pseudonymize_text_with_pii_detection(
+                                    detail.description, 
+                                    secret_seed,
+                                    pii_detection_service
+                                )
+                                detail.description = pseudonymized_description
+                                
+                                # Track pseudonymization results for logging
+                                pii_pseudonymization_results.append({
+                                    "report_type": report_type_key,
+                                    "detail_index": i,
+                                    "original_length": len(original_description),
+                                    "pseudonymized_length": len(pseudonymized_description),
+                                    "description_changed": original_description != pseudonymized_description,
+                                    "action_date_changed": original_action_date != detail.action_date,
+                                    "changed": original_description != pseudonymized_description or original_action_date != detail.action_date
+                                })
+                                
+                            except Exception as e:
+                                logger.warning(f"Failed to pseudonymize report description for {report_type_key}: {e}")
+                                # Keep original description if pseudonymization fails
+                                pii_pseudonymization_results.append({
+                                    "report_type": report_type_key,
+                                    "detail_index": i,
+                                    "error": str(e),
+                                    "action_date_changed": original_action_date != detail.action_date,
+                                    "changed": original_action_date != detail.action_date
+                                })
+        
+        # Log pseudonymization event if any descriptions were processed
+        if pii_pseudonymization_results:
+            changed_reports = [r for r in pii_pseudonymization_results if r.get("changed", False)]
+            if changed_reports:
+                await request.db_service.log_event(
+                    application_id=request.application_context.application_id,
+                    actor_id=request.requester,
+                    action="NPDB Report PII Pseudonymization",
+                    notes=f"Pseudonymized PII in {len(changed_reports)} report descriptions",
+                    prevent_duplicates=True
+                )
+        
         # Post processing for slimming down LLM-formatted response
         llm_npdb_response = llm_npdb_response.strip_response()
         
@@ -179,7 +240,7 @@ async def verify_npdb(request: VerificationStepRequest):
         SYSTEM_PROMPT = f"""
         You are a credentialing examiner verifying the NPDB (National Practitioner Data Bank) record of this practitioner. I want the results to be detailed
 
-        Decision tree
+        ## Decision tree
         choose "approved" when ALL of the following are true:
         1. The practitioner names match between application and NPDB record (allowing for minor variations)
         2. The NPI numbers match exactly between application and NPDB record
@@ -199,8 +260,11 @@ async def verify_npdb(request: VerificationStepRequest):
            - Peer review organization action: No
         7. Credential type is properly identified as "{credential_type}" based on previous approval history
         8. For recredential cases: Previous approval date and current timing are consistent with recredentialing requirements
-        9. For "recredential" cases, malpractice reports are not causes for requires review necessarily. You must review the report and determine if the practitioner is still in good standing via:
-            1) The action
+        
+        ### Special Case: Recredentialing ONLY
+        For "recredential" cases, malpractice reports are not causes for requires review necessarily. You must review the report and determine if the practitioner is still in good standing via:
+            1) The action payment does not exceed the amount of $400,000
+            2) The action was more than 10 years ago
 
         choose "requires_review" if ANY of the following are true:
         - Names don't match sufficiently between application and NPDB record
@@ -288,7 +352,8 @@ async def verify_npdb(request: VerificationStepRequest):
             request_json={"npdb_request": npdb_request.model_dump()},
             response_json={
                 "npdb_response": original_npdb_response.model_dump() if original_npdb_response else None, 
-                "llm_analysis": gemini_response.model_dump()
+                "llm_analysis": gemini_response.model_dump(),
+                "pii_pseudonymization": pii_pseudonymization_results if pii_pseudonymization_results else []
             },
             metadata=VerificationMetadata(
                 model=MODEL.value, 
@@ -297,6 +362,36 @@ async def verify_npdb(request: VerificationStepRequest):
                 document_url=document_url
             )
         )
+        
+        # Save separate invocation record for PII pseudonymization if it occurred
+        if pii_pseudonymization_results and any(r.get("changed", False) for r in pii_pseudonymization_results):
+            await request.db_service.save_invocation(
+                application_id=request.application_context.application_id,
+                step_key=f"{VerificationSteps.NPDB.value}_pii_pseudonymization",
+                invocation_type="PII Detection + Pseudonymization",
+                status="completed",
+                created_by=request.requester,
+                request_json={
+                    "pseudonymization_requests": [
+                        {
+                            "report_type": r["report_type"],
+                            "detail_index": r["detail_index"],
+                            "original_length": r.get("original_length", 0)
+                        }
+                        for r in pii_pseudonymization_results if r.get("changed", False)
+                    ]
+                },
+                response_json={
+                    "pseudonymization_results": pii_pseudonymization_results,
+                    "total_reports_processed": len(pii_pseudonymization_results),
+                    "reports_changed": len([r for r in pii_pseudonymization_results if r.get("changed", False)])
+                },
+                metadata=VerificationMetadata(
+                    model="PII Detection Service",
+                    response_time=0,  # This is included in the main response time
+                    document_url=None
+                )
+            )
         
         # Return VerificationStepResponse
         # We don't log here because processor.py will log the step_state record
