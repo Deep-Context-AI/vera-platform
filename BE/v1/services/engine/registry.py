@@ -7,6 +7,8 @@ from v1.services.engine.verifications.dea import verify_dea
 from v1.services.engine.verifications.dca import verify_dca
 from v1.services.engine.verifications.abms import verify_abms
 from v1.services.engine.verifications.ladmf import verify_ladmf
+from v1.services.engine.verifications.medicare import verify_medicare
+from v1.services.engine.verifications.medical import verify_medical
 
 # Rebuild the VerificationStepRequest model to resolve forward references
 rebuild_verification_models()
@@ -48,6 +50,18 @@ VERIFICATION_STEPS: Dict[VerificationSteps, VerificationStep] = {
     VerificationSteps.LADMF: VerificationStep(
         name=VerificationSteps.LADMF,
         processing_function=verify_ladmf,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
+    VerificationSteps.MEDICARE: VerificationStep(
+        name=VerificationSteps.MEDICARE,
+        processing_function=verify_medicare,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
+    VerificationSteps.MEDICAL: VerificationStep(
+        name=VerificationSteps.MEDICAL,
+        processing_function=verify_medical,
         request_schema=VerificationStepRequest,
         response_schema=VerificationStepResponse,
     ),
