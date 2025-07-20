@@ -27,9 +27,15 @@ async def verify_npi(request: VerificationStepRequest):
     """
     practitioner_first_name = request.application_context.first_name
     practitioner_last_name = request.application_context.last_name
-    db_service = request.db_service
-    
+    db_service = request.db_service    
     application_npi_number = request.application_context.npi_number
+    
+    # If the NPI number is not provided, return a business logic exception
+    if not application_npi_number:
+        return VerificationStepResponse.from_business_logic_exception(
+            reasoning="NPI number not provided in application context",
+            metadata_status=VerificationStepMetadataEnum.NOT_PROVIDED
+        )
     
     # ---------------------------
     # Pseudonymize sensitive data 
@@ -167,6 +173,8 @@ async def verify_npi(request: VerificationStepRequest):
             logger.error(f"Error parsing Gemini response: {e}")
             return VerificationStepResponse.from_exception(e)
         
+        document_url = original_npi_response.document_url if original_npi_response and original_npi_response.document_url else None
+        
         # Save invocation record using database service
         await request.db_service.save_invocation(
             application_id=request.application_context.application_id,
@@ -183,7 +191,7 @@ async def verify_npi(request: VerificationStepRequest):
                 model=MODEL.value, 
                 usage_metadata=usage_metadata,
                 response_time=time.time() - start_time,
-                document_url=original_npi_response.document_url if original_npi_response and original_npi_response.document_url else None
+                document_url=document_url
             )
         )
         
@@ -196,7 +204,7 @@ async def verify_npi(request: VerificationStepRequest):
                 status=VerificationStepMetadataEnum.COMPLETE,
                 usage_metadata=usage_metadata,
                 model=MODEL.value,
-                document_url=original_npi_response.document_url if original_npi_response and original_npi_response.document_url else None
+                document_url=document_url
             ),
         )
         

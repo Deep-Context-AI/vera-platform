@@ -51,7 +51,8 @@ class VerificationStepMetadataEnum(str, Enum):
     COMPLETE = "complete"
     # The verification step failed. Base case but can be partitioned by error type later
     FAILED = "failed"
-    NOT_FOUND = "not_found"
+    NOT_FOUND = "not_found" # Applicant provided a number but it was not found
+    NOT_PROVIDED = "not_provided" # Applicant did not provide a number
     EXPIRED = "expired"
 
 class VerificationMetadata(BaseModel):
@@ -119,5 +120,5 @@ class VerificationStepResponse(BaseModel):
         )
 
 class UserAgent(str, Enum):
-    VERA_AI = "vera-ai"
+    VERA_AI = "vera_ai"
     

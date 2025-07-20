@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from v1.services.engine.verifications.models import VerificationSteps, VerificationStepRequest, VerificationStepResponse, rebuild_verification_models
 from v1.services.engine.verifications.npi import verify_npi
 from v1.services.engine.verifications.dea import verify_dea
+from v1.services.engine.verifications.dca import verify_dca
+from v1.services.engine.verifications.abms import verify_abms
 
 # Rebuild the VerificationStepRequest model to resolve forward references
 rebuild_verification_models()
@@ -29,7 +31,19 @@ VERIFICATION_STEPS: Dict[VerificationSteps, VerificationStep] = {
         processing_function=verify_dea,
         request_schema=VerificationStepRequest,
         response_schema=VerificationStepResponse,
-    )
+    ),
+    VerificationSteps.DCA: VerificationStep(
+        name=VerificationSteps.DCA,
+        processing_function=verify_dca,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
+    VerificationSteps.ABMS: VerificationStep(
+        name=VerificationSteps.ABMS,
+        processing_function=verify_abms,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
 }
 
 

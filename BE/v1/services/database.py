@@ -421,7 +421,6 @@ class DatabaseService:
                 actor_id=actor_id,
                 action=f"Application Status Changed: {new_status.upper()}",
                 notes=audit_notes,
-                source="application_state_manager"
             )
             
             logger.info(f"Updated application {application_id} status: {current_status} -> {new_status}")

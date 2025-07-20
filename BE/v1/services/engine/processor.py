@@ -5,7 +5,7 @@ from typing import Dict, List
 
 from v1.models.requests import VeraRequest
 from v1.config.modal_config import app
-from v1.services.engine.registry import VerificationStep, get_verification_step, get_all_verification_steps
+from v1.services.engine.registry import VerificationStep, get_verification_step, get_all_verification_steps, VERIFICATION_STEPS
 from v1.services.database import create_database_service, DatabaseService
 from v1.services.engine.verifications.models import VerificationStepResponse, VerificationStepMetadataEnum, rebuild_verification_models, UserAgent
 from v1.models.context import ApplicationContext
@@ -136,10 +136,11 @@ class JobRunner:
             logger.info(f"All {len(requested_verifications)} verification steps were skipped - already exist in database")
         
         # Record Audit Trail for application status completion
+        total_steps = len(VERIFICATION_STEPS.keys())
         all_successful = all(
             result.metadata.status == VerificationStepMetadataEnum.COMPLETE
             for result in step_results.values()
-        )
+        ) and len(verification_tasks) == total_steps
         
         # Set application status to READY_FOR_REVIEW when processing is complete
         completion_status = "completed successfully" if all_successful else "completed with some failures"

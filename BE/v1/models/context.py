@@ -25,6 +25,7 @@ class ApplicationContext(BaseModel):
     
     npi_number: Optional[str] = None
     dea_number: Optional[str] = None
+    license_number: Optional[str] = None
     
     # Provider Table
     first_name: str
@@ -36,7 +37,7 @@ class ApplicationContext(BaseModel):
         """Type-safe factory method to load context from database using DatabaseService"""
         # Build the select columns for the join
         columns = [
-            'id', 'created_at', 'npi_number', 'dea_number',
+            'id', 'created_at', 'npi_number', 'dea_number', 'license_number',
             'practitioners!inner(first_name, last_name, home_address)'
         ]
         try:
@@ -59,6 +60,7 @@ class ApplicationContext(BaseModel):
                 
                 npi_number=application['npi_number'],
                 dea_number=application['dea_number'],
+                license_number=application['license_number'],
                 
                 address=Address(
                     street=practitioner_data['home_address']['street'],
