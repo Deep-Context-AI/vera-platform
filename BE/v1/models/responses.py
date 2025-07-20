@@ -18,6 +18,15 @@ class BaseResponse(BaseModel):
     
     class Config:
         use_enum_values = True
+        
+    def strip_response(self):
+        """Strip response of all fields that are not needed for LLM processing"""
+        self.status = None
+        self.message = None
+        self.timestamp = None
+        self.document_url = None
+        self.document_generated_at = None
+        return self
 
 class DocumentableResponse(BaseResponse):
     """Base response class for services that can generate PDF documents"""
@@ -310,6 +319,9 @@ class RegisteredAddress(BaseModel):
     city: str = Field(..., description="City")
     state: str = Field(..., description="State")
     zip: str = Field(..., description="ZIP code")
+    
+    def to_string(self):
+        return f"{self.street}, {self.city}, {self.state}, {self.zip}"
 
 class NewDEAVerificationResponse(DocumentableResponse):
     """New response model for DEA verification matching the updated structure"""

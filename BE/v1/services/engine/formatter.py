@@ -109,6 +109,15 @@ def _format_single_verification(step_name: str, step_result: Dict[str, Any]) -> 
                 "is_active": step_result.get("is_active"),
                 "specialty": step_result.get("specialty")
             })
+        elif step_name == "dea":
+            formatted_result.update({
+                "dea_number": step_result.get("dea_number"),
+                "practitioner_name": step_result.get("practitioner_name"),
+                "registration_status": step_result.get("registration_status"),
+                "expiration_date": step_result.get("expiration_date"),
+                "drug_schedules": step_result.get("drug_schedules"),
+                "has_restrictions": step_result.get("has_restrictions")
+            })
         
         # Add common fields if present
         if "confidence_score" in step_result:

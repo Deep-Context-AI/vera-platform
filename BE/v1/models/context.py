@@ -14,6 +14,9 @@ class Address(BaseModel):
     city: str = Field(..., description="The city of the address")
     state: str = Field(..., description="The state of the address in full form")
     zip: str = Field(..., description="The zip code of the address")
+    
+    def to_string(self):
+        return f"{self.street}, {self.city}, {self.state}, {self.zip}"
 
 class ApplicationContext(BaseModel):
     """Type-safe application context for verification steps"""
@@ -21,6 +24,7 @@ class ApplicationContext(BaseModel):
     created_at: datetime
     
     npi_number: Optional[str] = None
+    dea_number: Optional[str] = None
     
     # Provider Table
     first_name: str
@@ -32,7 +36,7 @@ class ApplicationContext(BaseModel):
         """Type-safe factory method to load context from database using DatabaseService"""
         # Build the select columns for the join
         columns = [
-            'id', 'created_at', 'npi_number',
+            'id', 'created_at', 'npi_number', 'dea_number',
             'practitioners!inner(first_name, last_name, home_address)'
         ]
         try:
@@ -54,6 +58,7 @@ class ApplicationContext(BaseModel):
                 created_at=application['created_at'],
                 
                 npi_number=application['npi_number'],
+                dea_number=application['dea_number'],
                 
                 address=Address(
                     street=practitioner_data['home_address']['street'],

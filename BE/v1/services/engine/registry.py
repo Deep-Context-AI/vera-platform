@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from v1.services.engine.verifications.models import VerificationSteps, VerificationStepRequest, VerificationStepResponse, rebuild_verification_models
 from v1.services.engine.verifications.npi import verify_npi
+from v1.services.engine.verifications.dea import verify_dea
 
 # Rebuild the VerificationStepRequest model to resolve forward references
 rebuild_verification_models()
@@ -20,6 +21,12 @@ VERIFICATION_STEPS: Dict[VerificationSteps, VerificationStep] = {
     VerificationSteps.NPI: VerificationStep(
         name=VerificationSteps.NPI,
         processing_function=verify_npi,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
+    VerificationSteps.DEA: VerificationStep(
+        name=VerificationSteps.DEA,
+        processing_function=verify_dea,
         request_schema=VerificationStepRequest,
         response_schema=VerificationStepResponse,
     )
