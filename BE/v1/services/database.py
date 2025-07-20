@@ -363,8 +363,215 @@ class DatabaseService:
             raise e
 
     # ==========================================
+    # APPLICATION STATE MANAGEMENT
+    # ==========================================
+    
+    async def update_application_status(
+        self,
+        application_id: int,
+        new_status: str,
+        actor_id: str,
+        notes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Update the application status and log the change to audit trail.
+        
+        Args:
+            application_id: ID of the application
+            new_status: New status to set (should be a valid ApplicationStatus value)
+            actor_id: ID of the actor making the change
+            notes: Optional notes about the status change
+            
+        Returns:
+            Dict containing the updated application record
+            
+        Raises:
+            Exception: If update fails
+        """
+        try:
+            # Get current application status for audit trail
+            current_app_response = self.supabase.schema('vera').table('applications') \
+                .select('status') \
+                .eq('id', application_id) \
+                .execute()
+            
+            if not current_app_response.data:
+                raise Exception(f"Application {application_id} not found")
+            
+            current_status = current_app_response.data[0].get('status')
+            
+            # Update the application status
+            update_data = {
+                'status': new_status,
+                'updated_at': datetime.now().isoformat()
+            }
+            
+            app_response = self.supabase.schema('vera').table('applications') \
+                .update(update_data) \
+                .eq('id', application_id) \
+                .execute()
+            
+            if not app_response.data:
+                raise Exception("Failed to update application status")
+            
+            # Log the status change to audit trail
+            audit_notes = notes or f"Application status changed from {current_status} to {new_status}"
+            await self.log_event(
+                application_id=application_id,
+                actor_id=actor_id,
+                action=f"Application Status Changed: {new_status.upper()}",
+                notes=audit_notes,
+                source="application_state_manager"
+            )
+            
+            logger.info(f"Updated application {application_id} status: {current_status} -> {new_status}")
+            return app_response.data[0]
+            
+        except Exception as e:
+            logger.error(f"Error updating application status: {e}")
+            raise e
+    
+    async def set_application_in_progress(
+        self,
+        application_id: int,
+        actor_id: str,
+        notes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Set application status to IN_PROGRESS.
+        
+        Args:
+            application_id: ID of the application
+            actor_id: ID of the actor starting the verification process
+            notes: Optional notes
+            
+        Returns:
+            Dict containing the updated application record
+        """
+        from v1.models.database import ApplicationStatus
+        
+        return await self.update_application_status(
+            application_id=application_id,
+            new_status=ApplicationStatus.IN_PROGRESS.value,
+            actor_id=actor_id,
+            notes=notes or "Verification process started"
+        )
+    
+    async def set_application_ready_for_review(
+        self,
+        application_id: int,
+        actor_id: str,
+        notes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Set application status to READY_FOR_REVIEW.
+        
+        Args:
+            application_id: ID of the application
+            actor_id: ID of the actor completing the verification process
+            notes: Optional notes
+            
+        Returns:
+            Dict containing the updated application record
+        """
+        from v1.models.database import ApplicationStatus
+        
+        return await self.update_application_status(
+            application_id=application_id,
+            new_status=ApplicationStatus.READY_FOR_REVIEW.value,
+            actor_id=actor_id,
+            notes=notes or "All verification steps completed, ready for review"
+        )
+
+    # ==========================================
     # CONVENIENCE METHODS
     # ==========================================
+    
+    async def check_existing_step_state(
+        self, 
+        application_id: int, 
+        step_key: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if a verification step already exists in the step_state table.
+        
+        Args:
+            application_id: ID of the application
+            step_key: Key identifying the verification step
+            
+        Returns:
+            Dict containing the existing step state record, or None if not found
+        """
+        try:
+            response = self.supabase.schema('vera').table('step_state') \
+                .select('*') \
+                .eq('application_id', application_id) \
+                .eq('step_key', step_key) \
+                .order('decided_at', desc=True) \
+                .limit(1) \
+                .execute()
+            
+            if response.data:
+                logger.info(f"Found existing step state for {step_key} in application {application_id}")
+                return response.data[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error checking existing step state: {e}")
+            # Return None on error to allow processing to continue
+            return None
+
+    def reconstruct_verification_step_response(
+        self, 
+        step_state_record: Dict[str, Any]
+    ) -> "VerificationStepResponse":
+        """
+        Safely reconstruct a VerificationStepResponse from a step_state database record.
+        
+        Args:
+            step_state_record: The step_state database record
+            
+        Returns:
+            VerificationStepResponse reconstructed from the database record
+        """
+        from v1.services.engine.verifications.models import (
+            VerificationStepResponse, 
+            VerificationStepDecision, 
+            VerificationMetadata,
+            VerificationStepMetadataEnum
+        )
+        
+        try:
+            # Extract decision, defaulting to requires_review if invalid
+            decision_str = step_state_record.get('decision', 'requires_review')
+            try:
+                decision = VerificationStepDecision(decision_str)
+            except ValueError:
+                decision = VerificationStepDecision.REQUIRES_REVIEW
+            
+            # Create simple metadata indicating this was from existing data
+            metadata = VerificationMetadata(
+                status=VerificationStepMetadataEnum.COMPLETE,
+                reasoning=f"Existing step state from {step_state_record.get('decided_at', 'unknown date')}"
+            )
+            
+            return VerificationStepResponse(
+                decision=decision,
+                analysis=None,  # Analysis not stored in step_state table
+                metadata=metadata
+            )
+            
+        except Exception as e:
+            logger.error(f"Error reconstructing VerificationStepResponse: {e}")
+            # Fallback to safe default
+            return VerificationStepResponse(
+                decision=VerificationStepDecision.REQUIRES_REVIEW,
+                metadata=VerificationMetadata(
+                    status=VerificationStepMetadataEnum.FAILED,
+                    error=f"Reconstruction failed: {str(e)}"
+                )
+            )
     
     async def get_application_context(self, application_id: int) -> Dict[str, Any]:
         """

@@ -4,6 +4,16 @@ from datetime import date, datetime
 from enum import Enum
 
 
+class ApplicationStatus(str, Enum):
+    """Application status states for tracking verification progress"""
+    SUBMITTED = "submitted"
+    IN_PROGRESS = "in_progress" 
+    READY_FOR_REVIEW = "ready_for_review"
+    READY_FOR_COMITTEE = "ready_for_committee"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class BaseDBModel(BaseModel):
     """Base database model with common configuration"""
     class Config:
