@@ -33,7 +33,7 @@ async def verify_npi(request: VerificationStepRequest):
     # If the NPI number is not provided, return a business logic exception
     if not application_npi_number:
         return VerificationStepResponse.from_business_logic_exception(
-            reasoning="NPI number not provided in application context",
+            reasoning="NPI verification requires NPI number - not provided in application context.",
             metadata_status=VerificationStepMetadataEnum.NOT_PROVIDED
         )
     
@@ -102,7 +102,7 @@ async def verify_npi(request: VerificationStepRequest):
         
         if not npi_response or npi_response.status != "success":
             return VerificationStepResponse.from_business_logic_exception(
-                reasoning=f"NPI {application_npi_number} not found during lookup",
+                reasoning=f"NPI {application_npi_number} not found during external service lookup. External service called but returned no valid data, no LLM analysis performed, invocation record created with failure status.",
                 metadata_status=VerificationStepMetadataEnum.NOT_FOUND
             )
         

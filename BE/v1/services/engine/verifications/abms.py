@@ -34,7 +34,7 @@ async def verify_abms(request: VerificationStepRequest):
     
     if not application_npi_number:
         return VerificationStepResponse.from_business_logic_exception(
-            reasoning="NPI number not provided in application context",
+            reasoning="ABMS verification requires NPI number - not provided in application context.",
             metadata_status=VerificationStepMetadataEnum.NOT_PROVIDED
         )
     
@@ -112,7 +112,7 @@ async def verify_abms(request: VerificationStepRequest):
         
         if not abms_response or abms_response.status != "success":
             return VerificationStepResponse.from_business_logic_exception(
-                reasoning=f"ABMS board certification for NPI {application_npi_number} not found during lookup",
+                reasoning=f"ABMS board certification for NPI {application_npi_number} not found during external service lookup. External service called but returned no valid data, no LLM analysis performed, invocation record created with failure status.",
                 metadata_status=VerificationStepMetadataEnum.NOT_FOUND
             )
         

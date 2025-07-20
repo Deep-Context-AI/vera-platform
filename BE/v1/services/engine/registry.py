@@ -6,6 +6,7 @@ from v1.services.engine.verifications.npi import verify_npi
 from v1.services.engine.verifications.dea import verify_dea
 from v1.services.engine.verifications.dca import verify_dca
 from v1.services.engine.verifications.abms import verify_abms
+from v1.services.engine.verifications.ladmf import verify_ladmf
 
 # Rebuild the VerificationStepRequest model to resolve forward references
 rebuild_verification_models()
@@ -41,6 +42,12 @@ VERIFICATION_STEPS: Dict[VerificationSteps, VerificationStep] = {
     VerificationSteps.ABMS: VerificationStep(
         name=VerificationSteps.ABMS,
         processing_function=verify_abms,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
+    VerificationSteps.LADMF: VerificationStep(
+        name=VerificationSteps.LADMF,
+        processing_function=verify_ladmf,
         request_schema=VerificationStepRequest,
         response_schema=VerificationStepResponse,
     ),

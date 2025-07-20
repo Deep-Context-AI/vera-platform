@@ -126,11 +126,17 @@ class JobRunner:
                     step_results[step_name] = result
                 
                 # Log the step state using the database service (only for newly processed steps)
+                # Include reasoning from metadata as notes, especially for early exits
+                notes = None
+                if step_results[step_name].metadata and step_results[step_name].metadata.reasoning:
+                    notes = step_results[step_name].metadata.reasoning
+                
                 await db_service.log_step_state(
                     application_id=application_id,
                     step_key=step_name,
                     decision=step_results[step_name].decision.value,
                     decided_by=UserAgent.VERA_AI.value,
+                    notes=notes,
                 )
         else:
             logger.info(f"All {len(requested_verifications)} verification steps were skipped - already exist in database")

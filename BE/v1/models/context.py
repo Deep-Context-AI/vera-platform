@@ -18,6 +18,12 @@ class Address(BaseModel):
     def to_string(self):
         return f"{self.street}, {self.city}, {self.state}, {self.zip}"
 
+class Demographics(BaseModel):
+    race: Optional[str] = Field(None, description="The race of the practitioner")
+    gender: Optional[str] = Field(None, description="The gender of the practitioner")
+    ethnicity: Optional[str] = Field(None, description="The ethnicity of the practitioner")
+    birth_date: Optional[datetime] = Field(None, description="The date of birth of the practitioner in YYYY-MM-DD format")
+
 class ApplicationContext(BaseModel):
     """Type-safe application context for verification steps"""
     application_id: int
@@ -30,6 +36,8 @@ class ApplicationContext(BaseModel):
     # Provider Table
     first_name: str
     last_name: str
+    ssn: str
+    demographics: Optional[Demographics] = None
     address: Address
     
     @classmethod
@@ -38,7 +46,7 @@ class ApplicationContext(BaseModel):
         # Build the select columns for the join
         columns = [
             'id', 'created_at', 'npi_number', 'dea_number', 'license_number',
-            'practitioners!inner(first_name, last_name, home_address)'
+            'practitioners!inner(first_name, last_name, home_address, ssn, demographics)'
         ]
         try:
             response = db_service.supabase.schema('vera').table('applications') \
@@ -51,11 +59,13 @@ class ApplicationContext(BaseModel):
             
             application = response.data[0]
             practitioner_data = application['practitioners']
+            print(f"Practitioner data: {practitioner_data}")
             
             return cls(
                 application_id=application_id,
                 first_name=practitioner_data['first_name'],
                 last_name=practitioner_data['last_name'],
+                ssn=practitioner_data['ssn'],
                 created_at=application['created_at'],
                 
                 npi_number=application['npi_number'],
@@ -67,7 +77,8 @@ class ApplicationContext(BaseModel):
                     city=practitioner_data['home_address']['city'],
                     state=practitioner_data['home_address']['state'],
                     zip=practitioner_data['home_address']['zip']
-                )
+                ),
+                demographics=Demographics(**practitioner_data['demographics']) if practitioner_data['demographics'] else None
             )
         except Exception as e:
             logger.error(f"Failed to load application context: {e}")

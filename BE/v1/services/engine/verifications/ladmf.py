@@ -3,9 +3,9 @@ import time
 
 import v1.services.pseudonymization as pseudo
 from v1.services.clients import call_gemini_model, GeminiModel, get_gemini_client
-from v1.services.external.DCA import dca_service
-from v1.models.requests import DCARequest
-from v1.models.responses import DCAResponse
+from v1.services.external.LADMF import ladmf_service
+from v1.models.requests import LADMFRequest
+from v1.models.responses import LADMFResponse
 from v1.services.engine.verifications.models import (
     VerificationStepResponse, VerificationStepDecision, VerificationStepMetadataEnum, VerificationMetadata,
     LLMResponse, UserAgent, VerificationSteps, VerificationStepRequest
@@ -16,9 +16,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-async def verify_dca(request: VerificationStepRequest):
+async def verify_ladmf(request: VerificationStepRequest):
     """
-    Verify CA license using external service and Gemini model evaluation
+    Verify LADMF (Limited Access Death Master File) using external service and Gemini model evaluation
     
     Args:
         request: VerificationStepRequest containing application context, requester, and database service
@@ -30,11 +30,33 @@ async def verify_dca(request: VerificationStepRequest):
     practitioner_last_name = request.application_context.last_name
     db_service = request.db_service
     practitioner_address = request.application_context.address
-    application_license_number = request.application_context.license_number
     
-    if not application_license_number:
+    # Extract required fields for LADMF verification
+    application_ssn = request.application_context.ssn.replace('-', '') if request.application_context.ssn else None
+    application_date_of_birth = None
+    
+    if request.application_context.demographics and request.application_context.demographics.birth_date:
+        # Convert datetime to string format required by LADMF service
+        application_date_of_birth = request.application_context.demographics.birth_date.strftime("%Y-%m-%d")
+    
+    # The requester is the user who initiated the verification thus is the actor in Audit
+    # In Step_State, the decision is made by the VERA AI agent
+    await request.db_service.log_event(
+        application_id=request.application_context.application_id,
+        actor_id=request.requester,
+        action="LADMF Verification Started",
+        prevent_duplicates=True
+    )
+    
+    if not application_ssn:
         return VerificationStepResponse.from_business_logic_exception(
-            reasoning="DCA verification requires license number - not provided in application context.",
+            reasoning="LADMF verification requires SSN - not provided in application context.",
+            metadata_status=VerificationStepMetadataEnum.NOT_PROVIDED
+        )
+    
+    if not application_date_of_birth:
+        return VerificationStepResponse.from_business_logic_exception(
+            reasoning="LADMF verification requires date of birth - not provided in demographics.",
             metadata_status=VerificationStepMetadataEnum.NOT_PROVIDED
         )
     
@@ -47,7 +69,8 @@ async def verify_dca(request: VerificationStepRequest):
         # Use consistent inputs for pseudonymization to ensure the same person gets the same pseudonym
         practitioner_full_name = f"{practitioner_first_name} {practitioner_last_name}"
         
-        pseudo_license_number = pseudo.pseudonymize_generic(application_license_number, secret_seed)
+        pseudo_ssn = pseudo.pseudonymize_generic(application_ssn, secret_seed)
+        pseudo_date_of_birth = pseudo.pseudonymize_generic(application_date_of_birth, secret_seed)
         # Use the practitioner's name as the canonical identity for name pseudonymization
         pseudo_practitioner_name = pseudo.pseudonymize_name(practitioner_full_name, secret_seed)
         pseudo_address = pseudo.pseudonymize_address(practitioner_address.to_string(), secret_seed)
@@ -56,105 +79,102 @@ async def verify_dca(request: VerificationStepRequest):
         await db_service.log_event(
             application_id=request.application_context.application_id,
             actor_id=request.requester,
-            action="Pseudonymized CA license number",
+            action="Pseudonymized SSN and DOB for LADMF lookup",
             prevent_duplicates=True
         )
 
     except Exception as e:
-        logger.error(f"Error pseudonymizing CA license number: {e}")
+        logger.error(f"Error pseudonymizing data for LADMF lookup: {e}")
         return VerificationStepResponse.from_exception(e)
-        
-    
-    # Record audit trail for verification start using database service
-    # The requester is the user who initiated the verification thus is the actor in Audit
-    # In Step_State, the decision is made by the VERA AI agent
-    await request.db_service.log_event(
-        application_id=request.application_context.application_id,
-        actor_id=request.requester,
-        action="DCA Verification Started",
-        prevent_duplicates=True
-    )
     
     try:
-        # Call services.external.DCA to get the license status
-        dca_request = DCARequest(
+        # Call services.external.LADMF to get the death record status
+        ladmf_request = LADMFRequest(
             first_name=practitioner_first_name,
             last_name=practitioner_last_name,
-            license_number=application_license_number
+            date_of_birth=application_date_of_birth,
+            social_security_number=application_ssn
         )
         
-        logger.info(f"Looking up CA license {pseudo_license_number} using external service")
-        dca_response: DCAResponse = await dca_service.verify_license(
-            request=dca_request,
+        logger.info(f"Looking up LADMF death record for SSN {pseudo_ssn} using external service")
+        ladmf_response: LADMFResponse = await ladmf_service.verify_death_record(
+            request=ladmf_request,
             generate_pdf=True,
             user_id=request.requester,
         )
         
         # Store original response before pseudonymization for audit trail
-        original_dca_response = dca_response.model_copy() if dca_response else None
+        original_ladmf_response = ladmf_response.model_copy() if ladmf_response else None
         
         # Create pseudonymized versions for LLM processing
         # Use the ACTUAL response data to create pseudonyms, not the application data
-        pseudo_response_license_number = pseudo.pseudonymize_generic(str(dca_response.license_number), secret_seed)
+        llm_ladmf_response = ladmf_response.model_copy()
         
-        # Create a copy for LLM processing with pseudonymized values
-        llm_dca_response = dca_response.model_copy()
-        llm_dca_response.license_number = pseudo_response_license_number
+        if ladmf_response.matched_record:
+            # Pseudonymize the matched record data for LLM
+            # Use the same practitioner name pseudonym as the application context for consistency
+            llm_ladmf_response.matched_record.full_name = pseudo_practitioner_name
+            llm_ladmf_response.matched_record.date_of_birth = pseudo_date_of_birth
+            llm_ladmf_response.matched_record.social_security_number = pseudo_ssn
+            
+            # Pseudonymize other sensitive fields
+            if llm_ladmf_response.matched_record.date_of_death:
+                llm_ladmf_response.matched_record.date_of_death = pseudo.pseudonymize_generic(
+                    llm_ladmf_response.matched_record.date_of_death, secret_seed
+                )
         
         # Post processing for slimming down LLM-formatted response
-        llm_dca_response = llm_dca_response.strip_response()
+        llm_ladmf_response = llm_ladmf_response.strip_response()
         
-        if not dca_response or dca_response.status != "success":
+        if not ladmf_response or ladmf_response.status != "success":
             return VerificationStepResponse.from_business_logic_exception(
-                reasoning=f"CA license {application_license_number} not found during external service lookup. External service called but returned no valid data, no LLM analysis performed, invocation record created with failure status.",
-                metadata_status=VerificationStepMetadataEnum.NOT_FOUND
+                reasoning=f"LADMF death record lookup failed during external service call. External service called but returned failure status, no LLM analysis performed, invocation record created with failure status.",
+                metadata_status=VerificationStepMetadataEnum.FAILED
             )
         
         # System prompt for Gemini model
         MODEL=GeminiModel.GEMINI_20_FLASH
         
         SYSTEM_PROMPT = f"""
-        You are a credentialing examiner verifying the credentials of this practitioner's California medical license through DCA. I want the results to be detailed
+        You are a credentialing examiner verifying the death status of this practitioner through LADMF (Limited Access Death Master File). I want the results to be detailed
 
         Decision tree
         choose "approved" when ALL of the following are true:
-        1. The practitioner names match between application and DCA record (allowing for minor variations)
-        2. The license numbers match exactly between application and DCA record
-        3. License status is CURRENT, ACTIVE or similar active status (primary_status_code: "20" is active)
-        4. License is not expired (expiration date is in the future); today's date is {datetime.now().strftime("%Y-%m-%d")}
-        5. No significant disciplinary actions that would prevent practice (has_discipline should be false)
-        6. License is for California practice (board_code should be "800" for Medical Board of California)
-        7. License type is appropriate for medical practice (typically "8002" for Physician's and Surgeon's)
-        8. No concerning public record actions that would limit practice authority
+        1. The practitioner names match between application and LADMF record (allowing for minor variations) 
+        2. The date of birth matches between application and LADMF record
+        3. The SSN matches between application and LADMF record
+        4. NO death record is found (match_found is false) - this indicates the practitioner is alive
+        5. The verification completed successfully with high confidence
 
         choose "requires_review" if ANY of the following are true:
-        - Names don't match sufficiently between application and DCA record
-        - License numbers don't match exactly
-        - License is expired, inactive, suspended, or revoked (primary_status_code not "20")
-        - License has significant disciplinary actions (has_discipline is true)
-        - License has concerning public record actions
+        - A death record IS found (match_found is true) - this indicates the practitioner may be deceased
+        - Names don't match sufficiently between application and any death records
+        - Date of birth doesn't match between application and any death records
+        - SSN doesn't match between application and any death records
         - Data is incomplete or inconclusive
-        - License is not appropriate for medical practice in California
+        - The verification failed or returned unexpected results
+        - Match confidence is low or uncertain
 
         you must respond like JSON
         decision: either "approved" or "requires_review"
-        reasoning: a single paragraph explaining your decision, specifically addressing name match, license number match, status, expiration, and disciplinary actions
+        reasoning: a single paragraph explaining your decision, specifically addressing whether a death record was found, name match, DOB match, SSN match, and the implications for credentialing
         """
         
         # Prepare message for Gemini with pseudonymized values
-        message = f"""Please evaluate this California DCA license verification:
+        message = f"""Please evaluate this LADMF (Limited Access Death Master File) verification:
 
-        DCA License Data:
-        {llm_dca_response.model_dump()}
+        LADMF Data:
+        {llm_ladmf_response.model_dump()}
 
         Application Context:
         - Practitioner Name: {pseudo_practitioner_name}
-        - License Number: {pseudo_license_number}
+        - Date of Birth: {pseudo_date_of_birth}
+        - SSN: {pseudo_ssn}
         - Address: {pseudo_address}
 
         Please provide your verification analysis.
         """
-        logger.info("Calling Gemini model for DCA verification analysis")
+        logger.info("Calling Gemini model for LADMF verification analysis")
 
         client = await get_gemini_client()
         start_time = time.time()
@@ -185,18 +205,18 @@ async def verify_dca(request: VerificationStepRequest):
             logger.error(f"Error parsing Gemini response: {e}")
             return VerificationStepResponse.from_exception(e)
         
-        document_url = original_dca_response.document_url if original_dca_response and original_dca_response.document_url else None
+        document_url = original_ladmf_response.document_url if original_ladmf_response and original_ladmf_response.document_url else None
         
         # Save invocation record using database service
         await request.db_service.save_invocation(
             application_id=request.application_context.application_id,
-            step_key=VerificationSteps.DCA.value,
+            step_key=VerificationSteps.LADMF.value,
             invocation_type="External API + LLM",
             status=verification_decision.value,
             created_by=request.requester,
-            request_json={"dca_request": dca_request.model_dump()},
+            request_json={"ladmf_request": ladmf_request.model_dump()},
             response_json={
-                "dca_response": original_dca_response.model_dump() if original_dca_response else None, 
+                "ladmf_response": original_ladmf_response.model_dump() if original_ladmf_response else None, 
                 "llm_analysis": gemini_response.model_dump()
             },
             metadata=VerificationMetadata(
@@ -221,13 +241,13 @@ async def verify_dca(request: VerificationStepRequest):
         )
         
     except Exception as e:
-        logger.error(f"Error in DCA verification: {e}")
+        logger.error(f"Error in LADMF verification: {e}")
         
         # Log failure using database service
         await request.db_service.log_event(
             application_id=request.application_context.application_id,
             actor_id=request.requester,
-            action="DCA Verification Failed",
+            action="LADMF Verification Failed",
             notes=f"Error: {str(e)}",
         )
         

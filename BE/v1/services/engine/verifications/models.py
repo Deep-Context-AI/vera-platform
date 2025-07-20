@@ -44,6 +44,8 @@ class VerificationStepDecision(str, Enum):
     # - The verification step failed
     # - The verification step returned a result that requires human review
     REQUIRES_REVIEW = "requires_review"
+    # Examiner-only decision to escalate to medical director
+    ESCALATE_TO_DIRECTOR = "escalate_to_director"
 
 class VerificationStepMetadataEnum(str, Enum):
     # Metadata ENUMS to help calculate fill-rate. 

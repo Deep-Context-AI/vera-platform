@@ -34,7 +34,7 @@ async def verify_dea(request: VerificationStepRequest):
     
     if not application_dea_number:
         return VerificationStepResponse.from_business_logic_exception(
-            reasoning="DEA number not provided in application context",
+            reasoning="DEA verification requires DEA number - not provided in application context.",
             metadata_status=VerificationStepMetadataEnum.NOT_PROVIDED
         )
     
@@ -112,7 +112,7 @@ async def verify_dea(request: VerificationStepRequest):
         
         if not dea_response or dea_response.status != "success":
             return VerificationStepResponse.from_business_logic_exception(
-                reasoning=f"DEA {application_dea_number} not found during lookup",
+                reasoning=f"DEA {application_dea_number} not found during external service lookup. External service called but returned no valid data, no LLM analysis performed, invocation record created with failure status.",
                 metadata_status=VerificationStepMetadataEnum.NOT_FOUND
             )
         
