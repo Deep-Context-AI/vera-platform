@@ -45,6 +45,16 @@ export interface VerificationStepState {
   status: 'not_started' | 'in_progress' | 'completed' | 'failed' | 'requires_review';
   reasoning: string;
   files: File[];
+  documents: Array<{
+    id: string;
+    fileName: string;
+    url: string;
+    uploadedAt: string;
+    size: number;
+    type: string;
+  }>;
+  documentsLoading: boolean;
+  hasExistingDocuments: boolean;
   licenses: Array<{
     id: string;
     number: string;
@@ -85,6 +95,8 @@ interface VerificationStepProps {
   onUpdateReasoning: (reasoning: string) => void;
   onFileUpload: (files: FileList | null) => void;
   onRemoveFile: (index: number) => void;
+  onRequestDocument: () => void;
+  onRemoveDocument: (documentId: string) => void;
   onAddLicense?: (license: Omit<VerificationStepState['licenses'][0], 'id'>) => void;
   onRemoveLicense?: (licenseId: string) => void;
   children?: React.ReactNode; // For special form components
@@ -138,6 +150,8 @@ export const VerificationStep: React.FC<VerificationStepProps> = ({
   onUpdateReasoning,
   onFileUpload,
   onRemoveFile,
+  onRequestDocument,
+  onRemoveDocument,
   children
 }) => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -201,6 +215,8 @@ export const VerificationStep: React.FC<VerificationStepProps> = ({
             onUpdateReasoning={onUpdateReasoning}
             onFileUpload={onFileUpload}
             onRemoveFile={onRemoveFile}
+            onRequestDocument={onRequestDocument}
+            onRemoveDocument={onRemoveDocument}
             uploadDialogOpen={uploadDialogOpen}
             setUploadDialogOpen={setUploadDialogOpen}
           >
@@ -288,6 +304,8 @@ const ActiveState: React.FC<{
   onUpdateReasoning: (reasoning: string) => void;
   onFileUpload: (files: FileList | null) => void;
   onRemoveFile: (index: number) => void;
+  onRequestDocument: () => void;
+  onRemoveDocument: (documentId: string) => void;
   uploadDialogOpen: boolean;
   setUploadDialogOpen: (open: boolean) => void;
   children?: React.ReactNode;
@@ -301,6 +319,8 @@ const ActiveState: React.FC<{
   onUpdateReasoning,
   onFileUpload,
   onRemoveFile,
+  onRequestDocument,
+  onRemoveDocument,
   uploadDialogOpen,
   setUploadDialogOpen,
   children
@@ -377,15 +397,63 @@ const ActiveState: React.FC<{
             />
           </div>
 
-          {/* File uploads */}
+          {/* Documents section */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Supporting Documents
             </label>
             
-            {/* Uploaded files list */}
+            {/* Existing documents from storage */}
+            {stepState.documentsLoading ? (
+              <div className="mb-3 p-4 bg-gray-50 dark:bg-gray-700 rounded border">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Loading documents...</span>
+                </div>
+              </div>
+            ) : stepState.documents && stepState.documents.length > 0 ? (
+              <div className="mb-3 space-y-2">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Existing documents from storage:
+                </div>
+                {stepState.documents.map((document) => (
+                  <div key={document.id} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="w-4 h-4 text-green-600" />
+                      <div>
+                        <span className="text-sm text-gray-900 dark:text-gray-100">{document.fileName}</span>
+                        <div className="text-xs text-gray-500">
+                          {(document.size / 1024).toFixed(1)} KB • {new Date(document.uploadedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <a
+                        href={document.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-700 text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/20 rounded"
+                      >
+                        View
+                      </a>
+                      <button
+                        onClick={() => onRemoveDocument(document.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Uploaded files list (temporary files before storage) */}
             {stepState.files && stepState.files.length > 0 && (
               <div className="mb-3 space-y-2">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Temporary uploads:
+                </div>
                 {stepState.files.map((file, index) => (
                   <div key={index} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border">
                     <div className="flex items-center space-x-2">
@@ -404,69 +472,93 @@ const ActiveState: React.FC<{
               </div>
             )}
 
-            {/* Upload dialog */}
-            <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  data-agent-action="upload-documents"
-                  data-step-id={step.id}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Documents
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md" data-agent-dialog="upload-documents">
-                <DialogHeader>
-                  <DialogTitle>Upload Documents</DialogTitle>
-                  <DialogDescription>
-                    Upload supporting documents for {step.name}. Accepted formats: PDF, DOC, DOCX, JPG, PNG.
-                  </DialogDescription>
-                </DialogHeader>
-                
-                <div className="space-y-4">
-                  <div 
-                    className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center"
-                    data-upload-zone="true"
-                  >
-                    <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                      Drop files here or click to browse
-                    </p>
-                    <input
-                      type="file"
-                      multiple
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      onChange={(e) => onFileUpload(e.target.files)}
-                      className="hidden"
-                      id={`file-upload-${step.id}`}
-                      data-agent-input="file-upload"
-                      data-step-id={step.id}
-                    />
-                    <label
-                      htmlFor={`file-upload-${step.id}`}
-                      className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
-                      data-agent-action="choose-files"
-                      data-step-id={step.id}
-                    >
-                      Choose files
-                    </label>
-                  </div>
-                </div>
+            {/* Document action buttons */}
+            <div className="space-y-2">
+              {/* Primary action: Get document or request new one */}
+              <Button 
+                onClick={onRequestDocument}
+                disabled={isLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                data-agent-action="get-document"
+                data-step-id={step.id}
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Get {step.name}
+                  </>
+                )}
+              </Button>
 
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setUploadDialogOpen(false)}
-                    data-agent-action="close-upload-dialog"
+              {/* Secondary action: Manual upload dialog */}
+              <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    data-agent-action="upload-documents"
                     data-step-id={step.id}
                   >
-                    Done
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload Documents
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md" data-agent-dialog="upload-documents">
+                  <DialogHeader>
+                    <DialogTitle>Upload Documents</DialogTitle>
+                    <DialogDescription>
+                      Upload supporting documents for {step.name}. Accepted formats: PDF, DOC, DOCX, JPG, PNG.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="space-y-4">
+                    <div 
+                      className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center"
+                      data-upload-zone="true"
+                    >
+                      <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Drop files here or click to browse
+                      </p>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        onChange={(e) => onFileUpload(e.target.files)}
+                        className="hidden"
+                        id={`file-upload-${step.id}`}
+                        data-agent-input="file-upload"
+                        data-step-id={step.id}
+                      />
+                      <label
+                        htmlFor={`file-upload-${step.id}`}
+                        className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+                        data-agent-action="choose-files"
+                        data-step-id={step.id}
+                      >
+                        Choose files
+                      </label>
+                    </div>
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setUploadDialogOpen(false)}
+                      data-agent-action="close-upload-dialog"
+                      data-step-id={step.id}
+                    >
+                      Done
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
 

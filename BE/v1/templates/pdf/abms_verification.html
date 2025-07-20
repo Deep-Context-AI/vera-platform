@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABMS Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>ABMS Verification Report</h1>
+        <p class="subtitle">American Board of Medical Specialties Certification Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-warning{% endif %}">
+                        {{ status|upper }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% if profile %}
+    <div class="info-section">
+        <h2>Physician Profile</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Name:</div>
+                <div class="info-value">{{ profile.name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">ABMS UID:</div>
+                <div class="info-value">{{ profile.abms_uid }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Date of Birth:</div>
+                <div class="info-value">{{ profile.date_of_birth }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">NPI:</div>
+                <div class="info-value">{{ profile.npi }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Profile Viewed:</div>
+                <div class="info-value">{{ profile.viewed }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Education</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Degree:</div>
+                <div class="info-value">{{ profile.education.degree }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Graduation Year:</div>
+                <div class="info-value">{{ profile.education.year }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Address Information</h2>
+        <div class="info-item">
+            <div class="info-label">Location:</div>
+            <div class="info-value">
+                {{ profile.address.city }}, {{ profile.address.country }}<br>
+                {{ profile.address.postal_code }}
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Medical Licenses</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>State</th>
+                    <th>License Number</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for license in profile.licenses %}
+                <tr>
+                    <td>{{ license.state }}</td>
+                    <td>{{ license.number }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="info-section">
+        <h2>Board Certifications</h2>
+        {% for certification in profile.certifications %}
+        <div class="certification-block no-break">
+            <h3>{{ certification.board_name }}</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Specialty:</div>
+                    <div class="info-value">{{ certification.specialty }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status:</div>
+                    <div class="info-value">
+                        <span class="status-badge {% if certification.status == 'Certified' %}status-success{% else %}status-warning{% endif %}">
+                            {{ certification.status }}
+                        </span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status Duration:</div>
+                    <div class="info-value">{{ certification.status_duration }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">MOC Participation:</div>
+                    <div class="info-value">
+                        <span class="status-badge {% if certification.moc_participation == 'Yes' %}status-success{% else %}status-warning{% endif %}">
+                            {{ certification.moc_participation }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <h4>Certification History</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for occurrence in certification.occurrences %}
+                    <tr>
+                        <td>{{ occurrence.type }}</td>
+                        <td>{{ occurrence.start_date }}</td>
+                        <td>{{ occurrence.end_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if notes %}
+    <div class="info-section">
+        <h2>Additional Notes</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">NPI Not for PSV:</div>
+                <div class="info-value">{{ notes.npi_not_for_psv }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">FSMG License Not for PSV:</div>
+                <div class="info-value">{{ notes.fsmg_license_not_for_psv }}</div>
+            </div>
+        </div>
+        
+        <div class="info-item">
+            <div class="info-label">PSV Compliance Organizations:</div>
+            <div class="info-value">
+                {% for org in notes.psv_compliance %}
+                    <span class="status-badge status-success">{{ org }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="info-item">
+            <div class="info-label">Copyright:</div>
+            <div class="info-value">{{ notes.copyright }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This ABMS verification report is generated from mocked American Board of Medical Specialties data and is not valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The board certification status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

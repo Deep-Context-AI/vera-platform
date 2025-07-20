@@ -11,6 +11,7 @@ from v1.models.responses import (
 from v1.models.database import ABMSModel, PractitionerEnhanced, CaliforniaBoardModel
 from v1.services.database import get_supabase_client
 from v1.services.practitioner_service import practitioner_service
+from v1.services.pdf_service import pdf_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -21,12 +22,14 @@ class ABMSService:
     def __init__(self):
         self.db: Client = get_supabase_client()
     
-    async def lookup_board_certification(self, request: ABMSRequest) -> ABMSResponse:
+    async def lookup_board_certification(self, request: ABMSRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> ABMSResponse:
         """
         Lookup board certification information from database
         
         Args:
             request: ABMSRequest containing the physician information
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             ABMSResponse with the lookup results
@@ -97,12 +100,45 @@ class ABMSService:
                 copyright="© 2025 ABMS Solutions, LLC"
             )
             
-            return ABMSResponse(
+            response = ABMSResponse(
                 status=ResponseStatus.SUCCESS,
                 message="ABMS lookup successful",
                 profile=profile,
                 notes=notes
             )
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id:
+                try:
+                    logger.info(f"Generating PDF document for ABMS verification: {full_name}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document     
+                    # Use practitioner_id from database lookup
+                    practitioner_id = str(practitioner.id) if practitioner else request.npi_number
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="abms_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="abms_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
+            
+            return response
                 
         except Exception as e:
             logger.error(f"Unexpected error during ABMS lookup for {full_name}: {e}")

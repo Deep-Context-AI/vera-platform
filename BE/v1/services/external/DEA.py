@@ -11,6 +11,7 @@ from v1.models.responses import (
 from v1.models.database import DEAModel, PractitionerEnhanced
 from v1.services.database import get_supabase_client
 from v1.services.practitioner_service import practitioner_service
+from v1.services.pdf_service import pdf_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -24,12 +25,14 @@ class DEAService:
     
 
     
-    async def verify_dea_practitioner(self, request: DEAVerificationRequest) -> NewDEAVerificationResponse:
+    async def verify_dea_practitioner(self, request: DEAVerificationRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> NewDEAVerificationResponse:
         """
         Verify DEA practitioner using database lookup
         
         Args:
             request: DEAVerificationRequest with first_name, last_name (required) and dea_number, other fields (optional)
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             NewDEAVerificationResponse with verification results
@@ -67,6 +70,37 @@ class DEAService:
             
             # Build verification response
             response = self._build_verification_response_from_db_record(dea_data, practitioner, request)
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id:
+                try:
+                    logger.info(f"Generating PDF document for DEA verification: {request.dea_number}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document
+                    # Use practitioner_id as practitioner_id if available, otherwise use DEA number
+                    practitioner_id = str(dea_data.practitioner_id) if dea_data.practitioner_id else request.dea_number
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="dea_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="dea_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
             
             logger.info(f"DEA verification completed for: {request.dea_number}")
             return response

@@ -12,6 +12,7 @@ from v1.models.responses import (
 from v1.models.database import NPDBModelEnhanced, PractitionerEnhanced
 from v1.services.database import get_supabase_client
 from v1.services.practitioner_service import practitioner_service
+from v1.services.pdf_service import pdf_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -22,12 +23,14 @@ class NPDBService:
     def __init__(self):
         self.db: Client = get_supabase_client()
     
-    async def verify_practitioner(self, request: NPDBRequest) -> NPDBResponse:
+    async def verify_practitioner(self, request: NPDBRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> NPDBResponse:
         """
         Verify practitioner and get detailed NPDB report through database lookup
         
         Args:
             request: NPDBRequest containing the practitioner information
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             NPDBResponse with the verification results
@@ -41,13 +44,47 @@ class NPDBService:
             logger.info(f"Verifying NPDB for: {full_name}")
             
             # Use comprehensive verification with extracted fields
-            return await self.perform_comprehensive_npdb_verification(
+            response = await self.perform_comprehensive_npdb_verification(
                 practitioner_name=full_name,
                 npi=request.npi_number,
                 license_number=request.license_number,
                 state=request.state_of_license,
                 request_data=request  # Pass the full request for detailed response
             )
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id:
+                try:
+                    logger.info(f"Generating PDF document for NPDB verification: {full_name}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document
+                    # Use practitioner_id from database if available, otherwise use NPI
+                    npdb_data = await self._lookup_npdb_by_identifiers(request.npi_number, request.license_number, full_name)
+                    practitioner_id = str(npdb_data.practitioner_id) if npdb_data and npdb_data.practitioner_id else request.npi_number
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="npdb_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="npdb_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
+            
+            return response
             
         except NotFoundException:
             # Re-raise NotFoundException as-is
@@ -334,9 +371,9 @@ class NPDBService:
                 if result == "Yes" and details:
                     for detail in details:
                         report_detail = NPDBReportDetail(
-                            action_type=detail.get("type", "Unknown"),
-                            action_date=detail.get("date", "Unknown"),
-                            issuing_state=detail.get("state", "Unknown"),
+                            action_type=detail.get("action_type", "Unknown"),
+                            action_date=detail.get("action_date", "Unknown"),
+                            issuing_state=detail.get("issuing_state", "Unknown"),
                             description=detail.get("description", "No description available")
                         )
                         report_details.append(report_detail)

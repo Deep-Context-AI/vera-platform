@@ -9,6 +9,7 @@ from v1.models.database import CaliforniaBoardModel, PractitionerEnhanced
 from v1.models.dca_reference import DCAReference
 from v1.services.database import get_supabase_client
 from v1.services.practitioner_service import practitioner_service
+from v1.services.pdf_service import pdf_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -20,12 +21,14 @@ class DCAService:
         self.db: Client = get_supabase_client()
         self.dca_reference = DCAReference()
     
-    async def verify_license(self, request: DCARequest) -> DCAResponse:
+    async def verify_license(self, request: DCARequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> DCAResponse:
         """
         Verify CA license through DCA database lookup
         
         Args:
             request: DCARequest containing provider information
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             DCAResponse with license verification results
@@ -49,6 +52,37 @@ class DCAService:
             
             # Build response from database data
             response = self._build_response_from_db_record(license_data, request)
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id:
+                try:
+                    logger.info(f"Generating PDF document for DCA verification: {request.license_number}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document
+                    # Use practitioner_id from database if available, otherwise use license number
+                    practitioner_id = str(license_data.practitioner_id) if license_data.practitioner_id else request.license_number
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="dca_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="dca_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
             
             logger.info(f"DCA license verification completed for license: {request.license_number}")
             return response

@@ -8,6 +8,19 @@ import traceback
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Enable DEBUG logging for voice-related modules
+voice_loggers = [
+    'v1.api.routes',
+    'v1.services.voice.audio_utils',
+    'v1.services.voice.gemini_voice_service',
+    'v1.services.voice_service',
+    'v1.services.twilio_service'
+]
+
+for voice_logger_name in voice_loggers:
+    voice_logger = logging.getLogger(voice_logger_name)
+    voice_logger.setLevel(logging.DEBUG)
+
 class ValidationException(HTTPException):
     """Custom exception for validation errors"""
     def __init__(self, detail: str = "Validation error"):

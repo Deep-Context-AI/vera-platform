@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPI Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>NPI Verification Report</h1>
+        <p class="subtitle">National Provider Identifier Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Provider Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">NPI Number:</div>
+                <div class="info-value">{{ npi }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Provider Name:</div>
+                <div class="info-value">{{ provider_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Provider Type:</div>
+                <div class="info-value">{{ provider_type }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if is_active %}status-success{% else %}status-warning{% endif %}">
+                        {% if is_active %}ACTIVE{% else %}INACTIVE{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if enumeration_date or last_update_date %}
+    <div class="info-section">
+        <h2>Registration Dates</h2>
+        <div class="info-grid">
+            {% if enumeration_date %}
+            <div class="info-item">
+                <div class="info-label">Enumeration Date:</div>
+                <div class="info-value">{{ enumeration_date }}</div>
+            </div>
+            {% endif %}
+            {% if last_update_date %}
+            <div class="info-item">
+                <div class="info-label">Last Update Date:</div>
+                <div class="info-value">{{ last_update_date }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if primary_taxonomy or specialty %}
+    <div class="info-section">
+        <h2>Specialty Information</h2>
+        <div class="info-grid">
+            {% if primary_taxonomy %}
+            <div class="info-item">
+                <div class="info-label">Primary Taxonomy Code:</div>
+                <div class="info-value">{{ primary_taxonomy }}</div>
+            </div>
+            {% endif %}
+            {% if specialty %}
+            <div class="info-item">
+                <div class="info-label">Primary Specialty:</div>
+                <div class="info-value">{{ specialty }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if secondary_taxonomies %}
+        <div class="info-item">
+            <div class="info-label">Secondary Taxonomies:</div>
+            <div class="info-value">
+                <ul>
+                {% for taxonomy in secondary_taxonomies %}
+                    <li><strong>{{ taxonomy.code }}:</strong> {{ taxonomy.description }}
+                    {% if taxonomy.primary %} (Primary){% endif %}
+                    {% if taxonomy.state %} - State: {{ taxonomy.state }}{% endif %}
+                    {% if taxonomy.license %} - License: {{ taxonomy.license }}{% endif %}
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if license_number or license_state %}
+    <div class="info-section">
+        <h2>License Information</h2>
+        <div class="info-grid">
+            {% if license_number %}
+            <div class="info-item">
+                <div class="info-label">License Number:</div>
+                <div class="info-value">{{ license_number }}</div>
+            </div>
+            {% endif %}
+            {% if license_state %}
+            <div class="info-item">
+                <div class="info-label">License State:</div>
+                <div class="info-value">{{ license_state }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if practice_address %}
+    <div class="info-section">
+        <h2>Practice Address</h2>
+        <div class="info-item">
+            <div class="info-label">Address:</div>
+            <div class="info-value">
+                {% if practice_address.address_1 %}{{ practice_address.address_1 }}{% endif %}
+                {% if practice_address.address_2 %}<br>{{ practice_address.address_2 }}{% endif %}
+                {% if practice_address.city or practice_address.state or practice_address.postal_code %}
+                <br>{{ practice_address.city }}{% if practice_address.city and practice_address.state %}, {% endif %}{{ practice_address.state }} {{ practice_address.postal_code }}
+                {% endif %}
+                {% if practice_address.country_code and practice_address.country_code != 'US' %}
+                <br>{{ practice_address.country_code }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if mailing_address and mailing_address != practice_address %}
+    <div class="info-section">
+        <h2>Mailing Address</h2>
+        <div class="info-item">
+            <div class="info-label">Address:</div>
+            <div class="info-value">
+                {% if mailing_address.address_1 %}{{ mailing_address.address_1 }}{% endif %}
+                {% if mailing_address.address_2 %}<br>{{ mailing_address.address_2 }}{% endif %}
+                {% if mailing_address.city or mailing_address.state or mailing_address.postal_code %}
+                <br>{{ mailing_address.city }}{% if mailing_address.city and mailing_address.state %}, {% endif %}{{ mailing_address.state }} {{ mailing_address.postal_code }}
+                {% endif %}
+                {% if mailing_address.country_code and mailing_address.country_code != 'US' %}
+                <br>{{ mailing_address.country_code }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if phone or fax %}
+    <div class="info-section">
+        <h2>Contact Information</h2>
+        <div class="info-grid">
+            {% if phone %}
+            <div class="info-item">
+                <div class="info-label">Phone:</div>
+                <div class="info-value">{{ phone }}</div>
+            </div>
+            {% endif %}
+            {% if fax %}
+            <div class="info-item">
+                <div class="info-label">Fax:</div>
+                <div class="info-value">{{ fax }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if gender or credential or sole_proprietor %}
+    <div class="info-section">
+        <h2>Individual Provider Details</h2>
+        <div class="info-grid">
+            {% if gender %}
+            <div class="info-item">
+                <div class="info-label">Gender:</div>
+                <div class="info-value">{{ gender }}</div>
+            </div>
+            {% endif %}
+            {% if credential %}
+            <div class="info-item">
+                <div class="info-label">Credential:</div>
+                <div class="info-value">{{ credential }}</div>
+            </div>
+            {% endif %}
+            {% if sole_proprietor %}
+            <div class="info-item">
+                <div class="info-label">Sole Proprietor:</div>
+                <div class="info-value">{{ sole_proprietor }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if authorized_official %}
+    <div class="info-section">
+        <h2>Authorized Official</h2>
+        <div class="info-grid">
+            {% if authorized_official.first_name or authorized_official.last_name %}
+            <div class="info-item">
+                <div class="info-label">Name:</div>
+                <div class="info-value">{{ authorized_official.first_name }} {{ authorized_official.last_name }}</div>
+            </div>
+            {% endif %}
+            {% if authorized_official.title %}
+            <div class="info-item">
+                <div class="info-label">Title:</div>
+                <div class="info-value">{{ authorized_official.title }}</div>
+            </div>
+            {% endif %}
+            {% if authorized_official.phone %}
+            <div class="info-item">
+                <div class="info-label">Phone:</div>
+                <div class="info-value">{{ authorized_official.phone }}</div>
+            </div>
+            {% endif %}
+            {% if authorized_official.credential %}
+            <div class="info-item">
+                <div class="info-label">Credential:</div>
+                <div class="info-value">{{ authorized_official.credential }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Overall Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-error{% endif %}">
+                        {{ status.upper() }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This verification report is generated from official NPI registry data and is valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The NPI registration status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

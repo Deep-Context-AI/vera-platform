@@ -11,6 +11,7 @@ from v1.models.responses import (
 from v1.models.database import MedicareModelEnhanced, PractitionerEnhanced
 from v1.services.database import get_supabase_client
 from v1.services.practitioner_service import practitioner_service
+from v1.services.pdf_service import pdf_service
 from v1.exceptions.api import ExternalServiceException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -21,12 +22,14 @@ class MedicareService:
     def __init__(self):
         self.db: Client = get_supabase_client()
     
-    async def verify_provider(self, request: MedicareRequest) -> MedicareResponse:
+    async def verify_provider(self, request: MedicareRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> MedicareResponse:
         """
         Perform Medicare enrollment verification through database lookup
         
         Args:
             request: MedicareRequest containing provider information
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             MedicareResponse with verification results from requested sources
@@ -50,6 +53,38 @@ class MedicareService:
             
             # Build response from database data
             response = self._build_response_from_db_record(medicare_data, request)
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id:
+                try:
+                    full_name = f"{request.first_name} {request.last_name}"
+                    logger.info(f"Generating PDF document for Medicare verification: {request.npi}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document
+                    # Use practitioner_id from database if available, otherwise use NPI
+                    practitioner_id = str(medicare_data.practitioner_id) if medicare_data.practitioner_id else request.npi
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="medicare_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="medicare_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
             
             logger.info(f"Medicare verification completed for NPI: {request.npi}")
             return response

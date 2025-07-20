@@ -1,4 +1,10 @@
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Header, WebSocket, WebSocketDisconnect
+from typing import Optional, Dict, Any
+import asyncio
+import json
+import logging
+import time
+from dataclasses import dataclass
 
 from v1.models.requests import (
     NPIRequest, DEAVerificationRequest, ABMSRequest, NPDBRequest,
@@ -26,13 +32,316 @@ from v1.services.external.MEDICARE import medicare_service
 from v1.services.external.EDUCATION import education_service
 from v1.services.external.HOSPITAL_PRIVILEGES import hospital_privileges_service
 from v1.services.database import DatabaseService
+db_service = DatabaseService()
 from v1.services.audit_trail_service import audit_trail_service
+from v1.services.voice_service import voice_service, VoiceCallRequest as VoiceRequest
+from v1.services.voice.audio_utils import VoiceSessionManager, AudioChunk
+from v1.services.voice.gemini_voice_service import GeminiVoiceService
+from v1.services.twilio_service import twilio_service
 
 # Create router
 router = APIRouter()
 
-# Initialize database service
-db_service = DatabaseService()
+# Track active WebSocket sessions
+active_websocket_sessions: Dict[str, "TwilioWebSocketHandler"] = {}
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SessionManager:
+    """Simple session manager for Gemini voice service"""
+    session_id: str
+    call_sid: str
+    phone_number: str = "unknown"
+    call_purpose: str = "test"
+
+
+class TwilioWebSocketHandler:
+    """Handles WebSocket connections from Twilio media streams"""
+    
+    def __init__(self, websocket: WebSocket, session_id: str):
+        self.websocket = websocket
+        self.session_id = session_id
+        self.call_sid: Optional[str] = None
+        self.stream_sid: Optional[str] = None
+        self.session_manager: Optional[VoiceSessionManager] = None
+        self.gemini_service: Optional[GeminiVoiceService] = None
+        self.is_active = False
+        self.message_count = 0  # Track total messages received
+        self.phone_number = "unknown"
+        self.call_purpose = "test"
+
+    async def handle_connection(self):
+        """Handle the WebSocket connection lifecycle"""
+        try:
+            # Accept the connection
+            await self.websocket.accept()
+            logger.info(f"WebSocket connection accepted for session: {self.session_id}")
+            
+            # Add to active sessions
+            active_websocket_sessions[self.session_id] = self
+            
+            # Start message processing
+            await self._message_loop()
+            
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected for session: {self.session_id}")
+        except Exception as e:
+            logger.error(f"Error in WebSocket handler: {e}")
+        finally:
+            # Clean up
+            await self._cleanup()
+
+    async def _initialize_services(self):
+        """Initialize voice services"""
+        try:
+            # Initialize Gemini voice service
+            self.gemini_service = GeminiVoiceService()
+            if not await self.gemini_service.initialize():
+                raise Exception("Failed to initialize Gemini service")
+            
+            # Set up callbacks
+            self.gemini_service.set_callbacks(
+                on_audio_received=self._on_gemini_audio_received,
+                on_turn_complete=self._on_gemini_turn_complete,
+                on_error=self._on_gemini_error
+            )
+            
+            # Initialize voice session manager
+            self.session_manager = VoiceSessionManager(
+                session_id=self.session_id,
+                call_sid=self.call_sid,
+                phone_number=self.phone_number
+            )
+            
+            # Create simple session manager for Gemini service
+            simple_session_manager = SessionManager(
+                session_id=self.session_id,
+                call_sid=self.call_sid,
+                phone_number=self.phone_number,
+                call_purpose=self.call_purpose
+            )
+            
+            # Start Gemini session
+            if not await self.gemini_service.start_session(simple_session_manager):
+                raise Exception("Failed to start Gemini session")
+            
+            logger.info(f"Services initialized for session: {self.session_id}, purpose: {self.call_purpose}")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize services: {e}")
+            raise
+
+    async def _message_loop(self):
+        """Main message processing loop"""
+        try:
+            while True:
+                # Receive message from Twilio
+                message = await self.websocket.receive_text()
+                self.message_count += 1
+                logger.debug(f"WebSocket message #{self.message_count} received: {len(message)} chars")
+                
+                try:
+                    data = json.loads(message)
+                    await self._handle_twilio_message(data)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON message: {e}")
+                    logger.error(f"Raw message: {message}")
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
+                    
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected after {self.message_count} messages")
+        except Exception as e:
+            logger.error(f"Error in message loop after {self.message_count} messages: {e}")
+    
+    async def _handle_twilio_message(self, data: Dict[str, Any]):
+        """Handle incoming messages from Twilio WebSocket"""
+        try:
+            event_type = data.get("event")
+            
+            # Only log non-media events and important media events
+            if event_type != "media":
+                logger.info(f"📞 Twilio event: {event_type}")
+            
+            if event_type == "connected":
+                logger.info("Twilio WebSocket connected")
+                
+            elif event_type == "start":
+                # Extract call information
+                start_data = data.get("start", {})
+                self.call_sid = start_data.get("callSid")
+                self.stream_sid = start_data.get("streamSid")  # This is what we need for audio!
+                
+                logger.info(f"🎬 Twilio media stream started for call: {self.call_sid}, stream: {self.stream_sid}")
+                
+                # Initialize services now that we have call information
+                await self._initialize_services()
+                
+                # Mark session as active
+                self.is_active = True
+                logger.info(f"✅ Session fully initialized: is_active={self.is_active}")
+                
+            elif event_type == "media":
+                # Handle media events using the simplified method
+                await self._handle_media_event(data)
+                        
+            elif event_type == "stop":
+                logger.info("🛑 Twilio media stream stopped")
+                self.is_active = False
+                
+                # End the Gemini session
+                if self.gemini_service:
+                    await self.gemini_service.end_session()
+                    
+            else:
+                logger.debug(f"Unhandled Twilio event type: {event_type}")
+                
+        except Exception as e:
+            logger.error(f"Error handling Twilio message: {e}")
+            logger.error(f"Message data: {data}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+    async def _on_gemini_audio_received(self, audio_chunk: AudioChunk):
+        """Handle audio received from Gemini"""
+        try:
+            # Send audio to Twilio in the correct format
+            if self.stream_sid:
+                media_message = {
+                    "event": "media",
+                    "streamSid": self.stream_sid,
+                    "media": {
+                        "payload": audio_chunk.to_base64()
+                    }
+                }
+                await self.websocket.send_text(json.dumps(media_message))
+                logger.info(f"Sent audio to Twilio: {len(audio_chunk.data)} bytes, format: {audio_chunk.format}")
+            else:
+                logger.warning("Cannot send audio - no stream_sid available")
+            
+        except Exception as e:
+            logger.error(f"Error sending audio to Twilio: {e}")
+
+    async def _on_gemini_turn_complete(self):
+        """Handle Gemini turn completion"""
+        logger.info(f"Gemini turn completed - session still active: {self.is_active}, message count: {self.message_count}")
+        
+        # Continue listening for user input instead of ending the call
+        logger.info("Turn completed - continuing to listen for user input")
+
+    async def _on_gemini_error(self, error: Exception):
+        """Handle Gemini error"""
+        logger.error(f"Gemini error: {error}")
+        
+        # Don't disable the session for recoverable errors like API signature issues
+        # Only disable for critical errors that indicate the session is fundamentally broken
+        error_message = str(error).lower()
+        
+        if any(keyword in error_message for keyword in [
+            "connection", "network", "timeout", "authentication", "authorization"
+        ]):
+            # Critical errors that require session restart
+            logger.error("Critical Gemini error - disabling session")
+            self.is_active = False
+        else:
+            # Recoverable errors (like API signature issues) - log but continue
+            logger.warning(f"Recoverable Gemini error: {error}")
+
+    async def _handle_media_event(self, data: Dict[str, Any]):
+        """Handle media events from Twilio"""
+        try:
+            if not self.session_manager or not self.is_active:
+                logger.warning(f"Received media event but session not ready - session_manager: {self.session_manager is not None}, is_active: {self.is_active}")
+                return
+            
+            # Extract media data
+            media_data = data.get("media", {})
+            media_payload = media_data.get("payload", "")
+            media_timestamp = media_data.get("timestamp", 0)
+            
+            # Check if payload is empty
+            if not media_payload:
+                logger.warning("Empty media payload received")
+                return
+            
+            # Check if payload is changing (detect repeated payloads)
+            if not hasattr(self, '_last_payload_hash'):
+                self._last_payload_hash = hash(media_payload)
+                self._payload_repeat_count = 0
+                logger.info(f"🎵 First audio payload received: {len(media_payload)} chars")
+            else:
+                current_hash = hash(media_payload)
+                if current_hash == self._last_payload_hash:
+                    self._payload_repeat_count += 1
+                    # Only log every 50 repeated payloads to reduce noise
+                    if self._payload_repeat_count % 50 == 0:
+                        logger.warning(f"🔄 Repeated payload detected! Count: {self._payload_repeat_count}")
+                else:
+                    if self._payload_repeat_count > 0:
+                        logger.info(f"🆕 New audio payload after {self._payload_repeat_count} repeats")
+                    self._last_payload_hash = current_hash
+                    self._payload_repeat_count = 0
+                    logger.info(f"🎤 New audio payload: {len(media_payload)} chars")
+            
+            # Send RAW Twilio audio directly to Gemini (no processing)
+            if self.gemini_service:
+                try:
+                    # Create a simple audio chunk with raw data
+                    import base64
+                    raw_audio_data = base64.b64decode(media_payload)
+                    
+                    # Create AudioChunk with raw Twilio data
+                    from v1.services.voice.audio_utils import AudioChunk, AudioFormat
+                    raw_audio_chunk = AudioChunk(
+                        data=raw_audio_data,
+                        format=AudioFormat.TWILIO_MULAW,  # Keep original format
+                        sample_rate=8000,  # Twilio's sample rate
+                        timestamp=float(media_timestamp),
+                        sequence_id=getattr(self, '_sequence_counter', 0)
+                    )
+                    
+                    # Increment sequence counter
+                    self._sequence_counter = getattr(self, '_sequence_counter', 0) + 1
+                    
+                    logger.info(f"📡 Sending RAW Twilio audio to Gemini: {len(raw_audio_data)} bytes, format: μ-law 8kHz")
+                    
+                    success = await self.gemini_service.send_raw_audio_chunk(raw_audio_chunk)
+                    if not success:
+                        logger.error(f"❌ Failed to send raw audio to Gemini")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating raw audio chunk: {e}")
+            else:
+                logger.error("No Gemini service available to send audio")
+                
+        except Exception as e:
+            logger.error(f"Error handling media event: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+    async def _cleanup(self):
+        """Cleanup resources"""
+        try:
+            # End Gemini session
+            if self.gemini_service:
+                await self.gemini_service.end_session()
+            
+            # Save session audio for debugging
+            if self.session_manager:
+                logger.info("Saving session audio for debugging...")
+                result = await self.session_manager.save_session_audio()
+                logger.info(f"Audio save result: {result}")
+            
+            # Remove from active sessions
+            if self.session_id in active_websocket_sessions:
+                del active_websocket_sessions[self.session_id]
+            
+            logger.info(f"WebSocket cleanup completed for session: {self.session_id}")
+            
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
 
 # NPI Endpoints
 @router.post(
@@ -40,11 +349,15 @@ db_service = DatabaseService()
     response_model=NPIResponse,
     tags=["NPI"],
     summary="Search NPI by criteria (POST)",
-    description="Search for National Provider Identifier using detailed search criteria via POST request"
+    description="Search for National Provider Identifier using detailed search criteria via POST request. Optionally generate PDF document."
 )
-async def search_npi_post(request: NPIRequest) -> NPIResponse:
+async def search_npi_post(
+    request: NPIRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> NPIResponse:
     """Search for NPI using detailed criteria via POST"""
-    return await npi_service.lookup_npi(request)
+    return await npi_service.lookup_npi(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # DEA Endpoints
 @router.post(
@@ -52,11 +365,15 @@ async def search_npi_post(request: NPIRequest) -> NPIResponse:
     response_model=NewDEAVerificationResponse,
     tags=["DEA"],
     summary="DEA verification",
-    description="Verify DEA practitioner with first name, last name, and DEA number (required), other fields optional"
+    description="Verify DEA practitioner with first name, last name, and DEA number (required), other fields optional. Optionally generate PDF document."
 )
-async def verify_dea_practitioner(request: DEAVerificationRequest) -> NewDEAVerificationResponse:
+async def verify_dea_practitioner(
+    request: DEAVerificationRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> NewDEAVerificationResponse:
     """Verify DEA practitioner - requires first_name, last_name, and dea_number, other fields optional"""
-    return await dea_service.verify_dea_practitioner(request)
+    return await dea_service.verify_dea_practitioner(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # ABMS Endpoints
 @router.post(
@@ -64,11 +381,15 @@ async def verify_dea_practitioner(request: DEAVerificationRequest) -> NewDEAVeri
     response_model=ABMSResponse,
     tags=["ABMS"],
     summary="Lookup board certification",
-    description="Retrieve board certification information by physician details"
+    description="Retrieve board certification information by physician details. Optionally generate PDF document."
 )
-async def get_board_certification(request: ABMSRequest) -> ABMSResponse:
+async def get_board_certification(
+    request: ABMSRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> ABMSResponse:
     """Lookup board certification information"""
-    return await abms_service.lookup_board_certification(request)
+    return await abms_service.lookup_board_certification(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # NPDB Endpoints
 @router.post(
@@ -76,11 +397,15 @@ async def get_board_certification(request: ABMSRequest) -> ABMSResponse:
     response_model=NPDBResponse,
     tags=["NPDB"],
     summary="Verify practitioner in NPDB",
-    description="Perform comprehensive NPDB verification with detailed practitioner information"
+    description="Perform comprehensive NPDB verification with detailed practitioner information. Optionally generate PDF document."
 )
-async def verify_npdb_practitioner(request: NPDBRequest) -> NPDBResponse:
+async def verify_npdb_practitioner(
+    request: NPDBRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> NPDBResponse:
     """Verify practitioner in NPDB with comprehensive information"""
-    return await npdb_service.verify_practitioner(request)
+    return await npdb_service.verify_practitioner(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # Sanctions Endpoints
 @router.post(
@@ -88,11 +413,15 @@ async def verify_npdb_practitioner(request: NPDBRequest) -> NPDBResponse:
     response_model=ComprehensiveSANCTIONResponse,
     tags=["Sanctions"],
     summary="Comprehensive sanctions check",
-    description="Perform comprehensive sanctions check across multiple sources including OIG LEIE, SAM.gov, State Medicaid, and Medical Boards"
+    description="Perform comprehensive sanctions check across multiple sources including OIG LEIE, SAM.gov, State Medicaid, and Medical Boards. Optionally generate PDF document."
 )
-async def comprehensive_sanctions_check(request: ComprehensiveSANCTIONRequest) -> ComprehensiveSANCTIONResponse:
+async def comprehensive_sanctions_check(
+    request: ComprehensiveSANCTIONRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> ComprehensiveSANCTIONResponse:
     """Perform comprehensive sanctions check with detailed practitioner information"""
-    return await sanction_service.comprehensive_sanctions_check(request)
+    return await sanction_service.comprehensive_sanctions_check(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # LADMF Endpoints
 @router.post(
@@ -100,11 +429,15 @@ async def comprehensive_sanctions_check(request: ComprehensiveSANCTIONRequest) -
     response_model=LADMFResponse,
     tags=["LADMF"],
     summary="Verify death record in LADMF",
-    description="Verify if an individual is deceased using the Limited Access Death Master File (SSA LADMF)"
+    description="Verify if an individual is deceased using the Limited Access Death Master File (SSA LADMF). Optionally generate PDF document."
 )
-async def verify_death_record(request: LADMFRequest) -> LADMFResponse:
+async def verify_death_record(
+    request: LADMFRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> LADMFResponse:
     """Verify death record in LADMF with individual's information"""
-    return await ladmf_service.verify_death_record(request)
+    return await ladmf_service.verify_death_record(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # MEDICAL Endpoints
 @router.post(
@@ -112,11 +445,15 @@ async def verify_death_record(request: LADMFRequest) -> LADMFResponse:
     response_model=MedicalResponse,
     tags=["Medical"],
     summary="Medi-Cal Managed Care + ORP verification",
-    description="Perform combined verification against Medi-Cal Managed Care and ORP (Other Recognized Provider) networks"
+    description="Perform combined verification against Medi-Cal Managed Care and ORP (Other Recognized Provider) networks. Optionally generate PDF document."
 )
-async def verify_medical_provider(request: MedicalRequest) -> MedicalResponse:
+async def verify_medical_provider(
+    request: MedicalRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> MedicalResponse:
     """Verify provider in both Medi-Cal Managed Care and ORP systems"""
-    return await medical_service.verify_provider(request)
+    return await medical_service.verify_provider(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # DCA Endpoints
 @router.post(
@@ -124,11 +461,15 @@ async def verify_medical_provider(request: MedicalRequest) -> MedicalResponse:
     response_model=DCAResponse,
     tags=["DCA"],
     summary="DCA CA license verification",
-    description="Verify California license through Department of Consumer Affairs (DCA)"
+    description="Verify California license through Department of Consumer Affairs (DCA). Optionally generate PDF document."
 )
-async def verify_dca_license(request: DCARequest) -> DCAResponse:
+async def verify_dca_license(
+    request: DCARequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> DCAResponse:
     """Verify CA license through DCA with provider information"""
-    return await dca_service.verify_license(request)
+    return await dca_service.verify_license(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # MEDICARE Endpoints
 @router.post(
@@ -136,11 +477,15 @@ async def verify_dca_license(request: DCARequest) -> DCAResponse:
     response_model=MedicareResponse,
     tags=["Medicare"],
     summary="Medicare enrollment verification",
-    description="Verify if a provider is enrolled in Medicare and eligible to bill or order/refer"
+    description="Verify if a provider is enrolled in Medicare and eligible to bill or order/refer. Optionally generate PDF document."
 )
-async def verify_medicare_provider(request: MedicareRequest) -> MedicareResponse:
+async def verify_medicare_provider(
+    request: MedicareRequest,
+    generate_pdf: bool = Query(False, description="Generate PDF document for verification results"),
+    user_id: Optional[str] = Header(None, alias="X-User-ID", description="User ID for PDF generation (required if generate_pdf=true)")
+) -> MedicareResponse:
     """Verify provider Medicare enrollment status across FFS and O&R datasets"""
-    return await medicare_service.verify_provider(request)
+    return await medicare_service.verify_provider(request, generate_pdf=generate_pdf, user_id=user_id)
 
 # EDUCATION Endpoints
 @router.post(
@@ -481,3 +826,215 @@ async def get_latest_step_status(
         message=f"Latest status for step {step_key} retrieved successfully",
         entry=entry_response
     )
+
+@router.get("/voice/test/{phone_number}")
+async def test_voice_call(phone_number: str):
+    """Test endpoint to make a simple voice call that says 'Hi'"""
+    try:
+        result = await voice_service.make_test_call(phone_number)
+        return {
+            "success": True,
+            "call_sid": result.call_sid,
+            "session_id": result.session_id,
+            "status": result.status,
+            "duration_seconds": result.duration_seconds,
+            "total_turns": result.total_turns,
+            "call_details": result.call_details
+        }
+    except Exception as e:
+        from fastapi import HTTPException
+        from logging import getLogger
+        logger = getLogger(__name__)
+        logger.error(f"Test voice call failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/voice/call")
+async def make_voice_call(request: VoiceRequest):
+    """Make an outbound voice call with custom parameters"""
+    try:
+        result = await voice_service.make_voice_call(request)
+        return {
+            "success": True,
+            "call_sid": result.call_sid,
+            "session_id": result.session_id,
+            "status": result.status,
+            "duration_seconds": result.duration_seconds,
+            "total_turns": result.total_turns,
+            "call_details": result.call_details
+        }
+    except Exception as e:
+        from fastapi import HTTPException
+        from logging import getLogger
+        logger = getLogger(__name__)
+        logger.error(f"Voice call failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/voice/education-verification")
+async def make_education_verification_call(
+    phone_number: str,
+    student_name: str,
+    institution: str,
+    degree_type: str,
+    graduation_year: int
+):
+    """Make an education verification call"""
+    try:
+        result = await voice_service.make_education_verification_call(
+            phone_number=phone_number,
+            student_name=student_name,
+            institution=institution,
+            degree_type=degree_type,
+            graduation_year=graduation_year
+        )
+        return {
+            "success": True,
+            "call_sid": result.call_sid,
+            "session_id": result.session_id,
+            "status": result.status,
+            "duration_seconds": result.duration_seconds,
+            "total_turns": result.total_turns,
+            "call_details": result.call_details
+        }
+    except Exception as e:
+        from fastapi import HTTPException
+        from logging import getLogger
+        logger = getLogger(__name__)
+        logger.error(f"Education verification call failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/voice/debug/audio/{session_id}")
+async def get_voice_debug_audio(session_id: str):
+    """Get debug audio files for a voice session"""
+    try:
+        import modal
+        from datetime import datetime
+        
+        # Get the voice debug volume
+        debug_volume = modal.Volume.from_name("voice-debug-audio")
+        
+        # Try to find the session directory
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        session_dir = f"voice_debug/{today}/{session_id}"
+        
+        # List files in the session directory
+        try:
+            files = list(debug_volume.listdir(f"/{session_dir}"))
+            
+            # Get metadata if it exists
+            metadata_path = f"/{session_dir}/session_metadata.json"
+            metadata = None
+            
+            if "session_metadata.json" in [f.name for f in files]:
+                with debug_volume.open(metadata_path, "r") as f:
+                    metadata = json.loads(f.read())
+            
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "storage_path": session_dir,
+                "files": [{"name": f.name, "size": f.size} for f in files],
+                "metadata": metadata
+            }
+            
+        except Exception as e:
+            return {
+                "status": "not_found",
+                "message": f"Session audio not found: {e}",
+                "session_id": session_id
+            }
+            
+    except Exception as e:
+        logger.error(f"Error retrieving debug audio: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@router.get("/voice/debug/audio/{session_id}/download/{filename}")
+async def download_voice_debug_audio(session_id: str, filename: str):
+    """Download a specific debug audio file"""
+    try:
+        import modal
+        import tempfile
+        import os
+        from fastapi.responses import FileResponse
+        from datetime import datetime
+        
+        # Get the voice debug volume
+        debug_volume = modal.Volume.from_name("voice-debug-audio")
+        
+        # Construct file path
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        session_dir = f"voice_debug/{today}/{session_id}"
+        file_path = f"/{session_dir}/{filename}"
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Download from volume - use the correct path format
+            debug_volume.get_file(file_path, temp_path)
+            
+            # Determine media type based on filename
+            if filename.endswith('.json'):
+                media_type = "application/json"
+            elif filename.endswith('.raw'):
+                media_type = "audio/raw"
+            else:
+                media_type = "application/octet-stream"
+            
+            return FileResponse(
+                path=temp_path,
+                filename=filename,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}",
+                    "X-Session-ID": session_id
+                }
+            )
+            
+        except Exception as download_error:
+            # Clean up temp file if download failed
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise download_error
+            
+    except Exception as e:
+        logger.error(f"Error downloading debug audio: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+# WebSocket endpoint for Twilio media streams
+@router.websocket("/media-stream/{session_id}")
+async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for Twilio media streams"""
+    logger.info(f"New WebSocket connection for session: {session_id}")
+    
+    handler = TwilioWebSocketHandler(websocket, session_id)
+    await handler.handle_connection()
+
+# WebSocket utility endpoints
+@router.get("/websocket/health")
+async def websocket_health_check():
+    """Health check endpoint for WebSocket functionality"""
+    return {
+        "status": "healthy",
+        "active_sessions": len(active_websocket_sessions),
+        "timestamp": time.time()
+    }
+
+@router.get("/websocket/sessions")
+async def get_active_websocket_sessions():
+    """Get information about active WebSocket sessions"""
+    session_info = {}
+    for session_id, handler in active_websocket_sessions.items():
+        session_info[session_id] = {
+            "session_id": session_id,
+            "call_sid": handler.call_sid,
+            "is_active": handler.is_active,
+            "message_count": handler.message_count
+        }
+    return {"active_sessions": session_info}

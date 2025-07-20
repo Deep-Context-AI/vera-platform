@@ -7,6 +7,7 @@ from v1.models.requests import NPIRequest
 from v1.models.responses import NPIResponse, ResponseStatus
 from v1.exceptions.api import ExternalServiceException
 from v1.services.database import get_supabase_client
+from v1.services.pdf_service import pdf_service
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +87,20 @@ class NPIService:
             npi=npi_data.get('number'),
             provider_name=provider_name,
             provider_type=npi_data.get('type'),
+            practitioner_id=npi_data.get('practitioner_id'),
             primary_taxonomy=npi_data.get('taxonomy_code'),
             specialty=npi_data.get('description'),
             is_active=npi_data.get('status') == 'Active',
         )
     
-    async def comprehensive_npi_lookup(self, request: NPIRequest) -> NPIResponse:
+    async def comprehensive_npi_lookup(self, request: NPIRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> NPIResponse:
         """
         Comprehensive NPI lookup that checks database first, then external API
         
         Args:
             request: NPIRequest containing search criteria
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             NPIResponse with the lookup results
@@ -110,11 +114,47 @@ class NPIService:
             db_result = await self.lookup_npi_from_db(request.npi)
             if db_result:
                 logger.info(f"NPI {request.npi} found in database")
-                return db_result
+                response = db_result
+            else:
+                # If not found in database, try external API
+                logger.info(f"NPI {request.npi} not found in database, trying external API")
+                response = await self.lookup_npi_external(request)
+        else:
+            # No NPI provided, use external API
+            response = await self.lookup_npi_external(request)
         
-        # If not found in database, try external API
-        logger.info(f"NPI {request.npi} not found in database, trying external API")
-        return await self.lookup_npi_external(request)
+        # Generate PDF if requested
+        if generate_pdf and user_id and response.status == ResponseStatus.SUCCESS:
+            try:
+                logger.info(f"Generating PDF document for NPI verification: {response.npi}")
+                
+                # Convert response to dict for template
+                response_dict = response.model_dump()
+                
+                # Generate PDF document
+                # Use practitioner_id from database if available, otherwise use NPI
+                practitioner_id = str(response.practitioner_id) if response.practitioner_id else (response.npi or "unknown_npi")
+                
+                document_url = await pdf_service.generate_pdf_document(
+                    template_name="npi_verification.html",
+                    data=response_dict,
+                    practitioner_id=practitioner_id,
+                    user_id=user_id,
+                    filename_prefix="npi_verification"
+                )
+                
+                # Update response with document URL and timestamp
+                response.document_url = document_url
+                response.document_generated_at = datetime.utcnow()
+                
+                logger.info(f"PDF document generated successfully: {document_url}")
+                
+            except Exception as e:
+                logger.error(f"Failed to generate PDF document: {e}")
+                # Don't fail the entire verification if PDF generation fails
+                pass
+        
+        return response
     
     async def lookup_npi_external(self, request: NPIRequest) -> NPIResponse:
         """
@@ -175,12 +215,14 @@ class NPIService:
             )
     
     # Keep the original method for backward compatibility, but make it use comprehensive lookup
-    async def lookup_npi(self, request: NPIRequest) -> NPIResponse:
+    async def lookup_npi(self, request: NPIRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> NPIResponse:
         """
         Lookup NPI using comprehensive approach (database first, then external API)
         
         Args:
             request: NPIRequest containing search criteria
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             NPIResponse with the lookup results
@@ -189,7 +231,7 @@ class NPIService:
             NotFoundException: If NPI is not found
             ExternalServiceException: If external service fails
         """
-        return await self.comprehensive_npi_lookup(request)
+        return await self.comprehensive_npi_lookup(request, generate_pdf, user_id)
     
     def _build_search_params(self, request: NPIRequest) -> Dict[str, str]:
         """Build search parameters for the NPI API"""

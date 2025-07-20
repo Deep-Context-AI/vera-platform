@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPDB Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>NPDB Verification Report</h1>
+        <p class="subtitle">National Practitioner Data Bank Verification</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Query Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Query Type:</div>
+                <div class="info-value">{{ query_response_type }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Process Date:</div>
+                <div class="info-value">{{ process_date }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Practitioner Name:</div>
+                <div class="info-value">{{ name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Verification Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-warning{% endif %}">
+                        {{ status|upper }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Subject Identification</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Full Name:</div>
+                <div class="info-value">{{ subject_identification.full_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Date of Birth:</div>
+                <div class="info-value">{{ subject_identification.date_of_birth }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">NPI Number:</div>
+                <div class="info-value">{{ subject_identification.npi_number }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">License Number:</div>
+                <div class="info-value">{{ subject_identification.license_number }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">State of License:</div>
+                <div class="info-value">{{ subject_identification.state_of_license }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">SSN (Last 4):</div>
+                <div class="info-value">****{{ subject_identification.ssn_last4 }}</div>
+            </div>
+        </div>
+        
+        {% if subject_identification.dea_number %}
+        <div class="info-item">
+            <div class="info-label">DEA Number:</div>
+            <div class="info-value">{{ subject_identification.dea_number }}</div>
+        </div>
+        {% endif %}
+        
+        {% if subject_identification.professional_school %}
+        <div class="info-item">
+            <div class="info-label">Professional School:</div>
+            <div class="info-value">{{ subject_identification.professional_school }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if subject_identification.work_address %}
+    <div class="info-section">
+        <h2>Work Address</h2>
+        <div class="info-item">
+            <div class="info-label">Address:</div>
+            <div class="info-value">
+                {{ subject_identification.work_address.line1 }}<br>
+                {% if subject_identification.work_address.line2 %}{{ subject_identification.work_address.line2 }}<br>{% endif %}
+                {{ subject_identification.work_address.city }}, {{ subject_identification.work_address.state }} {{ subject_identification.work_address.zip }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="info-section">
+        <h2>Continuous Query Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Query Type:</div>
+                <div class="info-value">{{ continuous_query_info.query_type }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Entity Name:</div>
+                <div class="info-value">{{ continuous_query_info.entity_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Authorized Submitter:</div>
+                <div class="info-value">{{ continuous_query_info.authorized_submitter }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Customer Use:</div>
+                <div class="info-value">{{ continuous_query_info.customer_use }}</div>
+            </div>
+        </div>
+        
+        <div class="info-item">
+            <div class="info-label">Statuses Queried:</div>
+            <div class="info-value">
+                {% for status in continuous_query_info.statuses_queried %}
+                    <span class="status-badge status-success">{{ status }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Report Summary</h2>
+        <div class="info-item">
+            <div class="info-label">Summary Date:</div>
+            <div class="info-value">{{ report_summary.summary_date }}</div>
+        </div>
+        
+        <h3>Report Types</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Report Type</th>
+                    <th>Result</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for report_type, report_data in report_summary.report_types.items() %}
+                <tr>
+                    <td>{{ report_type|replace('_', ' ')|title }}</td>
+                    <td>
+                        <span class="status-badge {% if report_data.result == 'Yes' %}status-error{% else %}status-success{% endif %}">
+                            {{ report_data.result }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if report_data.result == 'Yes' %}
+                            See details below
+                        {% else %}
+                            No details available
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if report_summary.report_types.values() | selectattr('result', 'equalto', 'Yes') | list | length > 0 %}
+    <div class="info-section">
+        <h2>Detailed Report Information</h2>
+        {% for report_type, report_data in report_summary.report_types.items() %}
+            {% if report_data.result == 'Yes' %}
+            <div class="detail-section">
+                <h3>{{ report_type|replace('_', ' ')|title }}</h3>
+                {% for detail in report_data.details %}
+                <div class="detail-item">
+                    <div class="info-item">
+                        <div class="info-label">Action Type:</div>
+                        <div class="info-value">{{ detail.action_type }}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">Action Date:</div>
+                        <div class="info-value">{{ detail.action_date }}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">Issuing State:</div>
+                        <div class="info-value">{{ detail.issuing_state }}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">Description:</div>
+                        <div class="info-value">{{ detail.description }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This NPDB verification report is generated from mocked National Practitioner Data Bank data and is not valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. The NPDB status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

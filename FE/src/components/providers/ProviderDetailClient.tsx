@@ -137,6 +137,9 @@ export function VerificationTabContent({
         status: existingAudit ? mapAuditStatusToVerification(existingAudit.status) : 'not_started',
         reasoning: existingAudit?.notes || '',
         files: [],
+        documents: [],
+        documentsLoading: false,
+        hasExistingDocuments: false,
         licenses: existingData?.licenses || [],
         incidents: existingData?.incidents || [],
         hospitalPrivileges: existingData?.hospitalPrivileges || [],
@@ -148,6 +151,49 @@ export function VerificationTabContent({
     
     setVerificationState(initialState);
   }, [workflow, auditSteps, user, agentRunner.isRunning, getCurrentUser]);
+
+  // Load existing documents for in-progress steps
+  useEffect(() => {
+    const loadExistingDocuments = async () => {
+      if (!practitionerId) return;
+
+      const { verificationDocumentService } = await import('@/lib/verification/documentService');
+      
+      // Check each step for existing documents
+      for (const step of workflow) {
+        const stepState = verificationState[step.id];
+        if (stepState?.status === 'in_progress' && !stepState.documentsLoading) {
+          try {
+            const documents = await verificationDocumentService.getExisting(practitionerId, step.id, applicationId);
+            
+            if (documents.length > 0) {
+              setVerificationState(prev => ({
+                ...prev,
+                [step.id]: {
+                  ...prev[step.id],
+                  hasExistingDocuments: true,
+                  documents: documents.map(doc => ({
+                    id: doc.path,
+                    fileName: doc.metadata.fileName,
+                    url: doc.url,
+                    uploadedAt: doc.createdAt,
+                    size: doc.metadata.fileSize,
+                    type: doc.metadata.mimeType
+                  }))
+                }
+              }));
+            }
+          } catch (error) {
+            console.error(`Error loading documents for ${step.id}:`, error);
+          }
+        }
+      }
+    };
+
+    if (Object.keys(verificationState).length > 0) {
+      loadExistingDocuments();
+    }
+  }, [practitionerId, workflow, verificationState, applicationId]);
 
   // Utility function to map audit status to verification status
   const mapAuditStatusToVerification = (auditStatus: string): VerificationStepState['status'] => {
@@ -446,6 +492,235 @@ export function VerificationTabContent({
     }));
   };
 
+  // Helper function to get practitioner data from global context
+  const getPractitionerData = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const context = (window as any).__practitionerContext;
+      if (context && context.practitioner) {
+        const { practitioner, applications, providerData } = context;
+        
+        // Get additional data from applications and provider data
+        const firstApp = applications?.[0];
+        const demographics = practitioner.demographics || {};
+        const homeAddress = practitioner.home_address || {};
+        
+        return {
+          // Basic info
+          first_name: practitioner.first_name || '',
+          last_name: practitioner.last_name || '',
+          middle_name: practitioner.middle_name || undefined,
+          full_name: `${practitioner.first_name} ${practitioner.last_name}`.trim(),
+          
+          // IDs and numbers
+          npi: firstApp?.npi_number || providerData?.npi_number || '',
+          npi_number: firstApp?.npi_number || providerData?.npi_number || '',
+          dea_number: firstApp?.dea_number || providerData?.dea_number || '',
+          license_number: firstApp?.license_number || providerData?.license_number || '',
+          
+          // Demographics
+          date_of_birth: demographics.birth_date || demographics.date_of_birth || '',
+          ssn_last4: practitioner.ssn ? practitioner.ssn.slice(-4) : '',
+          social_security_number: practitioner.ssn || '',
+          gender: demographics.gender || '',
+          
+          // Address
+          address: homeAddress.street ? {
+            line1: homeAddress.street || '',
+            line2: homeAddress.address_line_2 || '',
+            city: homeAddress.city || '',
+            state: homeAddress.state || '',
+            zip: homeAddress.zip_code || homeAddress.postal_code || ''
+          } : undefined,
+          city: homeAddress.city || '',
+          state: homeAddress.state || '',
+          zip: homeAddress.zip_code || homeAddress.postal_code || '',
+          postal_code: homeAddress.zip_code || homeAddress.postal_code || '',
+          
+          // License info
+          state_of_license: homeAddress.state || '',
+          license_state: homeAddress.state || '',
+          
+          // Education
+          institution: practitioner.education?.medical_school || '',
+          degree_type: practitioner.education?.degree || '',
+          graduation_year: practitioner.education?.graduation_year || new Date().getFullYear(),
+          
+          // Provider info
+          provider_type: 'Individual',
+          license_type: 'Medical Doctor',
+          taxonomy_code: firstApp?.npi_details?.taxonomy_code || '',
+          
+          // Medicare/Medicaid
+          medicare_id: firstApp?.medicare_id || '',
+          medicaid_id: firstApp?.medicaid_id || '',
+          
+          // Verification defaults
+          provider_verification_type: 'medicare_enrollment',
+          verification_sources: ['ffs_provider_enrollment', 'ordering_referring_provider'],
+          verification_type: 'degree_verification',
+          
+          // Hospital privileges
+          hospital_name: 'General Hospital', // TODO: Get from actual data
+          specialty: practitioner.education?.degree || 'General Practice',
+          
+          // Organization
+          organization_name: providerData?.organization_name || ''
+        };
+      }
+    }
+    
+    // Fallback data if no context available
+    return {
+      first_name: 'Unknown',
+      last_name: 'Provider',
+      full_name: 'Unknown Provider',
+      npi: '0000000000',
+      npi_number: '0000000000',
+      date_of_birth: '1980-01-01',
+      ssn_last4: '0000',
+      social_security_number: '0000',
+      city: '',
+      state: '',
+      zip: '',
+      postal_code: '',
+      state_of_license: '',
+      license_state: '',
+      license_number: '',
+      dea_number: '',
+      institution: '',
+      degree_type: '',
+      graduation_year: new Date().getFullYear(),
+      provider_type: 'Individual',
+      license_type: 'Medical Doctor',
+      taxonomy_code: '',
+      medicare_id: '',
+      medicaid_id: '',
+      provider_verification_type: 'medicare_enrollment',
+      verification_sources: ['ffs_provider_enrollment', 'ordering_referring_provider'],
+      verification_type: 'degree_verification',
+      hospital_name: 'General Hospital',
+      specialty: 'General Practice',
+      organization_name: '',
+      gender: ''
+    };
+  }, []);
+
+  // Document management handlers
+  const handleRequestDocument = async (stepId: string) => {
+    const step = workflow.find(s => s.id === stepId);
+    if (!step || !practitionerId) return;
+
+    setLoadingSteps(prev => new Set([...prev, stepId]));
+    setStepErrors(prev => ({ ...prev, [stepId]: '' }));
+
+    // Set documents loading state
+    setVerificationState(prev => ({
+      ...prev,
+      [stepId]: {
+        ...prev[stepId],
+        documentsLoading: true
+      }
+    }));
+
+    try {
+      const { verificationDocumentService } = await import('@/lib/verification/documentService');
+      
+      // Get actual practitioner data
+      const practitionerData = getPractitionerData();
+      
+      const result = await verificationDocumentService.handleWorkflow(
+        {
+          practitionerId,
+          stepId,
+          stepName: step.name,
+          applicationId,
+          requestedBy: getCurrentUser(),
+          practitionerData
+        },
+        verificationState[stepId]?.status || 'not_started'
+      );
+
+      // Update verification state with documents
+      setVerificationState(prev => ({
+        ...prev,
+        [stepId]: {
+          ...prev[stepId],
+          documentsLoading: false,
+          hasExistingDocuments: result.hasExistingDocuments,
+          documents: result.documents.map(doc => ({
+            id: doc.path,
+            fileName: doc.metadata.fileName,
+            url: doc.url,
+            uploadedAt: doc.createdAt,
+            size: doc.metadata.fileSize,
+            type: doc.metadata.mimeType
+          }))
+        }
+      }));
+
+      if (result.error) {
+        setStepErrors(prev => ({
+          ...prev,
+          [stepId]: result.error || 'Failed to process document request'
+        }));
+      }
+
+    } catch (error) {
+      console.error('Error requesting document:', error);
+      setStepErrors(prev => ({
+        ...prev,
+        [stepId]: 'Failed to request document. Please try again.'
+      }));
+      
+      setVerificationState(prev => ({
+        ...prev,
+        [stepId]: {
+          ...prev[stepId],
+          documentsLoading: false
+        }
+      }));
+    } finally {
+      setLoadingSteps(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(stepId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRemoveDocument = async (stepId: string, documentId: string) => {
+    const step = workflow.find(s => s.id === stepId);
+    if (!step || !practitionerId) return;
+
+    try {
+      const { verificationDocumentService } = await import('@/lib/verification/documentService');
+      
+      await verificationDocumentService.remove(documentId, {
+        practitionerId,
+        stepId,
+        stepName: step.name,
+        applicationId,
+        removedBy: getCurrentUser()
+      });
+
+      // Update local state
+      setVerificationState(prev => ({
+        ...prev,
+        [stepId]: {
+          ...prev[stepId],
+          documents: prev[stepId]?.documents.filter(doc => doc.id !== documentId) || []
+        }
+      }));
+
+    } catch (error) {
+      console.error('Error removing document:', error);
+      setStepErrors(prev => ({
+        ...prev,
+        [stepId]: 'Failed to remove document. Please try again.'
+      }));
+    }
+  };
+
   // Update handlers
   const handleUpdateStatus = (stepId: string, status: VerificationStepState['status']) => {
     setVerificationState(prev => ({
@@ -616,6 +891,8 @@ export function VerificationTabContent({
                   onUpdateReasoning={(reasoning) => handleUpdateReasoning(step.id, reasoning)}
                   onFileUpload={(files) => handleFileUpload(step.id, files)}
                   onRemoveFile={(index) => handleRemoveFile(step.id, index)}
+                  onRequestDocument={() => handleRequestDocument(step.id)}
+                  onRemoveDocument={(documentId) => handleRemoveDocument(step.id, documentId)}
                 >
                   {/* Special form components rendered as children */}
                   {step.hasSpecialForm && step.formType === 'licenses' && (

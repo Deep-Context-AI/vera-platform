@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanctions Verification Report</title>
+</head>
+<body>
+    <div class="header">
+        <h1>Sanctions Verification Report</h1>
+        <p class="subtitle">Comprehensive Sanctions and Exclusions Check</p>
+        <p class="subtitle">Document ID: {{ document_id }} | Generated: {{ generated_at }}</p>
+        {% if invoked_by_user_id %}<p class="subtitle">Requested by User: {{ invoked_by_user_id }}</p>{% endif %}
+    </div>
+
+    <div class="info-section">
+        <h2>Verification Status</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Status:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if status == 'success' %}status-success{% else %}status-warning{% endif %}">
+                        {{ status|upper }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Message:</div>
+                <div class="info-value">{{ message }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Check Date:</div>
+                <div class="info-value">{{ checked_on }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Provider Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Full Name:</div>
+                <div class="info-value">{{ provider.full_name }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">NPI:</div>
+                <div class="info-value">{{ provider.npi }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Date of Birth:</div>
+                <div class="info-value">{{ provider.dob }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">License Number:</div>
+                <div class="info-value">{{ provider.license_number }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">License State:</div>
+                <div class="info-value">{{ provider.state }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">SSN (Last 4):</div>
+                <div class="info-value">****{{ provider.ssn_last4 }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Sanctions Check Summary</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Total Sources Checked:</div>
+                <div class="info-value">{{ summary.total_sources_checked }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Matches Found:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if summary.matches_found > 0 %}status-error{% else %}status-success{% endif %}">
+                        {{ summary.matches_found }}
+                    </span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Flagged for Review:</div>
+                <div class="info-value">
+                    <span class="status-badge {% if summary.flagged_for_review %}status-warning{% else %}status-success{% endif %}">
+                        {{ summary.flagged_for_review }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Sanctions Check Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Match Status</th>
+                    <th>Sanction Status</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sanction in sanctions %}
+                <tr>
+                    <td>{{ sanction.source }}</td>
+                    <td>
+                        <span class="status-badge {% if sanction.matched %}status-warning{% else %}status-success{% endif %}">
+                            {% if sanction.matched %}MATCH{% else %}NO MATCH{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        {% if sanction.status %}
+                            <span class="status-badge {% if sanction.status == 'Active' %}status-error{% elif sanction.status == 'Resolved' %}status-success{% else %}status-warning{% endif %}">
+                                {{ sanction.status }}
+                            </span>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>{{ sanction.date or 'N/A' }}</td>
+                    <td>{{ sanction.type or 'N/A' }}</td>
+                    <td>
+                        {% if sanction.description %}
+                            <div class="description-text">{{ sanction.description }}</div>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if sanctions %}
+    <div class="info-section">
+        <h2>Detailed Sanctions Information</h2>
+        {% for sanction in sanctions %}
+        {% if sanction.matched %}
+        <div class="sanction-detail no-break">
+            <h3>{{ sanction.source }} - {{ sanction.type or 'Sanction' }}</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Status:</div>
+                    <div class="info-value">
+                        <span class="status-badge {% if sanction.status == 'Active' %}status-error{% elif sanction.status == 'Resolved' %}status-success{% else %}status-warning{% endif %}">
+                            {{ sanction.status }}
+                        </span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Date:</div>
+                    <div class="info-value">{{ sanction.date }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Type:</div>
+                    <div class="info-value">{{ sanction.type }}</div>
+                </div>
+            </div>
+            
+            {% if sanction.description %}
+            <div class="info-item">
+                <div class="info-label">Description:</div>
+                <div class="info-value">{{ sanction.description }}</div>
+            </div>
+            {% endif %}
+            
+            {% if sanction.document_url %}
+            <div class="info-item">
+                <div class="info-label">Supporting Documentation:</div>
+                <div class="info-value">
+                    <a href="{{ sanction.document_url }}" target="_blank">View Document</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p><strong>Important Notice:</strong> This sanctions verification report is generated from mocked sanctions databases and is not valid as of the generation date shown above. The information contained in this report should be used for credentialing and verification purposes only.</p>
+        
+        <p><strong>Disclaimer:</strong> This document is generated by the Vera Platform verification system. While every effort is made to ensure accuracy, users should verify critical information independently. Sanctions status may change after the generation of this report.</p>
+        
+        <p><strong>Generated by:</strong> Vera Platform | <strong>Timestamp:</strong> {{ generated_at }}</p>
+    </div>
+</body>
+</html> 

@@ -6,6 +6,7 @@ from datetime import datetime
 from v1.models.requests import LADMFRequest
 from v1.models.responses import LADMFResponse, LADMFMatchedRecord, ResponseStatus
 from v1.exceptions.api import ExternalServiceException, NotFoundException, ValidationException
+from v1.services.pdf_service import pdf_service
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +19,14 @@ class LADMFService:
         self.timeout = 30.0
         self.api_key = None  # Would be loaded from environment variables
     
-    async def verify_death_record(self, request: LADMFRequest) -> LADMFResponse:
+    async def verify_death_record(self, request: LADMFRequest, generate_pdf: bool = False, user_id: Optional[str] = None) -> LADMFResponse:
         """
         Verify death record in LADMF (Limited Access Death Master File)
         
         Args:
             request: LADMFRequest containing the individual's information
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
             
         Returns:
             LADMFResponse with the verification results
@@ -52,7 +55,7 @@ class LADMFService:
             
             # Mock response based on SSN pattern for demonstration
             # In real implementation, this would perform fuzzy matching on name and DOB
-            if request.social_security_number.endswith("6789"):
+            if request.social_security_number.endswith("0000"):
                 # Match found - person is deceased
                 matched_record = LADMFMatchedRecord(
                     full_name=f"{request.first_name} {request.middle_name or ''} {request.last_name}".strip(),
@@ -64,40 +67,20 @@ class LADMFService:
                     record_status="Confirmed"
                 )
                 
-                return LADMFResponse(
+                response = LADMFResponse(
                     status=ResponseStatus.SUCCESS,
                     message="Death record found in LADMF",
-                    match_found=False,
+                    match_found=True,
                     matched_record=matched_record,
                     match_confidence="high",
                     source="SSA LADMF",
-                    notes="No match found"
+                    notes="Death record confirmed in LADMF database"
                 )
-            elif request.social_security_number.endswith("1234"):
-                # Partial match - lower confidence
-                matched_record = LADMFMatchedRecord(
-                    full_name=f"{request.first_name} {request.last_name}",
-                    date_of_birth=request.date_of_birth,
-                    date_of_death="2020-03-22",
-                    social_security_number=request.social_security_number,
-                    state_of_issue="NY",
-                    last_known_residence="10001",
-                    record_status="Tentative"
-                )
-                
-                return LADMFResponse(
-                    status=ResponseStatus.SUCCESS,
-                    message="Potential death record found in LADMF",
-                    match_found=True,
-                    matched_record=matched_record,
-                    match_confidence="medium",
-                    source="SSA LADMF",
-                    notes="Potential match found. Additional verification recommended."
-                )
+
             else:
                 # No match found
                 logger.info(f"No death record found for: {request.first_name} {request.last_name}")
-                return LADMFResponse(
+                response = LADMFResponse(
                     status=ResponseStatus.SUCCESS,
                     message="No death record found",
                     match_found=False,
@@ -106,6 +89,39 @@ class LADMFService:
                     source="SSA LADMF",
                     notes="No death record found for the submitted individual."
                 )
+            
+            # Generate PDF if requested
+            if generate_pdf and user_id and response.status == ResponseStatus.SUCCESS:
+                try:
+                    logger.info(f"Generating PDF document for LADMF verification: {request.first_name} {request.last_name}")
+                    
+                    # Convert response to dict for template
+                    response_dict = response.model_dump()
+                    
+                    # Generate PDF document
+                    # Use SSN (last 4 digits) + name as practitioner_id for organizing documents
+                    practitioner_id = f"{request.first_name}_{request.last_name}_{request.social_security_number[-4:]}"
+                    
+                    document_url = await pdf_service.generate_pdf_document(
+                        template_name="ladmf_verification.html",
+                        data=response_dict,
+                        practitioner_id=practitioner_id,
+                        user_id=user_id,
+                        filename_prefix="ladmf_verification"
+                    )
+                    
+                    # Update response with document URL and timestamp
+                    response.document_url = document_url
+                    response.document_generated_at = datetime.utcnow()
+                    
+                    logger.info(f"PDF document generated successfully: {document_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate PDF document: {e}")
+                    # Don't fail the entire verification if PDF generation fails
+                    pass
+            
+            return response
                 
         except Exception as e:
             logger.error(f"Unexpected error during LADMF verification for {request.first_name} {request.last_name}: {e}")
