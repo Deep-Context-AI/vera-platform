@@ -461,6 +461,9 @@ class EducationResponse(BaseResponse):
     audio_file: Optional[AudioFileInfo] = Field(None, description="Generated audio file information")
     processed_at: Optional[str] = Field(None, description="ISO timestamp when processing completed")
     verification_details: Optional[EducationVerificationDetails] = Field(None, description="Detailed verification information")
+    database_verification_result: Optional[Dict[str, Any]] = Field(None, description="Database verification comparison results")
+    document_url: Optional[str] = Field(None, description="URL to generated PDF document")
+    document_generated_at: Optional[datetime] = Field(None, description="Timestamp when PDF document was generated")
     error_message: Optional[str] = Field(None, description="Error message if processing failed")
 
 class HospitalPrivilegesVerificationDetails(BaseModel):

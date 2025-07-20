@@ -24,6 +24,11 @@ class Demographics(BaseModel):
     ethnicity: Optional[str] = Field(None, description="The ethnicity of the practitioner")
     birth_date: Optional[datetime] = Field(None, description="The date of birth of the practitioner in YYYY-MM-DD format")
 
+class Education(BaseModel):
+    medical_school: str = Field(..., description="The institution of the education")
+    degree: str = Field(..., description="The degree of the education")
+    graduation_year: int = Field(..., description="The year of graduation")
+
 class ApplicationContext(BaseModel):
     """Type-safe application context for verification steps"""
     application_id: int
@@ -38,6 +43,7 @@ class ApplicationContext(BaseModel):
     last_name: str
     ssn: str
     demographics: Optional[Demographics] = None
+    education: Education
     address: Address
     
     # NPDB-specific fields
@@ -52,7 +58,7 @@ class ApplicationContext(BaseModel):
         columns = [
             'id', 'created_at', 'npi_number', 'dea_number', 'license_number', 
             'previous_approval_date', 'attestation_id',
-            'practitioners!inner(first_name, last_name, home_address, ssn, demographics)'
+            'practitioners!inner(first_name, last_name, home_address, ssn, demographics, education)'
         ]
         try:
             response = db_service.supabase.schema('vera').table('applications') \
@@ -114,7 +120,8 @@ class ApplicationContext(BaseModel):
                     state=practitioner_data['home_address']['state'],
                     zip=practitioner_data['home_address']['zip']
                 ),
-                demographics=Demographics(**practitioner_data['demographics']) if practitioner_data['demographics'] else None
+                demographics=Demographics(**practitioner_data['demographics']) if practitioner_data['demographics'] else None,
+                education=Education(**practitioner_data['education']) if practitioner_data['education'] else None
             )
         except Exception as e:
             logger.error(f"Failed to load application context: {e}")

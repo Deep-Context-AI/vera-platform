@@ -250,18 +250,6 @@ class EducationRequest(BaseRequest):
         if v not in allowed_types:
             raise ValueError(f'verification_type must be one of: {", ".join(allowed_types)}')
         return v
-    
-    @field_validator('degree_type')
-    def validate_degree_type(cls, v: str):
-        # Common degree types - can be expanded
-        allowed_degrees = [
-            "Associate", "Bachelor's", "Master's", "PhD", "Doctorate", "MD", "JD", "MBA", 
-            "MS", "MA", "BS", "BA", "Certificate", "Diploma"
-        ]
-        # Allow case-insensitive matching
-        if not any(v.lower() == degree.lower() for degree in allowed_degrees):
-            raise ValueError(f'degree_type must be one of: {", ".join(allowed_degrees)}')
-        return v
 
 class HospitalPrivilegesRequest(BaseRequest):
     """Request model for hospital privileges verification with transcript generation and audio conversion"""

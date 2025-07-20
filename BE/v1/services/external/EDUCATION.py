@@ -21,7 +21,10 @@ class DialogueInput:
 
 from v1.models.requests import EducationRequest
 from v1.models.responses import EducationResponse, ResponseStatus
-from v1.exceptions.api import ExternalServiceException
+from v1.models.database import PractitionerEnhanced, PractitionerEducation
+from v1.exceptions.api import ExternalServiceException, NotFoundException
+from v1.services.database import get_supabase_client
+from v1.services.pdf_service import pdf_service
 
 # Import Modal app from config
 from v1.config.modal_config import app, modal_image
@@ -308,6 +311,295 @@ class EducationService:
             logger.error(f"Error during education verification initiation: {e}")
             raise ExternalServiceException(
                 detail="Failed to initiate education verification",
+                service_name="Education Verification"
+            )
+    
+    async def lookup_education_from_db(self, request: EducationRequest) -> EducationResponse:
+        """
+        Lookup education verification from database
+        
+        Args:
+            request: EducationRequest containing practitioner and education information
+            
+        Returns:
+            EducationResponse with verification results
+            
+        Raises:
+            NotFoundException: If practitioner is not found
+            ExternalServiceException: If database query fails
+        """
+        try:
+            logger.info(f"Looking up education verification for: {request.first_name} {request.last_name}")
+            
+            # Query practitioners table by name
+            supabase = get_supabase_client()
+            response = supabase.schema('vera').table('practitioners').select('*').eq('first_name', request.first_name).eq('last_name', request.last_name).execute()
+            
+            if not response.data:
+                logger.info(f"Practitioner {request.first_name} {request.last_name} not found in database")
+                return EducationResponse(
+                    status=ResponseStatus.NOT_FOUND,
+                    message=f"Practitioner {request.first_name} {request.last_name} not found in database",
+                    job_id="db_lookup",
+                    function_call_id="db_lookup",
+                    verification_status="not_found",
+                    first_name=request.first_name,
+                    last_name=request.last_name,
+                    institution=request.institution,
+                    degree_type=request.degree_type,
+                    graduation_year=request.graduation_year
+                )
+            
+            # Get the first result (handle multiple matches by taking the first)
+            practitioner_data = response.data[0]
+            logger.info(f"Found practitioner {request.first_name} {request.last_name} in database")
+            
+            # Convert to enhanced model
+            practitioner = PractitionerEnhanced(**practitioner_data)
+            
+            # Compare education data
+            verification_result = self._compare_education_data(practitioner.education, request)
+            
+            # Create proper EducationVerificationDetails object
+            from v1.models.responses import EducationVerificationDetails
+            verification_details = EducationVerificationDetails(
+                first_name=request.first_name,
+                last_name=request.last_name,
+                institution=request.institution,
+                degree_type=request.degree_type,
+                graduation_year=request.graduation_year,
+                verification_type="degree_verification"
+            )
+            
+            return EducationResponse(
+                status=ResponseStatus.SUCCESS,
+                message="Education verification completed from database",
+                job_id="db_lookup",
+                function_call_id="db_lookup",
+                verification_status="completed",
+                first_name=request.first_name,
+                last_name=request.last_name,
+                institution=request.institution,
+                degree_type=request.degree_type,
+                graduation_year=request.graduation_year,
+                verification_details=verification_details,
+                database_verification_result=verification_result
+            )
+            
+        except Exception as e:
+            logger.error(f"Database error during education lookup: {e}")
+            raise ExternalServiceException(
+                detail=f"Failed to lookup education from database: {str(e)}",
+                service_name="Education Database Lookup"
+            )
+    
+    def _compare_education_data(self, db_education: Optional[PractitionerEducation], request: EducationRequest) -> dict:
+        """
+        Compare education data from database with request
+        
+        Args:
+            db_education: Education data from database
+            request: Education request data
+            
+        Returns:
+            Dictionary with verification results
+        """
+        if not db_education:
+            return {
+                "verified": False,
+                "match_details": {
+                    "degree_match": False,
+                    "institution_match": False,
+                    "graduation_year_match": False,
+                    "reason": "No education data in database"
+                },
+                "database_education": None,
+                "request_education": {
+                    "degree": request.degree_type,
+                    "medical_school": request.institution,
+                    "graduation_year": request.graduation_year
+                }
+            }
+        
+        # Convert database education to dict for comparison
+        db_education_dict = {
+            "degree": db_education.degree,
+            "medical_school": db_education.medical_school,
+            "graduation_year": db_education.graduation_year
+        }
+        
+        request_education_dict = {
+            "degree": request.degree_type,
+            "medical_school": request.institution,
+            "graduation_year": request.graduation_year
+        }
+        
+        # Compare each field
+        degree_match = self._compare_field(db_education.degree, request.degree_type, "degree")
+        institution_match = self._compare_field(db_education.medical_school, request.institution, "institution")
+        graduation_year_match = self._compare_field(db_education.graduation_year, request.graduation_year, "graduation_year")
+        
+        # Overall verification result
+        verified = degree_match and institution_match and graduation_year_match
+        
+        match_details = {
+            "degree_match": degree_match,
+            "institution_match": institution_match,
+            "graduation_year_match": graduation_year_match,
+            "overall_match": verified
+        }
+        
+        if not verified:
+            reasons = []
+            if not degree_match:
+                reasons.append(f"Degree mismatch: DB='{db_education.degree}' vs Request='{request.degree_type}'")
+            if not institution_match:
+                reasons.append(f"Institution mismatch: DB='{db_education.medical_school}' vs Request='{request.institution}'")
+            if not graduation_year_match:
+                reasons.append(f"Graduation year mismatch: DB='{db_education.graduation_year}' vs Request='{request.graduation_year}'")
+            match_details["reasons"] = reasons
+        
+        logger.info(f"Education comparison result: verified={verified}, details={match_details}")
+        
+        return {
+            "verified": verified,
+            "match_details": match_details,
+            "database_education": db_education_dict,
+            "request_education": request_education_dict
+        }
+    
+    def _compare_field(self, db_value, request_value, field_name: str) -> bool:
+        """
+        Compare individual fields with appropriate logic
+        
+        Args:
+            db_value: Value from database
+            request_value: Value from request
+            field_name: Name of the field for logging
+            
+        Returns:
+            Boolean indicating if fields match
+        """
+        # Handle None values
+        if db_value is None and request_value is None:
+            return True
+        if db_value is None or request_value is None:
+            return False
+        
+        # For strings, do case-insensitive comparison and handle common variations
+        if isinstance(db_value, str) and isinstance(request_value, str):
+            db_clean = db_value.strip().lower()
+            request_clean = request_value.strip().lower()
+            
+            # Exact match
+            if db_clean == request_clean:
+                return True
+            
+            # For institutions, check if one contains the other (handles variations like "University of California" vs "UC")
+            if field_name == "institution":
+                # Remove common words for better matching
+                common_words = ["university", "college", "school", "of", "the", "at", "medical", "health", "sciences"]
+                
+                def clean_institution_name(name: str) -> set:
+                    words = name.lower().replace(",", "").replace(".", "").split()
+                    return set(word for word in words if word not in common_words and len(word) > 2)
+                
+                db_words = clean_institution_name(db_value)
+                request_words = clean_institution_name(request_value)
+                
+                # Check if there's significant overlap
+                if db_words and request_words:
+                    overlap = len(db_words.intersection(request_words))
+                    min_words = min(len(db_words), len(request_words))
+                    return overlap / min_words >= 0.5  # At least 50% word overlap
+            
+            # For degrees, handle common variations
+            if field_name == "degree":
+                degree_mappings = {
+                    "md": ["doctor of medicine", "medical doctor", "m.d."],
+                    "do": ["doctor of osteopathic medicine", "osteopathic medicine", "d.o."],
+                    "mbbs": ["bachelor of medicine, bachelor of surgery", "bachelor of medicine and bachelor of surgery", "m.b.b.s."],
+                    "phd": ["doctor of philosophy", "ph.d."],
+                    "ms": ["master of science", "m.s."],
+                    "bs": ["bachelor of science", "b.s."],
+                    "ba": ["bachelor of arts", "b.a."]
+                }
+                
+                for standard, variations in degree_mappings.items():
+                    if (db_clean == standard or db_clean in variations) and (request_clean == standard or request_clean in variations):
+                        return True
+        
+        # For numbers (graduation year), direct comparison
+        if isinstance(db_value, (int, float)) and isinstance(request_value, (int, float)):
+            return db_value == request_value
+        
+        # Convert to string and compare if types don't match
+        return str(db_value).strip().lower() == str(request_value).strip().lower()
+    
+    async def comprehensive_education_verification(self, request: EducationRequest, prefer_database: bool = True, generate_pdf: bool = False, user_id: Optional[str] = None) -> EducationResponse:
+        """
+        Education verification using only database lookup and comparison
+        
+        Args:
+            request: EducationRequest containing education information
+            prefer_database: Whether to prefer database lookup (always True for this implementation)
+            generate_pdf: Whether to generate a PDF document
+            user_id: User ID for PDF generation (required if generate_pdf is True)
+            
+        Returns:
+            EducationResponse with verification results
+            
+        Raises:
+            ExternalServiceException: If database lookup fails
+            NotFoundException: If practitioner not found in database
+        """
+        try:
+            # Always use database lookup only
+            db_response = await self.lookup_education_from_db(request)
+            
+            if db_response.status == ResponseStatus.SUCCESS:
+                logger.info(f"Education verification completed via database for {request.first_name} {request.last_name}")
+                
+                # Generate PDF if requested and verification was successful
+                if generate_pdf and user_id and db_response.database_verification_result and db_response.database_verification_result.get("verified"):
+                    try:
+                        logger.info(f"Generating PDF document for education verification: {request.first_name} {request.last_name}")
+                        
+                        # Convert response to dict for template
+                        response_dict = db_response.model_dump()
+                        
+                        # Generate PDF document
+                        practitioner_id = f"{request.first_name}_{request.last_name}".replace(" ", "_")
+                        
+                        document_url = await pdf_service.generate_pdf_document(
+                            template_name="education_verification.html",
+                            data=response_dict,
+                            practitioner_id=practitioner_id,
+                            user_id=user_id,
+                            filename_prefix="education_verification"
+                        )
+                        
+                        # Add document URL to response
+                        db_response.document_url = document_url
+                        db_response.document_generated_at = datetime.utcnow()
+                        
+                        logger.info(f"PDF document generated successfully: {document_url}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to generate PDF document: {e}")
+                        # Don't fail the entire verification if PDF generation fails
+                        pass
+                
+                return db_response
+            
+            else:
+                # If not found or other error, return the response as-is
+                return db_response
+            
+        except Exception as e:
+            logger.error(f"Error during education verification: {e}")
+            raise ExternalServiceException(
+                detail=f"Failed to complete education verification: {str(e)}",
                 service_name="Education Verification"
             )
     
