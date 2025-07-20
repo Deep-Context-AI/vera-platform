@@ -12,6 +12,7 @@ from v1.services.engine.verifications.medical import verify_medical
 from v1.services.engine.verifications.npdb import verify_npdb
 from v1.services.engine.verifications.sanctions import verify_sanctions
 from v1.services.engine.verifications.education import verify_education
+from v1.services.engine.verifications.hospital_privileges import verify_hospital_privileges
 
 # Rebuild the VerificationStepRequest model to resolve forward references
 rebuild_verification_models()
@@ -83,6 +84,12 @@ VERIFICATION_STEPS: Dict[VerificationSteps, VerificationStep] = {
     VerificationSteps.EDUCATION: VerificationStep(
         name=VerificationSteps.EDUCATION,
         processing_function=verify_education,
+        request_schema=VerificationStepRequest,
+        response_schema=VerificationStepResponse,
+    ),
+    VerificationSteps.HOSPITAL: VerificationStep(
+        name=VerificationSteps.HOSPITAL,
+        processing_function=verify_hospital_privileges,
         request_schema=VerificationStepRequest,
         response_schema=VerificationStepResponse,
     ),

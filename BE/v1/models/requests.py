@@ -252,39 +252,16 @@ class EducationRequest(BaseRequest):
         return v
 
 class HospitalPrivilegesRequest(BaseRequest):
-    """Request model for hospital privileges verification with transcript generation and audio conversion"""
+    """Request model for hospital privileges verification"""
     first_name: str = Field(..., description="First name of the practitioner", min_length=1, max_length=50)
     last_name: str = Field(..., description="Last name of the practitioner", min_length=1, max_length=50)
     npi_number: str = Field(..., description="10-digit National Provider Identifier", min_length=10, max_length=10)
-    hospital_name: str = Field(..., description="Hospital name where privileges are being verified", min_length=2, max_length=200)
-    specialty: str = Field(..., description="Medical specialty for privileges", min_length=2, max_length=100)
-    verification_type: str = Field(..., description="Type of verification requested (e.g., 'current_privileges', 'historical_privileges')", max_length=50)
     
     @field_validator('npi_number')
     def validate_npi_number(cls, v: str):
         if not v.isdigit():
             raise ValueError('NPI number must contain only digits')
         return v
-    
-    @field_validator('verification_type')
-    def validate_verification_type(cls, v: str):
-        allowed_types = ['current_privileges', 'historical_privileges', 'privileges_status', 'general_inquiry']
-        if v.lower() not in allowed_types:
-            raise ValueError(f'Verification type must be one of: {", ".join(allowed_types)}')
-        return v.lower()
-    
-    @field_validator('specialty')
-    def validate_specialty(cls, v: str):
-        # Common medical specialties - can be expanded
-        common_specialties = [
-            'internal medicine', 'family medicine', 'pediatrics', 'emergency medicine',
-            'surgery', 'cardiology', 'orthopedics', 'neurology', 'psychiatry',
-            'radiology', 'anesthesiology', 'pathology', 'dermatology', 'oncology'
-        ]
-        if v.lower() not in common_specialties:
-            # Allow custom specialties but log a warning
-            pass
-        return v.title()  # Capitalize properly
 
 class AuditTrailRecordRequest(BaseRequest):
     """Simplified request model for recording an audit trail change"""

@@ -475,10 +475,10 @@ class HospitalPrivilegesVerificationDetails(BaseModel):
     specialty: str = Field(..., description="Medical specialty for privileges")
     verification_type: str = Field(..., description="Type of verification requested")
 
-class HospitalPrivilegesResponse(BaseResponse):
-    """Response model for hospital privileges verification with transcript generation and audio conversion"""
+class HospitalPrivilegesResponse(DocumentableResponse):
+    """Response model for hospital privileges verification with database lookup"""
     job_id: str = Field(..., description="Unique job identifier for tracking")
-    function_call_id: str = Field(..., description="Modal function call ID")
+    function_call_id: str = Field(..., description="Function call ID")
     verification_status: str = Field(..., description="Status of verification (processing, completed, failed)")
     first_name: str = Field(..., description="First name of the practitioner")
     last_name: str = Field(..., description="Last name of the practitioner")
@@ -491,6 +491,7 @@ class HospitalPrivilegesResponse(BaseResponse):
     audio_file: Optional[AudioFileInfo] = Field(None, description="Generated audio file information")
     processed_at: Optional[str] = Field(None, description="ISO timestamp when processing completed")
     verification_details: Optional[HospitalPrivilegesVerificationDetails] = Field(None, description="Detailed verification information")
+    database_verification_result: Optional[Dict[str, Any]] = Field(None, description="Database verification comparison results")
     error_message: Optional[str] = Field(None, description="Error message if processing failed")
 
 class InboxEmailAttachment(BaseModel):
