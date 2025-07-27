@@ -49,7 +49,7 @@ def fastapi_app():
 
     # Include v1 router
     app.include_router(v1_router, prefix="/v1")
-    app.include_router(vera_router, prefix="/vera")
+    app.include_router(vera_router, prefix="/v1/vera")
     
     @app.get("/")
     async def root():
