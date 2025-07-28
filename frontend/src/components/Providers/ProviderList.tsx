@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Search, Filter, ChevronDown, Eye, Edit, MoreVertical, Plus, Download, Upload, FileText, Calendar, Building, User, Phone, Mail } from 'lucide-react';
+import { useState } from 'react';
+import { Search, ChevronDown, Eye, Edit, MoreVertical, Plus, Download, Upload, FileText, Calendar, Building, User, Phone, Mail } from 'lucide-react';
 import { Provider } from '../../types';
 
 interface ProviderListProps {
-  onSelectProvider: (provider: Provider) => void;
+  onSelectProvider: () => void; // Navigate to hardcoded application ID 16000
 }
 
 export default function ProviderList({ onSelectProvider }: ProviderListProps) {
@@ -170,7 +170,7 @@ export default function ProviderList({ onSelectProvider }: ProviderListProps) {
 
   // Sort providers
   const sortedProviders = [...filteredProviders].sort((a, b) => {
-    let aValue: any, bValue: any;
+    let aValue: string | number | Date, bValue: string | number | Date;
     
     switch (sortBy) {
       case 'name':
@@ -467,7 +467,7 @@ export default function ProviderList({ onSelectProvider }: ProviderListProps) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => onSelectProvider(provider)}
+                          onClick={() => onSelectProvider()}
                           className="text-blue-600 hover:text-blue-900 p-1 rounded-lg hover:bg-blue-50"
                           title="View Provider"
                         >
@@ -498,7 +498,7 @@ export default function ProviderList({ onSelectProvider }: ProviderListProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {sortedProviders.map((provider) => (
             <div key={provider.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-                 onClick={() => onSelectProvider(provider)}>
+                 onClick={() => onSelectProvider()}>
               <div className="flex items-center space-x-3 mb-4">
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                   <User className="w-6 h-6 text-blue-600" />

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Shield, Mail, FileText, Calendar, BarChart3, BookOpen, Globe, Phone, Timer, Target, Award } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, BookOpen, Globe, Phone } from 'lucide-react';
 import Header from './components/Layout/Header';
 import Sidebar from './components/Layout/Sidebar';
 import OverviewCards from './components/Dashboard/OverviewCards';
 import ProviderList from './components/Providers/ProviderList';
-import ProviderDetail from './components/Providers/ProviderDetail';
+import ProviderDetailDemo from './components/Providers/ProviderDetailDemo';
 import TodaysQueue from './components/Dashboard/TodaysQueue';
 import InteractiveReports from './components/Reports/InteractiveReports';
 import InboxDashboard from './components/Inbox/InboxDashboard';
@@ -51,9 +51,9 @@ function App() {
     }
   };
 
-  const handleSelectProvider = (provider: Provider) => {
-    setSelectedProvider(provider);
-    setBreadcrumbs(['Providers', provider.name]);
+  const handleSelectProvider = () => {
+    setSelectedProvider({} as Provider); // Set a dummy provider for navigation state
+    setBreadcrumbs(['Providers', 'Application #16000']);
   };
 
   const handleBackToProviders = () => {
@@ -64,8 +64,7 @@ function App() {
   const renderContent = () => {
     if (selectedProvider) {
       return (
-        <ProviderDetail
-          provider={selectedProvider}
+        <ProviderDetailDemo
           onBack={handleBackToProviders}
         />
       );
