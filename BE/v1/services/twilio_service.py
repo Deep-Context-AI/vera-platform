@@ -5,6 +5,7 @@ This service provides direct Twilio integration for making outbound calls
 and generating TwiML responses that connect to our WebSocket endpoints.
 """
 
+from datetime import datetime
 import logging
 import os
 import uuid
@@ -25,6 +26,7 @@ class CallRequest:
     system_instruction: Optional[str] = None
     voice_name: str = "Kore"
     max_duration_minutes: int = 10
+    simulate_initial: bool = False
 
 @dataclass
 class CallResult:
@@ -113,7 +115,7 @@ class TwilioService:
         response = VoiceResponse()
         
         # Add initial greeting
-        greeting = f"Hello, this is {call_request.caller_name}. Connecting you to our voice assistant..."
+        greeting = f"Hello, connecting you to our voice assistant on a recorded line."
         response.say(greeting, voice='alice')
         
         # Connect to media stream
@@ -138,7 +140,8 @@ class TwilioService:
             "caller_name": call_request.caller_name,
             "system_instruction": call_request.system_instruction,
             "voice_name": call_request.voice_name,
-            "max_duration_minutes": call_request.max_duration_minutes
+            "max_duration_minutes": call_request.max_duration_minutes,
+            "simulate_initial": call_request.simulate_initial
         }
     
     def get_call_context(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -175,20 +178,22 @@ class TwilioService:
                                        student_name: str,
                                        institution: str,
                                        degree_type: str,
-                                       graduation_year: int) -> CallResult:
+                                       graduation_year: int,
+                                       simulate_initial: bool = False) -> CallResult:
         """Make an education verification call"""
-        system_instruction = f"""You are a professional voice assistant calling to verify education credentials for {student_name}. 
+        system_instruction = f"""You are a professional voice assistant calling to verify education credentials for {student_name}. You're an experimental AI assistant named Vera working with the credentialing team at VERA PLATFORM CORP. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
 
         You are calling {institution} to verify that {student_name} graduated with a {degree_type} in {graduation_year}.
 
         Follow this process:
-        1. Introduce yourself professionally
-        2. Explain that you are calling to verify education credentials
-        3. Provide the student's name: {student_name}
-        4. Ask about their {degree_type} degree from {graduation_year}
-        5. Request that verification details be sent via email
+        1. Introduce yourself professionally yet succinctly
+        2. Explain that you are calling to verify education credentials. Confirm that the recipient is the correct institution and that you are with the right department to verify the education credentials.
+        3. If the recipient is not the correct institution, ask to be transferred to the correct institution.
+        4. If correct, state that you wish to verify the education credentials of {student_name} alleged to have graduated with a {degree_type} in {graduation_year}. Typical procedures are for you to send a form to the institution to verify the education credentials, check if they will send back the same form or if they will send a different form.
+        5. Confirm the email address to send the verification details to and estimated time for the verification to be completed.
         6. Be polite and professional throughout
         7. If they cannot help, ask to be transferred to someone who can assist with education verification
+        8. For in-residency verification, ask for the residency program name and the year of graduation. Check for the status of the residency program.
 
         Keep the conversation focused and efficient. Speak clearly and professionally."""
         
@@ -198,7 +203,8 @@ class TwilioService:
             caller_name="Vera Platform Education Verification",
             system_instruction=system_instruction,
             voice_name="Kore",
-            max_duration_minutes=10
+            max_duration_minutes=10,
+            simulate_initial=simulate_initial
         )
         
         return self.make_outbound_call(education_request)

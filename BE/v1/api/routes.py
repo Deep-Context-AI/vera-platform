@@ -96,8 +96,35 @@ class TwilioWebSocketHandler:
     async def _initialize_services(self):
         """Initialize voice services"""
         try:
-            # Initialize Gemini voice service
-            self.gemini_service = GeminiVoiceService()
+            # Retrieve call context from twilio_service
+            call_context = twilio_service.get_call_context(self.session_id)
+            
+            if call_context:
+                # Update instance variables with context from the API call
+                self.phone_number = call_context.get("phone_number", "unknown")
+                self.call_purpose = call_context.get("purpose", "test")
+                system_instruction = call_context.get("system_instruction")
+                voice_name = call_context.get("voice_name", "Kore")
+                simulate_initial = call_context.get("simulate_initial", False)
+                
+                logger.info(f"Retrieved call context for session {self.session_id}: purpose={self.call_purpose}, phone={self.phone_number}, simulate_initial={simulate_initial}")
+            else:
+                # Fallback to defaults if no context found
+                system_instruction = None
+                voice_name = "Kore"
+                simulate_initial = False
+                logger.warning(f"No call context found for session {self.session_id}, using defaults")
+            
+            # Initialize Gemini voice service with custom configuration
+            from v1.services.voice.gemini_voice_service import GeminiVoiceConfig
+            
+            gemini_config = GeminiVoiceConfig(
+                voice_name=voice_name,
+                system_instruction=system_instruction,
+                simulate_initial=simulate_initial
+            )
+            
+            self.gemini_service = GeminiVoiceService(config=gemini_config)
             if not await self.gemini_service.initialize():
                 raise Exception("Failed to initialize Gemini service")
             
@@ -140,7 +167,6 @@ class TwilioWebSocketHandler:
                 # Receive message from Twilio
                 message = await self.websocket.receive_text()
                 self.message_count += 1
-                logger.debug(f"WebSocket message #{self.message_count} received: {len(message)} chars")
                 
                 try:
                     data = json.loads(message)
@@ -270,20 +296,13 @@ class TwilioWebSocketHandler:
             if not hasattr(self, '_last_payload_hash'):
                 self._last_payload_hash = hash(media_payload)
                 self._payload_repeat_count = 0
-                logger.info(f"🎵 First audio payload received: {len(media_payload)} chars")
             else:
                 current_hash = hash(media_payload)
                 if current_hash == self._last_payload_hash:
                     self._payload_repeat_count += 1
-                    # Only log every 50 repeated payloads to reduce noise
-                    if self._payload_repeat_count % 50 == 0:
-                        logger.warning(f"🔄 Repeated payload detected! Count: {self._payload_repeat_count}")
                 else:
-                    if self._payload_repeat_count > 0:
-                        logger.info(f"🆕 New audio payload after {self._payload_repeat_count} repeats")
                     self._last_payload_hash = current_hash
                     self._payload_repeat_count = 0
-                    logger.info(f"🎤 New audio payload: {len(media_payload)} chars")
             
             # Send RAW Twilio audio directly to Gemini (no processing)
             if self.gemini_service:
@@ -304,8 +323,6 @@ class TwilioWebSocketHandler:
                     
                     # Increment sequence counter
                     self._sequence_counter = getattr(self, '_sequence_counter', 0) + 1
-                    
-                    logger.info(f"📡 Sending RAW Twilio audio to Gemini: {len(raw_audio_data)} bytes, format: μ-law 8kHz")
                     
                     success = await self.gemini_service.send_raw_audio_chunk(raw_audio_chunk)
                     if not success:
@@ -875,7 +892,8 @@ async def make_education_verification_call(
     student_name: str,
     institution: str,
     degree_type: str,
-    graduation_year: int
+    graduation_year: int,
+    simulate_initial: bool = False
 ):
     """Make an education verification call"""
     try:
@@ -884,7 +902,8 @@ async def make_education_verification_call(
             student_name=student_name,
             institution=institution,
             degree_type=degree_type,
-            graduation_year=graduation_year
+            graduation_year=graduation_year,
+            simulate_initial=simulate_initial
         )
         return {
             "success": True,

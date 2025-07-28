@@ -40,6 +40,7 @@ class GeminiVoiceConfig:
     system_instruction: str = None
     max_output_tokens: int = 8192
     temperature: float = 0.7
+    simulate_initial: bool = False
     
     def __post_init__(self):
         if self.response_modalities is None:
@@ -121,10 +122,13 @@ class GeminiVoiceService:
             response_task = asyncio.create_task(self._handle_gemini_responses())
             logger.info(f"📡 Response handler task created: {response_task}")
             
-            # Send initial greeting
-            logger.info("👋 Sending initial greeting to Gemini...")
-            await self.send_initial_greeting()
-            logger.info("✅ Initial greeting sent")
+            # Send initial greeting only if simulate_initial is enabled
+            if self.config.simulate_initial:
+                logger.info("👋 Sending initial greeting to Gemini...")
+                await self.send_initial_greeting()
+                logger.info("✅ Initial greeting sent")
+            else:
+                logger.info("⏭️ Skipping initial greeting (simulate_initial=False)")
             
             return True
             
@@ -195,18 +199,12 @@ class GeminiVoiceService:
             logger.error("No active Gemini session")
             return False
             
-        try:
-            logger.info(f"📡 Converting and sending audio to Gemini:")
-            logger.info(f"  - Input format: {audio_chunk.format} (μ-law)")
-            logger.info(f"  - Input sample rate: {audio_chunk.sample_rate}Hz")
-            logger.info(f"  - Input data length: {len(audio_chunk.data)} bytes")
-            
+        try:            
             # Convert μ-law to PCM since Gemini expects PCM format
             import audioop
             
             # Step 1: Convert μ-law to linear PCM (16-bit)
             pcm_data = audioop.ulaw2lin(audio_chunk.data, 2)  # 2 = 16-bit
-            logger.info(f"  - After μ-law->PCM conversion: {len(pcm_data)} bytes")
             
             # Step 2: Resample from 8kHz to 16kHz (Gemini expects 16kHz)
             pcm_16khz, _ = audioop.ratecv(
@@ -217,7 +215,6 @@ class GeminiVoiceService:
                 16000,  # output sample rate (Gemini)
                 None  # no state
             )
-            logger.info(f"  - After resampling to 16kHz: {len(pcm_16khz)} bytes")
             
             # Step 3: Create blob with correct format for Gemini
             audio_blob = types.Blob(
@@ -225,9 +222,7 @@ class GeminiVoiceService:
                 mime_type="audio/pcm;rate=16000"  # Gemini's expected format
             )
             
-            logger.info("📤 Sending converted PCM audio to Gemini Live API...")
             await self.session.send_realtime_input(audio=audio_blob)
-            logger.info("✅ Successfully sent converted audio to Gemini")
             
             return True
             
@@ -317,17 +312,10 @@ class GeminiVoiceService:
                     response_count += 1
                     current_time = asyncio.get_event_loop().time()
 
-                    logger.info(
-                        f"📨 Gemini response #{response_count} received at {current_time:.2f}s"
-                    )
-
                     await self._process_gemini_response(response)
 
                     # Emit a heartbeat every ~5 s so we know the task is alive
                     if current_time - last_heartbeat > 5.0:
-                        logger.info(
-                            f"💓 Gemini response handler heartbeat – {response_count} responses so far"
-                        )
                         last_heartbeat = current_time
 
                 # If we get here **without** hitting an exception the async
@@ -361,34 +349,23 @@ class GeminiVoiceService:
     async def _process_gemini_response(self, response):
         """Process individual response from Gemini"""
         try:
-            logger.debug(f"=== GEMINI RESPONSE DEBUG ===")
-            logger.debug(f"Response type: {type(response)}")
-            logger.debug(f"Response attributes: {dir(response)}")
-            
             processed_audio = False  # ensure we don't send the same chunk twice
 
             # 1) Top-level `data` attribute (seen with some server messages)
             if hasattr(response, 'data') and response.data:
-                logger.info(f"🎵 Received audio data from Gemini: {len(response.data)} bytes (top-level)")
-
                 await self._forward_gemini_audio(response.data)
                 processed_audio = True
 
             # Handle server content (transcriptions, turn completion, etc.)
             if hasattr(response, 'server_content') and response.server_content:
                 server_content = response.server_content
-                logger.debug(f"Server content received: {type(server_content)}")
-                logger.debug(f"Server content attributes: {dir(server_content)}")
                 
                 # Check for audio data in model_turn parts
                 if hasattr(server_content, 'model_turn') and server_content.model_turn:
                     model_turn = server_content.model_turn
-                    logger.debug(f"Model turn received: {type(model_turn)}")
                     
                     if hasattr(model_turn, 'parts'):
-                        logger.debug(f"Model turn has {len(model_turn.parts)} parts")
                         for i, part in enumerate(model_turn.parts):
-                            logger.debug(f"Part {i}: {type(part)}")
                             
                             # Check for text content
                             if hasattr(part, 'text') and part.text:
@@ -399,14 +376,9 @@ class GeminiVoiceService:
                                 inline_data = part.inline_data
                                 if hasattr(inline_data, 'mime_type') and 'audio' in inline_data.mime_type:
                                     if hasattr(inline_data, 'data') and inline_data.data:
-                                        logger.info(f"🎵 Found audio in model_turn part {i}: {len(inline_data.data)} bytes, mime_type: {inline_data.mime_type}")
-                                        
                                         if not processed_audio:
                                             await self._forward_gemini_audio(inline_data.data)
                                             processed_audio = True
-                            
-                            if not hasattr(part, 'text') and not hasattr(part, 'inline_data'):
-                                logger.debug(f"Part {i} has no text or inline_data")
 
                 # Handle turn completion
                 if hasattr(server_content, 'turn_complete') and server_content.turn_complete:
@@ -451,13 +423,8 @@ class GeminiVoiceService:
                 gemini_audio, timestamp
             )
 
-            logger.info(
-                f"🔄 Converted Gemini audio to Twilio format: {len(twilio_chunk.data)} bytes"
-            )
-
             if self.on_audio_received:
                 await self.on_audio_received(twilio_chunk)
-                logger.info("📤 Audio sent to Twilio callback")
             else:
                 logger.warning("⚠️ No audio callback available")
         except Exception as e:

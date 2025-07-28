@@ -23,6 +23,7 @@ class VoiceCallRequest:
     system_instruction: Optional[str] = None
     voice_name: str = "Kore"
     max_duration_minutes: int = 10
+    simulate_initial: bool = False
 
 @dataclass
 class VoiceCallResponse:
@@ -156,7 +157,8 @@ class VoiceService:
                                              student_name: str,
                                              institution: str,
                                              degree_type: str,
-                                             graduation_year: int) -> VoiceCallResponse:
+                                             graduation_year: int,
+                                             simulate_initial: bool = False) -> VoiceCallResponse:
         """
         Make an education verification call
         
@@ -170,20 +172,6 @@ class VoiceService:
         Returns:
             VoiceCallResponse with call results
         """
-        system_instruction = f"""You are a professional voice assistant calling to verify education credentials for {student_name}. 
-
-        You are calling {institution} to verify that {student_name} graduated with a {degree_type} in {graduation_year}.
-
-        Follow this process:
-        1. Introduce yourself professionally
-        2. Explain that you are calling to verify education credentials
-        3. Provide the student's name: {student_name}
-        4. Ask about their {degree_type} degree from {graduation_year}
-        5. Request that verification details be sent via email
-        6. Be polite and professional throughout
-        7. If they cannot help, ask to be transferred to someone who can assist with education verification
-
-        Keep the conversation focused and efficient. Speak clearly and professionally."""
         
         # Make education verification call using TwilioService
         result = twilio_service.make_education_verification_call(
@@ -191,7 +179,8 @@ class VoiceService:
             student_name=student_name,
             institution=institution,
             degree_type=degree_type,
-            graduation_year=graduation_year
+            graduation_year=graduation_year,
+            simulate_initial=simulate_initial
         )
         
         if result.status == "failed":
@@ -215,7 +204,8 @@ class VoiceService:
                 "student_name": student_name,
                 "institution": institution,
                 "degree_type": degree_type,
-                "graduation_year": graduation_year
+                "graduation_year": graduation_year,
+                "simulate_initial": simulate_initial
             }
         )
         
