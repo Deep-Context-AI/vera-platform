@@ -20,6 +20,14 @@ from google.genai import types
 
 from v1.services.voice.audio_utils import VoiceSessionManager, AudioChunk, AudioFormat
 
+# Import websockets exceptions for precise error handling
+try:
+    from websockets.exceptions import ConnectionClosedOK
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:
+    WEBSOCKETS_AVAILABLE = False
+    ConnectionClosedOK = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +72,22 @@ class GeminiVoiceService:
         self.voice_session_manager: Optional[VoiceSessionManager] = None
         self.turn_count = 0
         self.session_start_time = None
+        
+        # Transcript storage
+        self.input_transcript = []  # User speech transcriptions
+        self.output_transcript = []  # Gemini speech transcriptions
+        self.full_conversation = []  # Combined conversation flow
+        
+        # Token usage tracking
+        self.total_token_count = 0
+        self.token_usage_details = []  # List of usage metadata entries
+        self.current_session_tokens = {
+            "total": 0,
+            "audio_input": 0,
+            "audio_output": 0,
+            "text_input": 0,
+            "text_output": 0
+        }
         
         # Callbacks
         self.on_audio_received: Optional[Callable] = None
@@ -269,12 +293,28 @@ class GeminiVoiceService:
             return False
 
     async def end_session(self) -> bool:
-        """End the Gemini session"""
+        """End the Gemini session and save both audio and transcript"""
         if self.session and hasattr(self, '_session_context_manager'):
             try:
                 await self._session_context_manager.__aexit__(None, None, None)
                 duration = asyncio.get_event_loop().time() - self.session_start_time if self.session_start_time else 0
-                logger.info(f"Gemini session ended. Duration: {duration:.2f}s, Turns: {self.turn_count}")
+                logger.info(f"Gemini session ended. Duration: {duration:.2f}s, Turns: {self.turn_count}, Total Tokens: {self.total_token_count}")
+                
+                # Log token usage breakdown if available
+                if self.current_session_tokens and any(v > 0 for v in self.current_session_tokens.values() if isinstance(v, int)):
+                    token_breakdown = ", ".join([f"{k.replace('_', ' ').title()}: {v}" for k, v in self.current_session_tokens.items() if isinstance(v, int) and v > 0])
+                    logger.info(f"🪙 Final token breakdown: {token_breakdown}")
+                
+                # Save both audio and transcript
+                if self.voice_session_manager:
+                    # Save audio files
+                    audio_result = await self.voice_session_manager.save_session_audio()
+                    logger.info(f"Audio save result: {audio_result}")
+                    
+                    # Save transcript files
+                    transcript_result = await self._save_session_transcript()
+                    logger.info(f"Transcript save result: {transcript_result}")
+                    
             except Exception as e:
                 logger.error(f"Error closing Gemini session: {e}")
             finally:
@@ -283,6 +323,105 @@ class GeminiVoiceService:
                 
         self.state = GeminiSessionState.DISCONNECTED
         return True
+
+    async def _save_session_transcript(self) -> Dict[str, Any]:
+        """Save conversation transcript to Modal volume"""
+        try:
+            if not self.voice_session_manager:
+                return {"status": "skipped", "message": "No voice session manager available"}
+            
+            # Try to import Modal components
+            try:
+                import modal
+                from v1.config.modal_config import app
+                MODAL_AVAILABLE = True
+            except ImportError:
+                logger.warning("Modal not available, skipping transcript save")
+                return {"status": "skipped", "message": "Modal not available"}
+            
+            # Prepare transcript data
+            transcript_data = {
+                "session_id": self.voice_session_manager.conversation_state.session_id,
+                "call_sid": self.voice_session_manager.conversation_state.call_sid,
+                "phone_number": self.voice_session_manager.conversation_state.phone_number,
+                "start_time": self.voice_session_manager.conversation_state.start_time,
+                "duration": asyncio.get_event_loop().time() - self.session_start_time if self.session_start_time else 0,
+                "turn_count": self.turn_count,
+                "input_transcript": self.input_transcript,
+                "output_transcript": self.output_transcript,
+                "full_conversation": self.full_conversation,
+                "token_usage": {
+                    "total_tokens": self.total_token_count,
+                    "session_tokens": self.current_session_tokens,
+                    "usage_details": self.token_usage_details,
+                    "total_usage_entries": len(self.token_usage_details)
+                }
+            }
+            
+            # Call the Modal function to save the transcript
+            try:
+                result = await _save_transcript_to_volume.remote.aio(transcript_data)
+                return result
+            except Exception as e:
+                logger.error(f"Failed to call Modal transcript function: {e}")
+                return {"status": "failed", "message": f"Modal function failed: {e}"}
+            
+        except Exception as e:
+            logger.error(f"Error saving session transcript: {e}")
+            return {"status": "failed", "message": str(e)}
+
+    async def _process_token_usage(self, usage_metadata):
+        """Process token usage metadata from Gemini responses"""
+        try:
+            if not usage_metadata:
+                return
+            
+            # Get total token count
+            total_tokens = getattr(usage_metadata, 'total_token_count', 0)
+            timestamp = asyncio.get_event_loop().time()
+            
+            # Update total count
+            if total_tokens > self.total_token_count:
+                self.total_token_count = total_tokens
+                self.current_session_tokens["total"] = total_tokens
+            
+            # Process detailed token breakdown by modality
+            token_details = {}
+            if hasattr(usage_metadata, 'response_tokens_details'):
+                for detail in usage_metadata.response_tokens_details:
+                    if hasattr(detail, 'modality') and hasattr(detail, 'token_count'):
+                        modality = str(detail.modality).lower()
+                        token_count = detail.token_count
+                        token_details[modality] = token_count
+                        
+                        # Update current session tracking
+                        if modality in self.current_session_tokens:
+                            self.current_session_tokens[modality] = token_count
+                        
+                        logger.debug(f"🪙 Token usage - {modality}: {token_count}")
+            
+            # Store detailed usage entry
+            usage_entry = {
+                "timestamp": timestamp,
+                "turn": self.turn_count,
+                "total_tokens": total_tokens,
+                "token_details": token_details,
+                "cumulative_total": self.total_token_count
+            }
+            
+            self.token_usage_details.append(usage_entry)
+            
+            # Log token usage summary
+            if token_details:
+                details_str = ", ".join([f"{k}: {v}" for k, v in token_details.items()])
+                logger.info(f"🪙 Token usage update - Total: {total_tokens} ({details_str})")
+            else:
+                logger.info(f"🪙 Token usage update - Total: {total_tokens}")
+                
+        except Exception as e:
+            logger.error(f"Error processing token usage: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     async def _handle_gemini_responses(self):
         """Continuously read and process responses from Gemini Live API.
@@ -331,6 +470,21 @@ class GeminiVoiceService:
                     await asyncio.sleep(0.1)
 
             except Exception as e:
+                # Handle normal WebSocket closure (1000 OK) gracefully
+                if WEBSOCKETS_AVAILABLE and ConnectionClosedOK and isinstance(e, ConnectionClosedOK):
+                    logger.info(f"Gemini session ended normally (WebSocket closed OK) after {response_count} responses")
+                    # This is a normal session end initiated by Gemini - don't restart
+                    # TODO: Monitor if this pattern is too aggressive in ending sessions
+                    break
+                
+                # Fallback: check error string for connection closure patterns
+                error_str = str(e).lower()
+                if "connectionclosedok" in error_str or "sent 1000 (ok)" in error_str:
+                    logger.info(f"Gemini session ended normally (WebSocket closed OK) after {response_count} responses")
+                    # This is a normal session end initiated by Gemini - don't restart
+                    # TODO: Monitor if this pattern is too aggressive in ending sessions
+                    break
+                
                 logger.error(
                     f"Error in Gemini response handler after {response_count} responses: {e}"
                 )
@@ -390,8 +544,8 @@ class GeminiVoiceService:
                         logger.debug("Turn complete callback executed")
                     else:
                         logger.warning("No turn complete callback available")
-                else:
-                    logger.debug("No turn completion in server content")
+                # else:
+                #     logger.debug("No turn completion in server content")
             else:
                 logger.debug("No server content in response")
                 
@@ -401,8 +555,76 @@ class GeminiVoiceService:
                 
             if hasattr(response, 'client_content') and response.client_content:
                 logger.debug(f"Client content received: {response.client_content}")
+            
+            # Collect transcript text both I/O
+            if hasattr(response, 'server_content') and response.server_content:
+                server_content = response.server_content
                 
-            logger.debug(f"=== END GEMINI RESPONSE DEBUG ===")
+                # Collect input transcription (user speech)
+                if hasattr(server_content, 'input_transcription') and server_content.input_transcription:
+                    try:
+                        # Handle Transcription object properly - access text content
+                        transcription_obj = server_content.input_transcription
+                        if hasattr(transcription_obj, 'text'):
+                            input_text = transcription_obj.text.strip() if transcription_obj.text else ""
+                        elif hasattr(transcription_obj, 'content'):
+                            input_text = transcription_obj.content.strip() if transcription_obj.content else ""
+                        else:
+                            # If it's already a string, use it directly
+                            input_text = str(transcription_obj).strip()
+                        
+                        if input_text:
+                            timestamp = asyncio.get_event_loop().time()
+                            self.input_transcript.append({
+                                "text": input_text,
+                                "timestamp": timestamp,
+                                "turn": self.turn_count,
+                                "type": "user"
+                            })
+                            self.full_conversation.append({
+                                "speaker": "user",
+                                "text": input_text,
+                                "timestamp": timestamp,
+                                "turn": self.turn_count
+                            })
+                            logger.info(f"🎤 User speech transcribed: '{input_text}'")
+                    except Exception as e:
+                        logger.error(f"Error processing input transcription: {e}")
+                
+                # Collect output transcription (Gemini speech)
+                if hasattr(server_content, 'output_transcription') and server_content.output_transcription:
+                    try:
+                        # Handle Transcription object properly - access text content
+                        transcription_obj = server_content.output_transcription
+                        if hasattr(transcription_obj, 'text'):
+                            output_text = transcription_obj.text.strip() if transcription_obj.text else ""
+                        elif hasattr(transcription_obj, 'content'):
+                            output_text = transcription_obj.content.strip() if transcription_obj.content else ""
+                        else:
+                            # If it's already a string, use it directly
+                            output_text = str(transcription_obj).strip()
+                        
+                        if output_text:
+                            timestamp = asyncio.get_event_loop().time()
+                            self.output_transcript.append({
+                                "text": output_text,
+                                "timestamp": timestamp,
+                                "turn": self.turn_count,
+                                "type": "assistant"
+                            })
+                            self.full_conversation.append({
+                                "speaker": "assistant",
+                                "text": output_text,
+                                "timestamp": timestamp,
+                                "turn": self.turn_count
+                            })
+                            logger.info(f"🤖 Gemini speech transcribed: '{output_text}'")
+                    except Exception as e:
+                        logger.error(f"Error processing output transcription: {e}")
+            
+            # Collect token usage information
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                await self._process_token_usage(response.usage_metadata)
 
         except Exception as e:
             logger.error(f"Error processing Gemini response: {e}")
@@ -446,7 +668,10 @@ class GeminiVoiceService:
                         voice_name=self.config.voice_name
                     )
                 )
-            )
+            ),
+            # API Reference says this is no types and this is exactly how it is in example
+            input_audio_transcription={},
+            output_audio_transcription={},
         )
 
     def get_session_status(self) -> Dict[str, Any]:
@@ -456,7 +681,22 @@ class GeminiVoiceService:
             "state": self.state.value,
             "turn_count": self.turn_count,
             "duration": duration,
-            "session_active": self.session is not None
+            "session_active": self.session is not None,
+            "transcript_info": self.get_transcript_info()
+        }
+    
+    def get_transcript_info(self) -> Dict[str, Any]:
+        """Get current transcript information"""
+        return {
+            "input_entries": len(self.input_transcript),
+            "output_entries": len(self.output_transcript),
+            "conversation_entries": len(self.full_conversation),
+            "has_transcript_data": len(self.full_conversation) > 0,
+            "token_usage": {
+                "total_tokens": self.total_token_count,
+                "usage_entries": len(self.token_usage_details),
+                "current_session_tokens": self.current_session_tokens
+            }
         }
 
     def set_callbacks(self,
@@ -471,4 +711,241 @@ class GeminiVoiceService:
 
 class GeminiVoiceServiceError(Exception):
     """Exception raised by Gemini voice service"""
-    pass 
+    pass
+
+
+# Modal function to save transcript to volume (only if Modal is available)
+try:
+    import modal
+    from v1.config.modal_config import app
+    MODAL_AVAILABLE = True
+    # Reference the same volume used for audio
+    audio_volume = modal.Volume.from_name("voice-debug-audio", create_if_missing=True)
+    
+    @app.function(
+        timeout=300,
+        volumes={"/audio_storage": audio_volume}
+    )
+    def _save_transcript_to_volume(transcript_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Modal function to save transcript data to volume as text files"""
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            # Create directory structure using mounted volume path (same as audio)
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            session_dir = f"/audio_storage/voice_debug/{today}/{transcript_data['session_id']}"
+            
+            # Create directory structure
+            os.makedirs(session_dir, exist_ok=True)
+            
+            # Prepare transcript files
+            transcript_files = []
+            
+            # 1. Save full conversation transcript
+            if transcript_data['full_conversation']:
+                conversation_filename = "full_conversation.txt"
+                conversation_path = f"{session_dir}/{conversation_filename}"
+                
+                with open(conversation_path, "w", encoding="utf-8") as f:
+                    f.write(f"Voice Call Transcript\n")
+                    f.write(f"=====================\n")
+                    f.write(f"Session ID: {transcript_data['session_id']}\n")
+                    f.write(f"Call SID: {transcript_data['call_sid']}\n")
+                    f.write(f"Phone Number: {transcript_data['phone_number']}\n")
+                    f.write(f"Start Time: {datetime.fromtimestamp(transcript_data['start_time']).strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+                    f.write(f"Duration: {transcript_data['duration']:.2f} seconds\n")
+                    f.write(f"Total Turns: {transcript_data['turn_count']}\n")
+                    
+                    # Add token usage summary
+                    if 'token_usage' in transcript_data:
+                        token_usage = transcript_data['token_usage']
+                        f.write(f"\nToken Usage Summary:\n")
+                        f.write(f"===================\n")
+                        f.write(f"Total Tokens: {token_usage['total_tokens']}\n")
+                        if token_usage['session_tokens']:
+                            session_tokens = token_usage['session_tokens']
+                            if session_tokens.get('audio_input', 0) > 0:
+                                f.write(f"Audio Input Tokens: {session_tokens['audio_input']}\n")
+                            if session_tokens.get('audio_output', 0) > 0:
+                                f.write(f"Audio Output Tokens: {session_tokens['audio_output']}\n")
+                            if session_tokens.get('text_input', 0) > 0:
+                                f.write(f"Text Input Tokens: {session_tokens['text_input']}\n")
+                            if session_tokens.get('text_output', 0) > 0:
+                                f.write(f"Text Output Tokens: {session_tokens['text_output']}\n")
+                        f.write(f"Usage Updates: {token_usage['total_usage_entries']}\n")
+                    
+                    f.write(f"\nConversation:\n")
+                    f.write(f"=============\n\n")
+                    
+                    for entry in transcript_data['full_conversation']:
+                        timestamp = datetime.fromtimestamp(entry['timestamp']).strftime('%H:%M:%S')
+                        speaker = entry['speaker'].upper()
+                        text = entry['text']
+                        turn = entry['turn']
+                        f.write(f"[{timestamp}] {speaker} (Turn {turn}): {text}\n")
+                
+                transcript_files.append({
+                    "type": "full_conversation",
+                    "filename": conversation_filename,
+                    "path": conversation_path,
+                    "storage_path": f"voice_debug/{today}/{transcript_data['session_id']}/{conversation_filename}",
+                    "description": "Complete conversation transcript with timestamps"
+                })
+            
+            # 2. Save user input transcript
+            if transcript_data['input_transcript']:
+                input_filename = "user_input.txt"
+                input_path = f"{session_dir}/{input_filename}"
+                
+                with open(input_path, "w", encoding="utf-8") as f:
+                    f.write("User Speech Transcript\n")
+                    f.write("======================\n\n")
+                    
+                    for entry in transcript_data['input_transcript']:
+                        timestamp = datetime.fromtimestamp(entry['timestamp']).strftime('%H:%M:%S')
+                        turn = entry['turn']
+                        text = entry['text']
+                        f.write(f"[{timestamp}] Turn {turn}: {text}\n")
+                
+                transcript_files.append({
+                    "type": "user_input",
+                    "filename": input_filename,
+                    "path": input_path,
+                    "storage_path": f"voice_debug/{today}/{transcript_data['session_id']}/{input_filename}",
+                    "description": "User speech transcriptions only"
+                })
+            
+            # 3. Save assistant output transcript
+            if transcript_data['output_transcript']:
+                output_filename = "assistant_output.txt"
+                output_path = f"{session_dir}/{output_filename}"
+                
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write("Assistant Speech Transcript\n")
+                    f.write("===========================\n\n")
+                    
+                    for entry in transcript_data['output_transcript']:
+                        timestamp = datetime.fromtimestamp(entry['timestamp']).strftime('%H:%M:%S')
+                        turn = entry['turn']
+                        text = entry['text']
+                        f.write(f"[{timestamp}] Turn {turn}: {text}\n")
+                
+                transcript_files.append({
+                    "type": "assistant_output",
+                    "filename": output_filename,
+                    "path": output_path,
+                    "storage_path": f"voice_debug/{today}/{transcript_data['session_id']}/{output_filename}",
+                    "description": "Assistant speech transcriptions only"
+                })
+            
+            # 4. Save token usage details
+            if 'token_usage' in transcript_data and transcript_data['token_usage']['total_usage_entries'] > 0:
+                token_filename = "token_usage.txt"
+                token_path = f"{session_dir}/{token_filename}"
+                
+                with open(token_path, "w", encoding="utf-8") as f:
+                    f.write("Token Usage Details\n")
+                    f.write("===================\n\n")
+                    
+                    token_usage = transcript_data['token_usage']
+                    f.write(f"Session Summary:\n")
+                    f.write(f"Total Tokens Consumed: {token_usage['total_tokens']}\n")
+                    f.write(f"Total Usage Updates: {token_usage['total_usage_entries']}\n\n")
+                    
+                    if token_usage['session_tokens']:
+                        f.write(f"Final Token Breakdown:\n")
+                        session_tokens = token_usage['session_tokens']
+                        for modality, count in session_tokens.items():
+                            if count > 0:
+                                f.write(f"  {modality.replace('_', ' ').title()}: {count}\n")
+                        f.write(f"\n")
+                    
+                    f.write(f"Detailed Usage Timeline:\n")
+                    f.write(f"========================\n\n")
+                    
+                    for i, usage_entry in enumerate(token_usage['usage_details'], 1):
+                        timestamp = datetime.fromtimestamp(usage_entry['timestamp']).strftime('%H:%M:%S')
+                        f.write(f"Update #{i} - [{timestamp}] Turn {usage_entry['turn']}:\n")
+                        f.write(f"  Total Tokens: {usage_entry['total_tokens']}\n")
+                        f.write(f"  Cumulative Total: {usage_entry['cumulative_total']}\n")
+                        
+                        if usage_entry['token_details']:
+                            f.write(f"  Breakdown:\n")
+                            for modality, count in usage_entry['token_details'].items():
+                                f.write(f"    {modality.replace('_', ' ').title()}: {count}\n")
+                        f.write(f"\n")
+                
+                transcript_files.append({
+                    "type": "token_usage",
+                    "filename": token_filename,
+                    "path": token_path,
+                    "storage_path": f"voice_debug/{today}/{transcript_data['session_id']}/{token_filename}",
+                    "description": "Detailed token usage and consumption tracking"
+                })
+            
+            # 5. Save structured JSON data
+            json_filename = "transcript_data.json"
+            json_path = f"{session_dir}/{json_filename}"
+            
+            transcript_metadata = {
+                "session_info": {
+                    "session_id": transcript_data['session_id'],
+                    "call_sid": transcript_data['call_sid'],
+                    "phone_number": transcript_data['phone_number'],
+                    "start_time": transcript_data['start_time'],
+                    "duration": transcript_data['duration'],
+                    "turn_count": transcript_data['turn_count']
+                },
+                "transcripts": {
+                    "input_transcript": transcript_data['input_transcript'],
+                    "output_transcript": transcript_data['output_transcript'],
+                    "full_conversation": transcript_data['full_conversation']
+                },
+                "files": transcript_files,
+                "saved_at": datetime.utcnow().isoformat()
+            }
+            
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(transcript_metadata, f, indent=2)
+            
+            transcript_files.append({
+                "type": "structured_data",
+                "filename": json_filename,
+                "path": json_path,
+                "storage_path": f"voice_debug/{today}/{transcript_data['session_id']}/{json_filename}",
+                "description": "Structured transcript data in JSON format"
+            })
+            
+            # Commit changes to volume
+            audio_volume.commit()
+            
+            return {
+                "status": "success",
+                "session_id": transcript_data['session_id'],
+                "storage_path": f"voice_debug/{today}/{transcript_data['session_id']}",
+                "transcript_files": transcript_files,
+                "total_files": len(transcript_files),
+                "input_entries": len(transcript_data['input_transcript']),
+                "output_entries": len(transcript_data['output_transcript']),
+                "conversation_entries": len(transcript_data['full_conversation']),
+                "token_usage_summary": {
+                    "total_tokens": transcript_data.get('token_usage', {}).get('total_tokens', 0),
+                    "usage_entries": transcript_data.get('token_usage', {}).get('total_usage_entries', 0),
+                    "has_token_data": 'token_usage' in transcript_data and transcript_data['token_usage']['total_usage_entries'] > 0
+                }
+            }
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error saving transcript to volume: {e}")
+            return {"status": "failed", "message": str(e)}
+
+except ImportError:
+    MODAL_AVAILABLE = False
+    
+    # Dummy function when Modal is not available
+    def _save_transcript_to_volume(transcript_data: Dict[str, Any]) -> Dict[str, Any]:
+        return {"status": "skipped", "message": "Modal not available"} 

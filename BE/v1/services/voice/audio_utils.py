@@ -24,6 +24,70 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+# Helper functions for audio conversion (available regardless of Modal)
+def convert_to_mp3(raw_audio: bytes, sample_rate: int, sample_width: int = 2, channels: int = 1) -> bytes:
+    """Convert raw PCM audio to MP3 format using pydub"""
+    if len(raw_audio) == 0:
+        return b""
+    
+    try:
+        from pydub import AudioSegment
+        import io
+        
+        # Create AudioSegment from raw audio
+        audio_segment = AudioSegment(
+            data=raw_audio,
+            sample_width=sample_width,  # 2 bytes = 16-bit
+            frame_rate=sample_rate,
+            channels=channels
+        )
+        
+        # Try MP3 export first
+        try:
+            mp3_buffer = io.BytesIO()
+            audio_segment.export(mp3_buffer, format="mp3", bitrate="128k")
+            mp3_buffer.seek(0)
+            logger.info(f"Successfully converted audio to MP3 format")
+            return mp3_buffer.read()
+        except Exception as mp3_error:
+            logger.warning(f"MP3 conversion failed (likely missing ffmpeg): {mp3_error}")
+            # Fallback to WAV format
+            wav_buffer = io.BytesIO()
+            audio_segment.export(wav_buffer, format="wav")
+            wav_buffer.seek(0)
+            logger.info(f"Converted audio to WAV format as fallback")
+            return wav_buffer.read()
+            
+    except Exception as e:
+        logger.error(f"Audio conversion failed completely: {e}")
+        return b""
+
+def convert_mulaw_to_mp3(mulaw_audio: bytes, sample_rate: int = 8000) -> tuple:
+    """Convert μ-law audio to MP3 format, returns (audio_data, file_extension)"""
+    if len(mulaw_audio) == 0:
+        return b"", "mp3"
+    
+    try:
+        import audioop
+        # Convert μ-law to PCM (16-bit)
+        pcm_audio = audioop.ulaw2lin(mulaw_audio, 2)  # 2 = 16-bit
+        
+        # Convert PCM to MP3 (with fallback to WAV)
+        audio_data = convert_to_mp3(pcm_audio, sample_rate, sample_width=2, channels=1)
+        
+        # Determine file extension based on actual format
+        if audio_data.startswith(b'ID3') or audio_data.startswith(b'\xff\xfb'):
+            return audio_data, "mp3"
+        elif audio_data.startswith(b'RIFF'):
+            return audio_data, "wav"
+        else:
+            logger.warning("Unknown audio format, defaulting to mp3 extension")
+            return audio_data, "mp3"
+            
+    except Exception as e:
+        logger.error(f"μ-law conversion failed: {e}")
+        return b"", "mp3"
+
 # Try to import Modal components for audio debugging
 try:
     import modal
@@ -623,6 +687,7 @@ async def download_voice_audio_file(storage_path: str):
 
 # Modal function to save audio to volume (only if Modal is available)
 if MODAL_AVAILABLE:
+    
     @app.function(
         timeout=600,
         volumes={"/audio_storage": audio_volume}
@@ -649,119 +714,111 @@ if MODAL_AVAILABLE:
             # Prepare audio files info
             audio_files = []
             
-            # Helper function to convert raw audio to MP3
-            def convert_to_mp3(raw_audio: bytes, sample_rate: int, sample_width: int = 2, channels: int = 1) -> bytes:
-                """Convert raw PCM audio to MP3 format using pydub"""
-                if len(raw_audio) == 0:
-                    return b""
-                
-                # Create AudioSegment from raw audio
-                audio_segment = AudioSegment(
-                    data=raw_audio,
-                    sample_width=sample_width,  # 2 bytes = 16-bit
-                    frame_rate=sample_rate,
-                    channels=channels
-                )
-                
-                # Export to MP3 format
-                mp3_buffer = io.BytesIO()
-                audio_segment.export(mp3_buffer, format="mp3", bitrate="128k")
-                mp3_buffer.seek(0)
-                return mp3_buffer.read()
-            
-            # Helper function to convert μ-law to PCM then to MP3
-            def convert_mulaw_to_mp3(mulaw_audio: bytes, sample_rate: int = 8000) -> bytes:
-                """Convert μ-law audio to MP3 format"""
-                if len(mulaw_audio) == 0:
-                    return b""
-                
-                import audioop
-                # Convert μ-law to PCM (16-bit)
-                pcm_audio = audioop.ulaw2lin(mulaw_audio, 2)  # 2 = 16-bit
-                
-                # Convert PCM to MP3
-                return convert_to_mp3(pcm_audio, sample_rate, sample_width=2, channels=1)
-            
             # Create directory structure
             os.makedirs(session_dir, exist_ok=True)
             
             # Save Twilio input as MP3 (converted from μ-law)
             if len(session_data['input_audio']) > 0:
-                input_filename = f"twilio_input_8khz.mp3"
-                input_path = f"{session_dir}/{input_filename}"
-                
                 try:
-                    mp3_data = convert_mulaw_to_mp3(session_data['input_audio'], 8000)
-                    if mp3_data:
+                    audio_data, file_ext = convert_mulaw_to_mp3(session_data['input_audio'], 8000)
+                    if audio_data:
+                        input_filename = f"twilio_input_8khz.{file_ext}"
+                        input_path = f"{session_dir}/{input_filename}"
+                        
                         with open(input_path, "wb") as f:
-                            f.write(mp3_data)
+                            f.write(audio_data)
                         
                         audio_files.append({
                             "type": "twilio_input",
                             "filename": input_filename,
                             "path": input_path,
                             "storage_path": f"voice_debug/{today}/{session_data['session_id']}/{input_filename}",
-                            "format": "MP3",
+                            "format": file_ext.upper(),
                             "original_format": "μ-law",
                             "sample_rate": 8000,
-                            "size_bytes": len(mp3_data),
+                            "size_bytes": len(audio_data),
                             "original_size_bytes": len(session_data['input_audio']),
-                            "description": "Twilio input audio converted to MP3"
+                            "description": f"Twilio input audio converted to {file_ext.upper()}"
                         })
+                        logger.info(f"Successfully saved Twilio input audio as {file_ext.upper()}: {len(audio_data)} bytes")
+                    else:
+                        logger.warning("No Twilio input audio data after conversion")
                 except Exception as e:
-                    logger.error(f"Failed to convert Twilio input to MP3: {e}")
+                    logger.error(f"Failed to convert Twilio input to audio file: {e}")
             
             # Save Gemini input as MP3 (converted from PCM)
             if len(session_data['gemini_input_audio']) > 0:
-                gemini_input_filename = f"gemini_input_16khz.mp3"
-                gemini_input_path = f"{session_dir}/{gemini_input_filename}"
-                
                 try:
-                    mp3_data = convert_to_mp3(session_data['gemini_input_audio'], 16000, sample_width=2, channels=1)
-                    if mp3_data:
+                    audio_data = convert_to_mp3(session_data['gemini_input_audio'], 16000, sample_width=2, channels=1)
+                    if audio_data:
+                        # Determine file extension
+                        if audio_data.startswith(b'ID3') or audio_data.startswith(b'\xff\xfb'):
+                            file_ext = "mp3"
+                        elif audio_data.startswith(b'RIFF'):
+                            file_ext = "wav"
+                        else:
+                            file_ext = "mp3"  # default
+                        
+                        gemini_input_filename = f"gemini_input_16khz.{file_ext}"
+                        gemini_input_path = f"{session_dir}/{gemini_input_filename}"
+                        
                         with open(gemini_input_path, "wb") as f:
-                            f.write(mp3_data)
+                            f.write(audio_data)
                         
                         audio_files.append({
                             "type": "gemini_input",
                             "filename": gemini_input_filename,
                             "path": gemini_input_path,
                             "storage_path": f"voice_debug/{today}/{session_data['session_id']}/{gemini_input_filename}",
-                            "format": "MP3",
+                            "format": file_ext.upper(),
                             "original_format": "PCM",
                             "sample_rate": 16000,
-                            "size_bytes": len(mp3_data),
+                            "size_bytes": len(audio_data),
                             "original_size_bytes": len(session_data['gemini_input_audio']),
-                            "description": "Gemini input audio converted to MP3"
+                            "description": f"Gemini input audio converted to {file_ext.upper()}"
                         })
+                        logger.info(f"Successfully saved Gemini input audio as {file_ext.upper()}: {len(audio_data)} bytes")
+                    else:
+                        logger.warning("No Gemini input audio data after conversion")
                 except Exception as e:
-                    logger.error(f"Failed to convert Gemini input to MP3: {e}")
+                    logger.error(f"Failed to convert Gemini input to audio file: {e}")
             
             # Save Gemini output as MP3 (converted from PCM)
             if len(session_data['output_audio']) > 0:
-                output_filename = f"gemini_output_24khz.mp3"
-                output_path = f"{session_dir}/{output_filename}"
-                
                 try:
-                    mp3_data = convert_to_mp3(session_data['output_audio'], 24000, sample_width=2, channels=1)
-                    if mp3_data:
+                    audio_data = convert_to_mp3(session_data['output_audio'], 24000, sample_width=2, channels=1)
+                    if audio_data:
+                        # Determine file extension
+                        if audio_data.startswith(b'ID3') or audio_data.startswith(b'\xff\xfb'):
+                            file_ext = "mp3"
+                        elif audio_data.startswith(b'RIFF'):
+                            file_ext = "wav"
+                        else:
+                            file_ext = "mp3"  # default
+                        
+                        output_filename = f"gemini_output_24khz.{file_ext}"
+                        output_path = f"{session_dir}/{output_filename}"
+                        
                         with open(output_path, "wb") as f:
-                            f.write(mp3_data)
+                            f.write(audio_data)
                         
                         audio_files.append({
                             "type": "gemini_output",
                             "filename": output_filename,
                             "path": output_path,
                             "storage_path": f"voice_debug/{today}/{session_data['session_id']}/{output_filename}",
-                            "format": "MP3",
+                            "format": file_ext.upper(),
                             "original_format": "PCM",
                             "sample_rate": 24000,
-                            "size_bytes": len(mp3_data),
+                            "size_bytes": len(audio_data),
                             "original_size_bytes": len(session_data['output_audio']),
-                            "description": "Gemini output audio converted to MP3"
+                            "description": f"Gemini output audio converted to {file_ext.upper()}"
                         })
+                        logger.info(f"Successfully saved Gemini output audio as {file_ext.upper()}: {len(audio_data)} bytes")
+                    else:
+                        logger.warning("No Gemini output audio data after conversion")
                 except Exception as e:
-                    logger.error(f"Failed to convert Gemini output to MP3: {e}")
+                    logger.error(f"Failed to convert Gemini output to audio file: {e}")
             
             # Save session metadata
             session_info = {
@@ -773,7 +830,7 @@ if MODAL_AVAILABLE:
                 "turn_count": session_data['turn_count'],
                 "audio_files": audio_files,
                 "saved_at": datetime.utcnow().isoformat(),
-                "format_note": "All audio files converted to MP3 for playback compatibility"
+                "format_note": "Audio files converted to MP3 (preferred) or WAV (fallback) for playback compatibility"
             }
             
             metadata_path = f"{session_dir}/session_metadata.json"
@@ -789,8 +846,8 @@ if MODAL_AVAILABLE:
                 "storage_path": f"voice_debug/{today}/{session_data['session_id']}",
                 "audio_files": audio_files,
                 "total_files": len(audio_files),
-                "format": "MP3",
-                "note": "All audio files converted to playable MP3 format"
+                "format": "MP3/WAV (auto-detected)",
+                "note": "Audio files converted to playable format (MP3 preferred, WAV fallback if MP3 unavailable)"
             }
             
         except Exception as e:

@@ -71,6 +71,13 @@ class TwilioWebSocketHandler:
         self.message_count = 0  # Track total messages received
         self.phone_number = "unknown"
         self.call_purpose = "test"
+        
+        # Combined audio recording for full conversation
+        self.combined_audio_recording = {
+            "incoming_chunks": [],  # Raw Twilio audio (μ-law, 8kHz)
+            "outgoing_chunks": [],  # Gemini audio sent to Twilio (μ-law, 8kHz)
+            "recording_enabled": True
+        }
 
     async def handle_connection(self):
         """Handle the WebSocket connection lifecycle"""
@@ -233,6 +240,16 @@ class TwilioWebSocketHandler:
     async def _on_gemini_audio_received(self, audio_chunk: AudioChunk):
         """Handle audio received from Gemini"""
         try:
+            # Record outgoing audio for combined recording
+            if self.combined_audio_recording["recording_enabled"]:
+                import time
+                self.combined_audio_recording["outgoing_chunks"].append({
+                    "data": audio_chunk.data,
+                    "timestamp": time.time(),
+                    "audio_timestamp": audio_chunk.timestamp,
+                    "type": "outgoing"
+                })
+            
             # Send audio to Twilio in the correct format
             if self.stream_sid:
                 media_message = {
@@ -243,7 +260,6 @@ class TwilioWebSocketHandler:
                     }
                 }
                 await self.websocket.send_text(json.dumps(media_message))
-                logger.info(f"Sent audio to Twilio: {len(audio_chunk.data)} bytes, format: {audio_chunk.format}")
             else:
                 logger.warning("Cannot send audio - no stream_sid available")
             
@@ -311,6 +327,16 @@ class TwilioWebSocketHandler:
                     import base64
                     raw_audio_data = base64.b64decode(media_payload)
                     
+                    # Record incoming audio for combined recording
+                    if self.combined_audio_recording["recording_enabled"]:
+                        import time
+                        self.combined_audio_recording["incoming_chunks"].append({
+                            "data": raw_audio_data,
+                            "timestamp": time.time(),
+                            "media_timestamp": float(media_timestamp),
+                            "type": "incoming"
+                        })
+                    
                     # Create AudioChunk with raw Twilio data
                     from v1.services.voice.audio_utils import AudioChunk, AudioFormat
                     raw_audio_chunk = AudioChunk(
@@ -345,7 +371,11 @@ class TwilioWebSocketHandler:
             if self.gemini_service:
                 await self.gemini_service.end_session()
             
-            # Save session audio for debugging
+            # Save combined audio recording
+            if self.combined_audio_recording["recording_enabled"]:
+                await self._save_combined_audio_recording()
+            
+            # Save session audio for debugging (individual files)
             if self.session_manager:
                 logger.info("Saving session audio for debugging...")
                 result = await self.session_manager.save_session_audio()
@@ -359,6 +389,44 @@ class TwilioWebSocketHandler:
             
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
+
+    async def _save_combined_audio_recording(self):
+        """Save combined audio recording (incoming + outgoing) as a single MP3 file"""
+        try:
+            if not self.combined_audio_recording["incoming_chunks"] and not self.combined_audio_recording["outgoing_chunks"]:
+                logger.info("No audio chunks recorded for combined audio file")
+                return
+            
+            # Prepare combined audio data
+            combined_data = {
+                "session_id": self.session_id,
+                "call_sid": self.call_sid or "unknown",
+                "phone_number": self.phone_number,
+                "call_purpose": self.call_purpose,
+                "incoming_chunks": self.combined_audio_recording["incoming_chunks"],
+                "outgoing_chunks": self.combined_audio_recording["outgoing_chunks"],
+                "total_incoming": len(self.combined_audio_recording["incoming_chunks"]),
+                "total_outgoing": len(self.combined_audio_recording["outgoing_chunks"])
+            }
+            
+            # Try to import Modal components
+            try:
+                import modal
+                from v1.config.modal_config import app
+                
+                # Call Modal function to create combined audio file
+                result = await _save_combined_audio_to_volume.remote.aio(combined_data)
+                logger.info(f"Combined audio save result: {result}")
+                
+            except ImportError:
+                logger.warning("Modal not available, skipping combined audio save")
+            except Exception as e:
+                logger.error(f"Failed to save combined audio: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error saving combined audio recording: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 # NPI Endpoints
 @router.post(
@@ -893,9 +961,12 @@ async def make_education_verification_call(
     institution: str,
     degree_type: str,
     graduation_year: int,
-    simulate_initial: bool = False
+    simulate_initial: bool = False,
+    npi: str = None,
+    last_4_ssn: str = None,
+    dob: str = None
 ):
-    """Make an education verification call"""
+    """Make an education verification call with optional provider context"""
     try:
         result = await voice_service.make_education_verification_call(
             phone_number=phone_number,
@@ -903,7 +974,10 @@ async def make_education_verification_call(
             institution=institution,
             degree_type=degree_type,
             graduation_year=graduation_year,
-            simulate_initial=simulate_initial
+            simulate_initial=simulate_initial,
+            npi=npi,
+            last_4_ssn=last_4_ssn,
+            dob=dob
         )
         return {
             "success": True,
@@ -1057,3 +1131,180 @@ async def get_active_websocket_sessions():
             "message_count": handler.message_count
         }
     return {"active_sessions": session_info}
+
+
+# Modal function to save combined audio recording (only if Modal is available)
+try:
+    import modal
+    from v1.config.modal_config import app
+    MODAL_AVAILABLE = True
+    # Reference the same volume used for other audio files
+    audio_volume = modal.Volume.from_name("voice-debug-audio", create_if_missing=True)
+    
+    @app.function(
+        timeout=600,
+        volumes={"/audio_storage": audio_volume}
+    )
+    def _save_combined_audio_to_volume(combined_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Modal function to create combined audio file (incoming + outgoing) as MP3"""
+        try:
+            import os
+            import io
+            import audioop
+            from datetime import datetime
+            from pydub import AudioSegment
+            import logging
+            
+            # Import helper functions from audio_utils
+            from v1.services.voice.audio_utils import convert_to_mp3
+            
+            logger = logging.getLogger(__name__)
+            
+            # Create directory structure
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            session_dir = f"/audio_storage/voice_debug/{today}/{combined_data['session_id']}"
+            os.makedirs(session_dir, exist_ok=True)
+            
+            # Collect and sort all audio chunks by timestamp
+            all_chunks = []
+            
+            # Add incoming chunks (user speech)
+            for chunk in combined_data.get('incoming_chunks', []):
+                all_chunks.append({
+                    "data": chunk["data"],
+                    "timestamp": chunk["timestamp"],
+                    "type": "incoming",
+                    "source": "user"
+                })
+            
+            # Add outgoing chunks (Gemini speech) 
+            for chunk in combined_data.get('outgoing_chunks', []):
+                all_chunks.append({
+                    "data": chunk["data"],
+                    "timestamp": chunk["timestamp"],
+                    "type": "outgoing",
+                    "source": "assistant"
+                })
+            
+            # Sort by timestamp to create chronological conversation
+            all_chunks.sort(key=lambda x: x["timestamp"])
+            
+            if not all_chunks:
+                return {"status": "skipped", "message": "No audio chunks to process"}
+            
+            # Process audio chunks and combine them
+            combined_audio_segments = []
+            
+            for i, chunk in enumerate(all_chunks):
+                try:
+                    audio_data = chunk["data"]
+                    chunk_type = chunk["type"]
+                    
+                    # Both incoming and outgoing are μ-law format, use consistent conversion
+                    # Convert μ-law to PCM then create AudioSegment
+                    pcm_data = audioop.ulaw2lin(audio_data, 2)  # 2 = 16-bit
+                    audio_segment = AudioSegment(
+                        data=pcm_data,
+                        sample_width=2,  # 16-bit
+                        frame_rate=8000,  # 8kHz for both Twilio and converted Gemini audio
+                        channels=1
+                    )
+                    
+                    # Add a small gap between speakers for clarity (100ms)
+                    if i > 0 and all_chunks[i-1]["source"] != chunk["source"]:
+                        silence = AudioSegment.silent(duration=100)  # 100ms silence
+                        combined_audio_segments.append(silence)
+                    
+                    combined_audio_segments.append(audio_segment)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing audio chunk {i}: {e}")
+                    continue
+            
+            if not combined_audio_segments:
+                return {"status": "failed", "message": "No valid audio segments processed"}
+            
+            # Combine all audio segments
+            combined_audio = combined_audio_segments[0]
+            for segment in combined_audio_segments[1:]:
+                combined_audio += segment
+            
+            # Export to MP3 with fallback to WAV (reuse conversion logic pattern)
+            try:
+                # Try MP3 first
+                combined_filename = "conversation_combined.mp3"
+                combined_path = f"{session_dir}/{combined_filename}"
+                
+                mp3_buffer = io.BytesIO()
+                combined_audio.export(mp3_buffer, format="mp3", bitrate="128k")
+                mp3_buffer.seek(0)
+                
+                with open(combined_path, "wb") as f:
+                    f.write(mp3_buffer.read())
+                
+                file_format = "MP3"
+                logger.info(f"Successfully created combined MP3 audio file")
+                
+            except Exception as mp3_error:
+                logger.warning(f"MP3 export failed: {mp3_error}, trying WAV")
+                # Fallback to WAV
+                combined_filename = "conversation_combined.wav"
+                combined_path = f"{session_dir}/{combined_filename}"
+                
+                combined_audio.export(combined_path, format="wav")
+                file_format = "WAV"
+                logger.info(f"Successfully created combined WAV audio file")
+            
+            # Create metadata file for the combined recording
+            metadata = {
+                "session_id": combined_data['session_id'],
+                "call_sid": combined_data['call_sid'],
+                "phone_number": combined_data['phone_number'],
+                "call_purpose": combined_data['call_purpose'],
+                "created_at": datetime.utcnow().isoformat(),
+                "combined_file": {
+                    "filename": combined_filename,
+                    "format": file_format,
+                    "duration_seconds": len(combined_audio) / 1000.0,
+                    "total_chunks_processed": len(all_chunks),
+                    "incoming_chunks": combined_data['total_incoming'],
+                    "outgoing_chunks": combined_data['total_outgoing']
+                },
+                "description": "Combined conversation audio with user input and assistant responses"
+            }
+            
+            metadata_path = f"{session_dir}/combined_audio_metadata.json"
+            import json
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+            
+            # Commit changes to volume
+            audio_volume.commit()
+            
+            return {
+                "status": "success",
+                "session_id": combined_data['session_id'],
+                "storage_path": f"voice_debug/{today}/{combined_data['session_id']}",
+                "combined_file": {
+                    "filename": combined_filename,
+                    "format": file_format,
+                    "storage_path": f"voice_debug/{today}/{combined_data['session_id']}/{combined_filename}",
+                    "duration_seconds": len(combined_audio) / 1000.0
+                },
+                "chunks_processed": len(all_chunks),
+                "incoming_chunks": combined_data['total_incoming'],
+                "outgoing_chunks": combined_data['total_outgoing']
+            }
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error creating combined audio file: {e}")
+            return {"status": "failed", "message": str(e)}
+
+except ImportError:
+    MODAL_AVAILABLE = False
+    
+    # Dummy function when Modal is not available
+    def _save_combined_audio_to_volume(combined_data: Dict[str, Any]) -> Dict[str, Any]:
+        return {"status": "skipped", "message": "Modal not available"}

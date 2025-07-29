@@ -179,8 +179,31 @@ class TwilioService:
                                        institution: str,
                                        degree_type: str,
                                        graduation_year: int,
-                                       simulate_initial: bool = False) -> CallResult:
+                                       simulate_initial: bool = False,
+                                       npi: str = None,
+                                       last_4_ssn: str = None,
+                                       dob: str = None) -> CallResult:
         """Make an education verification call"""
+        
+        # Build provider context section
+        provider_context = []
+        if npi:
+            provider_context.append(f"NPI: {npi}")
+        else:
+            provider_context.append("NPI: N/A - in residency")
+        
+        if last_4_ssn:
+            provider_context.append(f"Last 4 SSN: {last_4_ssn}")
+        else:
+            provider_context.append("Last 4 SSN: 0001")
+        
+        if dob:
+            provider_context.append(f"DOB: {dob}")
+        else:
+            provider_context.append("DOB: 01/01/2001")
+        
+        provider_context_str = "\n        ".join(provider_context)
+        
         system_instruction = f"""You are a professional voice assistant calling to verify education credentials for {student_name}. You're an experimental AI assistant named Vera working with the credentialing team at VERA PLATFORM CORP. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
 
         You are calling {institution} to verify that {student_name} graduated with a {degree_type} in {graduation_year}.
@@ -189,7 +212,13 @@ class TwilioService:
         1. Introduce yourself professionally yet succinctly
         2. Explain that you are calling to verify education credentials. Confirm that the recipient is the correct institution and that you are with the right department to verify the education credentials.
         3. If the recipient is not the correct institution, ask to be transferred to the correct institution.
-        4. If correct, state that you wish to verify the education credentials of {student_name} alleged to have graduated with a {degree_type} in {graduation_year}. Typical procedures are for you to send a form to the institution to verify the education credentials, check if they will send back the same form or if they will send a different form.
+        4. If correct, state that you wish to verify these education credentials {student_name}; {degree_type} in {graduation_year}. 
+        
+        Provider Context:
+        {provider_context_str}
+        
+        > Typically you send a form to the institution to verify the education credentials, check if they will send back the same form or if they will send a different form.
+        
         5. Confirm the email address to send the verification details to and estimated time for the verification to be completed.
         6. Be polite and professional throughout
         7. If they cannot help, ask to be transferred to someone who can assist with education verification

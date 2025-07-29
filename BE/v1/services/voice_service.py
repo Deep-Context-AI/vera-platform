@@ -158,7 +158,10 @@ class VoiceService:
                                              institution: str,
                                              degree_type: str,
                                              graduation_year: int,
-                                             simulate_initial: bool = False) -> VoiceCallResponse:
+                                             simulate_initial: bool = False,
+                                             npi: str = None,
+                                             last_4_ssn: str = None,
+                                             dob: str = None) -> VoiceCallResponse:
         """
         Make an education verification call
         
@@ -168,6 +171,10 @@ class VoiceService:
             institution: Educational institution
             degree_type: Type of degree
             graduation_year: Year of graduation
+            simulate_initial: Whether to simulate initial greeting
+            npi: Optional NPI number
+            last_4_ssn: Optional last 4 digits of SSN
+            dob: Optional date of birth
             
         Returns:
             VoiceCallResponse with call results
@@ -180,7 +187,10 @@ class VoiceService:
             institution=institution,
             degree_type=degree_type,
             graduation_year=graduation_year,
-            simulate_initial=simulate_initial
+            simulate_initial=simulate_initial,
+            npi=npi,
+            last_4_ssn=last_4_ssn,
+            dob=dob
         )
         
         if result.status == "failed":
