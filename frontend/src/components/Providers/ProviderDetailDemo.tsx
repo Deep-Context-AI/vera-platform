@@ -1,16 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowLeft, User, Phone, Mail, Calendar, FileText, 
   CheckCircle, Clock, Download, Eye, Play, Loader,
-  Building, Search, Plus, MoreVertical, Activity,
-  ZoomIn, ZoomOut, RotateCw, Maximize2, X
+  Building, Search, Plus, MoreVertical, Activity, X
 } from 'lucide-react';
+import { Worker, Viewer, DocumentLoadEvent } from '@react-pdf-viewer/core';
+import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
+import { 
+  highlightPlugin, 
+  HighlightArea, 
+  RenderHighlightsProps,
+  MessageIcon 
+} from '@react-pdf-viewer/highlight';
+
+
+// Import required CSS
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+import '@react-pdf-viewer/highlight/lib/styles/index.css';
 import { useProviderStore } from '../../stores/providerStore';
 import { getStepDetails, runVerificationStepSync } from '../../lib/providerApi';
 import { StepDetailsResponse, SyncVerificationResponse } from '../../lib/types';
 
 interface ProviderDetailDemoProps {
   onBack: () => void;
+}
+
+// AI Highlight interface - what the backend should provide
+interface AIHighlight {
+  id: string;
+  quote: string;           // The text that was highlighted by AI
+  analysis: string;        // AI analysis/reasoning for this highlight
+  pageIndex?: number;      // Optional: if backend knows the page
+}
+
+// Frontend highlight state - combines AI data with calculated positions
+interface ProcessedHighlight extends AIHighlight {
+  highlightAreas: HighlightArea[];  // Calculated by frontend
+  found: boolean;                   // Whether we found the text in PDF
 }
 
 // Loading spinner component
@@ -51,7 +78,137 @@ const ProviderSkeleton = () => (
 
 export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) {
   // Hardcoded application ID as requested
-  const applicationId = 16000;
+  const applicationId = 19907;
+  
+  // Helper function to get highlight color - now using a default yellow color
+  const getHighlightColor = () => {
+    return { background: '#fde047', opacity: 0.3 }; // yellow
+  };
+
+  // Render highlights function
+  const renderHighlights = (props: RenderHighlightsProps) => (
+    <div>
+      {processedHighlights.map((highlight) => (
+        <div key={highlight.id}>
+          {highlight.highlightAreas
+            .filter((area) => area.pageIndex === props.pageIndex)
+            .map((area, idx) => (
+              <div
+                key={`${highlight.id}-${idx}`}
+                style={{
+                  ...props.getCssProperties(area, props.rotation),
+                  ...getHighlightColor(),
+                  cursor: 'pointer',
+                  border: selectedHighlight?.id === highlight.id ? '2px solid #fde047' : 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.6';
+                  e.currentTarget.style.transform = 'scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = getHighlightColor().opacity.toString();
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+                onClick={() => {
+                  setSelectedHighlight(highlight);
+                  // Open the sidebar to AI Highlights tab (index 3: thumbnails, bookmarks, attachments, AI highlights)
+                  activateTab(3);
+                  // Jump to highlight area if found
+                  if (highlight.found && highlight.highlightAreas.length > 0) {
+                    jumpToHighlightArea(highlight.highlightAreas[0]);
+                  }
+                }}
+                title={`${highlight.quote} - ${highlight.analysis}`}
+              />
+            ))}
+        </div>
+      ))}
+    </div>
+  );
+
+  // Create plugin instances inside the component  
+  const defaultLayoutPluginInstance = defaultLayoutPlugin({
+    sidebarTabs: (defaultTabs) => [
+      ...defaultTabs,
+      {
+        content: (
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b border-gray-200 bg-white">
+              <h3 className="text-lg font-semibold">AI Analysis Highlights</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {highlightsLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="text-center">
+                    <LoadingSpinner />
+                    <p className="text-gray-500 text-sm mt-2">Analyzing document...</p>
+                  </div>
+                </div>
+              ) : processedHighlights.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <MessageIcon />
+                  </div>
+                  <p className="text-sm">No AI highlights available</p>
+                  <p className="text-xs mt-1">Highlights will appear here when AI analysis is available</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {processedHighlights.map((highlight) => (
+                    <div 
+                      key={highlight.id}
+                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                        selectedHighlight?.id === highlight.id 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => {
+                        setSelectedHighlight(highlight);
+                        if (highlight.found && highlight.highlightAreas.length > 0) {
+                          jumpToHighlightArea(highlight.highlightAreas[0]);
+                        }
+                      }}
+                    >
+                      {!highlight.found && (
+                        <div className="mb-2">
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                            not found
+                          </span>
+                        </div>
+                      )}
+                      <blockquote className="text-sm font-medium text-gray-900 mb-2">
+                        "{highlight.quote}"
+                      </blockquote>
+                      <p className="text-sm text-gray-600">{highlight.analysis}</p>
+                      {highlight.found && highlight.highlightAreas.length > 0 && (
+                        <p className="text-xs text-blue-600 mt-2">
+                          Found {highlight.highlightAreas.length} occurrence{highlight.highlightAreas.length > 1 ? 's' : ''}
+                        </p>
+                      )}
+                      
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ),
+        icon: <MessageIcon />,
+        title: 'AI Highlights'
+      }
+    ]
+  });
+  
+  const highlightPluginInstance = highlightPlugin({
+    renderHighlights
+  });
+
+  // Function to jump to a highlight area
+  const { jumpToHighlightArea } = highlightPluginInstance;
+  
+  // Function to activate sidebar tab
+  const { activateTab } = defaultLayoutPluginInstance;
   
   // Zustand store
   const {
@@ -89,11 +246,15 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
   const [runningSteps, setRunningSteps] = useState<Set<string>>(new Set());
   const [stepResults, setStepResults] = useState<Record<string, SyncVerificationResponse>>({});
 
-  // Document viewer state
-  const [zoom, setZoom] = useState(100);
-  const [rotation, setRotation] = useState(0);
+  // Document viewer state (zoom and rotation handled by defaultLayoutPlugin)
   const [rightPanelTab, setRightPanelTab] = useState<'comments' | 'activity'>('comments');
   const [comment, setComment] = useState('');
+  
+  // AI Highlights state
+  const [processedHighlights, setProcessedHighlights] = useState<ProcessedHighlight[]>([]);
+  const [selectedHighlight, setSelectedHighlight] = useState<ProcessedHighlight | null>(null);
+  const [pdfDocument, setPdfDocument] = useState<{numPages: number; getPage: (pageNumber: number) => Promise<unknown>} | null>(null);
+  const [highlightsLoading, setHighlightsLoading] = useState(false);
 
   // Helper function to get document URL from multiple possible locations
   const getDocumentUrl = (stepDetails: StepDetailsResponse | null): string | null => {
@@ -121,6 +282,251 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
       null
     );
   };
+
+  // Function to generate search variations for better matching
+  const generateSearchVariations = useCallback((searchText: string): string[] => {
+    const variations = [searchText]; // Always include original
+    
+    // Handle common formatting patterns
+    if (searchText.includes('_')) {
+      // Convert underscore to space: "action_date" -> "action date"
+      variations.push(searchText.replace(/_/g, ' '));
+      
+      // Convert to title case: "action_date" -> "Action Date"
+      const titleCase = searchText.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      variations.push(titleCase);
+      
+      // Add colon variations: "Action Date:" 
+      variations.push(titleCase + ':');
+    }
+    
+    // Handle date patterns like "action_date: 2021" 
+    const colonMatch = searchText.match(/^(.+?):\s*(.+)$/);
+    if (colonMatch) {
+      const [, key, value] = colonMatch;
+      // Try just the key part formatted properly
+      const keyTitleCase = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      variations.push(keyTitleCase);
+      variations.push(keyTitleCase + ':');
+      
+      // Try just the value part
+      variations.push(value);
+      
+      // Try partial date matches if it looks like a date
+      if (/^\d{4}$/.test(value)) {
+        variations.push(value + '-'); // Start of date like "2021-"
+      }
+    }
+    
+    console.log(`Search variations for "${searchText}":`, variations);
+    return variations;
+  }, []);
+
+  // Function to search for text in PDF and calculate highlight areas
+  const findTextInPDF = useCallback(async (searchText: string): Promise<HighlightArea[]> => {
+    if (!pdfDocument) return [];
+
+    const highlightAreas: HighlightArea[] = [];
+    const searchVariations = generateSearchVariations(searchText);
+
+    try {
+      // Search through all pages
+      for (let pageIndex = 0; pageIndex < pdfDocument.numPages; pageIndex++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const page = await pdfDocument.getPage(pageIndex + 1) as any;
+        const viewport = page.getViewport({ scale: 1.0 });
+        const textContent = await page.getTextContent();
+
+        // Search through text items
+        let currentText = '';
+        const textItems: Array<{str: string; transform: number[]; width: number; height: number}> = [];
+        
+        textContent.items.forEach((item: unknown) => {
+          if (item && typeof item === 'object' && 'str' in item) {
+            currentText += item.str + ' ';
+            textItems.push(item as {str: string; transform: number[]; width: number; height: number});
+          }
+        });
+
+        const currentTextLower = currentText.toLowerCase();
+        
+        // Try each search variation
+        for (const variation of searchVariations) {
+          const searchLower = variation.toLowerCase();
+          let searchIndex = currentTextLower.indexOf(searchLower);
+
+          while (searchIndex !== -1) {
+            // Calculate character position in the text
+            let charCount = 0;
+            let startItem = -1;
+            let endItem = -1;
+
+            // Find which text items contain our search text
+            for (let i = 0; i < textItems.length; i++) {
+              const itemLength = textItems[i].str.length + 1; // +1 for space
+              
+              if (charCount <= searchIndex && charCount + itemLength > searchIndex) {
+                startItem = i;
+              }
+              if (charCount <= searchIndex + variation.length && charCount + itemLength > searchIndex + variation.length) {
+                endItem = i;
+                break;
+              }
+              charCount += itemLength;
+            }
+
+            // Create highlight area if we found the text
+            if (startItem !== -1 && endItem !== -1) {
+              const startItemData = textItems[startItem];
+              const endItemData = textItems[endItem] || startItemData;
+
+              // Calculate bounding box
+              const left = Math.min(startItemData.transform[4], endItemData.transform[4]);
+              const right = Math.max(
+                startItemData.transform[4] + startItemData.width,
+                endItemData.transform[4] + endItemData.width
+              );
+              const bottom = Math.min(startItemData.transform[5], endItemData.transform[5]);
+              const top = Math.max(
+                startItemData.transform[5] + startItemData.height,
+                endItemData.transform[5] + endItemData.height
+              );
+
+              // Convert to percentages
+              const highlightArea: HighlightArea = {
+                pageIndex,
+                left: (left / viewport.width) * 100,
+                top: ((viewport.height - top) / viewport.height) * 100,
+                width: ((right - left) / viewport.width) * 100,
+                height: ((top - bottom) / viewport.height) * 100
+              };
+
+              highlightAreas.push(highlightArea);
+              console.log(`Found match for "${variation}" at position:`, highlightArea);
+            }
+
+            // Find next occurrence
+            searchIndex = currentTextLower.indexOf(searchLower, searchIndex + 1);
+          }
+          
+          // If we found matches with this variation, stop trying others
+          if (highlightAreas.length > 0) {
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error searching text in PDF:', error);
+    }
+
+    return highlightAreas;
+  }, [pdfDocument, generateSearchVariations]);
+
+  // Handle PDF document load
+  const handleDocumentLoad = (e: DocumentLoadEvent) => {
+    setPdfDocument(e.doc);
+  };
+
+  // Helper function to extract highlights from step details
+  const extractHighlightsFromStepDetails = useCallback((stepDetails: StepDetailsResponse): AIHighlight[] => {
+    const highlights: AIHighlight[] = [];
+    
+    try {
+      const execDetails = stepDetails.execution_details;
+      
+      if (!execDetails) {
+        console.log('No execution details found');
+        return highlights;
+      }
+      
+      // Try to find highlights in various response data locations
+      const possiblePaths = [
+        // Direct response paths for different verification types
+        execDetails.response_data?.npdb_response?.llm_analysis?.highlights,
+        execDetails.response_data?.dea_response?.llm_analysis?.highlights,
+        execDetails.response_data?.npi_response?.llm_analysis?.highlights,
+        execDetails.response_data?.dca_response?.llm_analysis?.highlights,
+        execDetails.response_data?.abms_response?.llm_analysis?.highlights,
+        execDetails.response_data?.medicare_response?.llm_analysis?.highlights,
+        execDetails.response_data?.education_response?.llm_analysis?.highlights,
+        execDetails.response_data?.sanction_response?.llm_analysis?.highlights,
+        execDetails.response_data?.medical_response?.llm_analysis?.highlights,
+        execDetails.response_data?.hospital_response?.llm_analysis?.highlights,
+        execDetails.response_data?.ladmf_response?.llm_analysis?.highlights,
+        
+        // Generic paths
+        execDetails.response_data?.llm_analysis?.highlights,
+        execDetails.metadata?.llm_analysis?.highlights,
+        
+        // Also check if llm_analysis is at the root level (with any cast for flexibility)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (execDetails as any).llm_analysis?.highlights
+      ];
+      
+      for (let i = 0; i < possiblePaths.length; i++) {
+        const path = possiblePaths[i];
+        if (Array.isArray(path)) {
+          console.log(`Found highlights at path index ${i}:`, path);
+          highlights.push(...path);
+          break; // Use the first valid highlights array found
+        }
+      }
+      
+      console.log(`Extracted ${highlights.length} highlights from step details`);
+    } catch (error) {
+      console.error('Error extracting highlights from step details:', error);
+    }
+    
+    return highlights;
+  }, []);
+
+  // Process AI highlights when PDF document loads
+  useEffect(() => {
+    const processHighlights = async () => {
+      if (!pdfDocument || !stepDetails || !getDocumentUrl(stepDetails)) return;
+
+      setHighlightsLoading(true);
+      console.log('Starting to process AI highlights...');
+
+      try {
+        // Extract highlights from real API response
+        const apiHighlights = extractHighlightsFromStepDetails(stepDetails);
+        
+        console.log('Step details structure:', stepDetails);
+        console.log('Extracted API highlights:', apiHighlights);
+        
+        if (apiHighlights.length === 0) {
+          console.log('No highlights found in API response');
+          setProcessedHighlights([]);
+          return;
+        }
+
+        // Search for actual text positions in the PDF
+        const processed: ProcessedHighlight[] = [];
+        
+        for (const highlight of apiHighlights) {
+          console.log(`Searching for text: "${highlight.quote}"`);
+          const highlightAreas = await findTextInPDF(highlight.quote);
+          console.log(`Found ${highlightAreas.length} highlight areas for "${highlight.quote}"`);
+          
+          processed.push({
+            ...highlight,
+            highlightAreas,
+            found: highlightAreas.length > 0
+          });
+        }
+        
+        setProcessedHighlights(processed);
+        console.log('AI highlights processing completed:', processed);
+      } catch (error) {
+        console.error('Error processing highlights:', error);
+      } finally {
+        setHighlightsLoading(false);
+      }
+    };
+
+    processHighlights();
+  }, [pdfDocument, stepDetails, findTextInPDF, extractHighlightsFromStepDetails, generateSearchVariations]);
 
   // Fetch profile data on mount
   useEffect(() => {
@@ -811,33 +1217,7 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                       <span className="text-sm font-medium text-gray-700">
                                         {stepDetails?.step_name || 'Verification'} Document
                                       </span>
-                                      {getDocumentUrl(stepDetails) && (
-                                        <div className="flex items-center space-x-2">
-                                          <button
-                                            onClick={() => setZoom(Math.max(50, zoom - 25))}
-                                            className="p-1 rounded hover:bg-gray-100 transition-colors"
-                                          >
-                                            <ZoomOut className="w-4 h-4 text-gray-600" />
-                                          </button>
-                                          <span className="text-sm text-gray-600 min-w-[4rem] text-center">{zoom}%</span>
-                                          <button
-                                            onClick={() => setZoom(Math.min(200, zoom + 25))}
-                                            className="p-1 rounded hover:bg-gray-100 transition-colors"
-                                          >
-                                            <ZoomIn className="w-4 h-4 text-gray-600" />
-                                          </button>
-                                          <div className="w-px h-4 bg-gray-300 mx-2"></div>
-                                          <button
-                                            onClick={() => setRotation((rotation + 90) % 360)}
-                                            className="p-1 rounded hover:bg-gray-100 transition-colors"
-                                          >
-                                            <RotateCw className="w-4 h-4 text-gray-600" />
-                                          </button>
-                                          <button className="p-1 rounded hover:bg-gray-100 transition-colors">
-                                            <Maximize2 className="w-4 h-4 text-gray-600" />
-                                          </button>
-                                        </div>
-                                      )}
+
                                     </div>
                                     <div className="flex items-center space-x-2">
                                       {getDocumentUrl(stepDetails) ? (
@@ -861,38 +1241,14 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                     {getDocumentUrl(stepDetails) ? (
                                       // Real PDF Viewer
                                       <div className="flex justify-center h-full">
-                                        <div 
-                                          className="bg-white shadow-lg border border-gray-300 w-full max-w-4xl h-full"
-                                          style={{
-                                            transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
-                                            transformOrigin: 'center center',
-                                            transition: 'transform 0.3s ease'
-                                          }}
-                                        >
-                                          <object 
-                                            data={getDocumentUrl(stepDetails)!} 
-                                            type="application/pdf" 
-                                            width="100%" 
-                                            height="100%"
-                                            className="rounded border border-gray-200"
-                                          >
-                                            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                                              <div className="mb-4">
-                                                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                                                <h3 className="text-lg font-medium text-gray-900 mb-2">Unable to display PDF</h3>
-                                                <p className="text-gray-600 mb-4">Your browser cannot display this PDF directly.</p>
-                                              </div>
-                                              <a 
-                                                href={getDocumentUrl(stepDetails)!}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                              >
-                                                <Download className="w-4 h-4" />
-                                                <span>Download PDF</span>
-                                              </a>
-                                            </div>
-                                          </object>
+                                        <div className="bg-white shadow-lg border border-gray-300 w-full max-w-4xl h-full">
+                                          <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
+                                            <Viewer 
+                                              fileUrl={getDocumentUrl(stepDetails)!} 
+                                              plugins={[defaultLayoutPluginInstance, highlightPluginInstance]}
+                                              onDocumentLoad={handleDocumentLoad}
+                                            />
+                                          </Worker>
                                         </div>
                                       </div>
                                     ) : (
@@ -924,7 +1280,7 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                 <div className="flex border-b border-gray-200 bg-white">
                                   <button
                                     onClick={() => setRightPanelTab('comments')}
-                                    className={`flex-1 px-4 py-3 text-sm font-medium ${
+                                    className={`flex-1 px-3 py-3 text-sm font-medium ${
                                       rightPanelTab === 'comments'
                                         ? 'text-blue-600 border-b-2 border-blue-600'
                                         : 'text-gray-500 hover:text-gray-700'
@@ -934,7 +1290,7 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                   </button>
                                   <button
                                     onClick={() => setRightPanelTab('activity')}
-                                    className={`flex-1 px-4 py-3 text-sm font-medium ${
+                                    className={`flex-1 px-3 py-3 text-sm font-medium ${
                                       rightPanelTab === 'activity'
                                         ? 'text-blue-600 border-b-2 border-blue-600'
                                         : 'text-gray-500 hover:text-gray-700'
@@ -1118,7 +1474,6 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
           </div>
         </div>
       </div>
-
 
     </div>
   );
