@@ -69,6 +69,11 @@ class VerificationMetadata(BaseModel):
     # Allow arbitrary types for the error field
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+class LLMHighlight(BaseModel):
+    id: Optional[str] = Field(default=None)
+    quote: str
+    analysis: str
+
 class LLMResponse(BaseModel):
     # Base pydantic model for all LLM Responses that should be subclassed if unique to a specific verification step
     reasoning: str
