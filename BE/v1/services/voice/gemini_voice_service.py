@@ -49,6 +49,9 @@ class GeminiVoiceConfig:
     max_output_tokens: int = 8192
     temperature: float = 0.7
     simulate_initial: bool = False
+    enable_function_calling: bool = True
+    application_id: Optional[int] = None
+    practitioner_name: Optional[str] = None
     
     def __post_init__(self):
         if self.response_modalities is None:
@@ -57,7 +60,26 @@ class GeminiVoiceConfig:
         if self.system_instruction is None:
             self.system_instruction = """You are a professional voice assistant for education verification calls. 
             Speak clearly and concisely. Keep responses brief and to the point. 
-            You are calling to verify education credentials."""
+            You are calling to verify education credentials.
+            
+            When you have gathered sufficient information to make a verification decision, call the 
+            complete_education_verification function with your assessment. You should call this function 
+            when you either:
+            1. Successfully verified the education credentials and can approve them
+            2. Found discrepancies or issues that require manual review
+            3. Cannot obtain sufficient information to complete verification
+            
+            After completing the verification, you should politely conclude the conversation and then
+            call the end_call function to gracefully terminate the call. Always provide a clear summary 
+            of the conversation and your reasoning for the decision.
+            
+            Use the end_call function when:
+            - You have completed the verification process and said goodbye
+            - The conversation has naturally concluded after providing results
+            - You need to end the call due to inability to reach the right department or person
+            - The other party has indicated they need to end the call
+            
+            Always be polite and professional when ending calls."""
 
 
 class GeminiVoiceService:
@@ -93,6 +115,7 @@ class GeminiVoiceService:
         self.on_audio_received: Optional[Callable] = None
         self.on_turn_complete: Optional[Callable] = None
         self.on_error: Optional[Callable] = None
+        self.on_function_call: Optional[Callable] = None
 
     async def initialize(self) -> bool:
         """Initialize the Gemini client"""
@@ -549,9 +572,36 @@ class GeminiVoiceService:
             else:
                 logger.debug("No server content in response")
                 
-            # Handle other response types
+            # Handle function calls (tool calls)
             if hasattr(response, 'tool_call') and response.tool_call:
-                logger.debug(f"Tool call received: {response.tool_call}")
+                logger.info(f"🔧 Function call received from Gemini: {response.tool_call}")
+                
+                try:
+                    # Process the function call
+                    if self.on_function_call:
+                        await self.on_function_call(response.tool_call)
+                    else:
+                        logger.warning("⚠️ Function call received but no callback handler set")
+                        
+                    # Send function response back to Gemini
+                    function_responses = []
+                    if hasattr(response.tool_call, 'function_calls'):
+                        for fc in response.tool_call.function_calls:
+                            function_response = types.FunctionResponse(
+                                id=fc.id,
+                                name=fc.name,
+                                response={"result": "completed", "status": "success"}
+                            )
+                            function_responses.append(function_response)
+                        
+                        # Send the function responses back to Gemini
+                        await self.session.send_tool_response(function_responses=function_responses)
+                        logger.info(f"✅ Sent function response back to Gemini: {len(function_responses)} responses")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error processing function call: {e}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
                 
             if hasattr(response, 'client_content') and response.client_content:
                 logger.debug(f"Client content received: {response.client_content}")
@@ -654,10 +704,67 @@ class GeminiVoiceService:
 
     def _build_live_config(self) -> types.LiveConnectConfig:
         """Build configuration for Gemini Live API"""
+        tools = []
+        
+        # Add function calling tool if enabled
+        if self.config.enable_function_calling:
+            education_verification_function = {
+                "name": "complete_education_verification",
+                "description": "Complete the education verification process with a final decision based on the conversation",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "decision": {
+                            "type": "string",
+                            "enum": ["approved", "requires_review"],
+                            "description": "The verification decision: 'approved' if credentials are verified successfully, 'requires_review' if there are issues or insufficient information"
+                        },
+                        "call_summary": {
+                            "type": "string",
+                            "description": "A comprehensive summary of the call including who was contacted, what information was gathered, and the verification outcome"
+                        },
+                        "reasoning": {
+                            "type": "string", 
+                            "description": "Detailed reasoning for the decision, explaining what was verified or what issues were found"
+                        },
+                        "contact_person": {
+                            "type": "string",
+                            "description": "Name and title of the person contacted during verification (if any)"
+                        },
+                        "verification_status": {
+                            "type": "string",
+                            "description": "Status of the verification attempt: 'completed', 'partial', 'failed', or 'unable_to_contact'"
+                        }
+                    },
+                    "required": ["decision", "call_summary", "reasoning", "verification_status"]
+                }
+            }
+            
+            end_call_function = {
+                "name": "end_call",
+                "description": "End the phone call gracefully after completing the verification or when the conversation has concluded",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "description": "Reason for ending the call: 'verification_completed', 'unable_to_help', 'wrong_department', or 'conversation_concluded'"
+                        },
+                        "farewell_message": {
+                            "type": "string",
+                            "description": "A brief farewell message that was conveyed to the person before ending the call"
+                        }
+                    },
+                    "required": ["reason"]
+                }
+            }
+            
+            tools.append({"function_declarations": [education_verification_function, end_call_function]})
+        
         return types.LiveConnectConfig(
             response_modalities=self.config.response_modalities,
             system_instruction=self.config.system_instruction,
-            tools=[],  # Add tools if needed
+            tools=tools,
             generation_config=types.GenerationConfig(
                 max_output_tokens=self.config.max_output_tokens,
                 temperature=self.config.temperature
@@ -702,11 +809,13 @@ class GeminiVoiceService:
     def set_callbacks(self,
                      on_audio_received: Optional[Callable] = None,
                      on_turn_complete: Optional[Callable] = None,
-                     on_error: Optional[Callable] = None):
+                     on_error: Optional[Callable] = None,
+                     on_function_call: Optional[Callable] = None):
         """Set callback functions"""
         self.on_audio_received = on_audio_received
         self.on_turn_complete = on_turn_complete
         self.on_error = on_error
+        self.on_function_call = on_function_call
 
 
 class GeminiVoiceServiceError(Exception):

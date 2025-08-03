@@ -15,7 +15,7 @@ import {
 class ProviderAPIClient {
   private api: AxiosInstance;
 
-  constructor(baseURL: string = 'https://mikhailocampo--vera-platform-v2-fastapi-app.modal.run') {
+  constructor(baseURL: string = 'https://mikhailocampo--vera-platform-v2-fastapi-app-dev.modal.run') {
     this.api = axios.create({
       baseURL: `${baseURL}/v1/vera`,
       headers: {

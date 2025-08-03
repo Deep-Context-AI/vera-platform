@@ -1,6 +1,9 @@
 import modal
 import logging
+import os
+import io
 from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.responses import StreamingResponse
 from typing import Optional
 from supabase import Client
 
@@ -385,6 +388,119 @@ async def get_provider_documents(
         
     except Exception as e:
         logger.error(f"Error getting documents: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+# Modal function to serve audio files from volume
+try:
+    from v1.config.modal_config import app
+    MODAL_AVAILABLE = True
+    # Reference the same volume used for other audio files
+    audio_volume = modal.Volume.from_name("voice-debug-audio", create_if_missing=True)
+    
+    @app.function(
+        timeout=60,
+        volumes={"/audio_storage": audio_volume}
+    )
+    def _get_audio_file_from_volume(file_path: str) -> bytes:
+        """Modal function to read audio file from volume"""
+        full_path = f"/audio_storage/{file_path}"
+        
+        if not os.path.exists(full_path):
+            raise FileNotFoundError(f"Audio file not found: {file_path}")
+        
+        if not full_path.endswith('.mp3'):
+            raise ValueError("Only MP3 files are supported")
+        
+        with open(full_path, 'rb') as f:
+            return f.read()
+    
+except ImportError:
+    MODAL_AVAILABLE = False
+    audio_volume = None
+
+@router.get("/audio/{file_path:path}")
+async def get_audio_file(file_path: str):
+    """
+    Serve MP3 files from Modal Volume
+    
+    Args:
+        file_path: Path to the MP3 file in the volume (e.g., voice_debug/2025-08-03/session-id/file.mp3)
+        
+    Returns:
+        MP3 file with appropriate headers for audio playback
+    """
+    try:
+        if not MODAL_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Modal service is not available"
+            )
+        
+        logger.info(f"Serving audio file: {file_path}")
+        
+        # Validate file path to prevent directory traversal
+        if '..' in file_path or file_path.startswith('/'):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file path"
+            )
+        
+        if not file_path.endswith('.mp3'):
+            raise HTTPException(
+                status_code=400,
+                detail="Only MP3 files are supported"
+            )
+        
+        # Get file data from Modal Volume
+        try:
+            file_data = await _get_audio_file_from_volume.remote.aio(file_path)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Audio file not found: {file_path}"
+            )
+        except Exception as e:
+            logger.error(f"Error reading audio file from volume: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Error reading audio file"
+            )
+        
+        # Extract filename for Content-Disposition header
+        filename = os.path.basename(file_path)
+        
+        # Create a BytesIO object to stream the data
+        file_stream = io.BytesIO(file_data)
+        
+        def generate():
+            while True:
+                chunk = file_stream.read(8192)  # Read in 8KB chunks
+                if not chunk:
+                    break
+                yield chunk
+        
+        return StreamingResponse(
+            generate(),
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": f"inline; filename={filename}",
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600",
+                "Content-Length": str(len(file_data)),
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error serving audio file: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"

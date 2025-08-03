@@ -57,7 +57,7 @@ class TwilioService:
             "mikhailocampo--vera-platform-v2-fastapi-app-dev.modal.run"
         )
     
-    def make_outbound_call(self, call_request: CallRequest) -> CallResult:
+    def make_outbound_call(self, call_request: CallRequest, application_id: int = None, practitioner_name: str = None) -> CallResult:
         """
         Make an outbound call that connects to our WebSocket endpoint
         
@@ -78,7 +78,7 @@ class TwilioService:
             websocket_url = f"wss://{self.base_websocket_url}/v1/media-stream/{session_id}"
             
             # Store call context for the WebSocket handler to access
-            self._store_call_context(session_id, call_request)
+            self._store_call_context(session_id, call_request, application_id, practitioner_name)
             
             # Create TwiML response
             twiml = self._generate_twiml(websocket_url, call_request)
@@ -126,7 +126,7 @@ class TwilioService:
         
         return str(response)
     
-    def _store_call_context(self, session_id: str, call_request: CallRequest):
+    def _store_call_context(self, session_id: str, call_request: CallRequest, application_id: int = None, practitioner_name: str = None):
         """
         Store call context for the WebSocket handler to access
         This is a simple in-memory store - in production you might use Redis
@@ -134,7 +134,7 @@ class TwilioService:
         if not hasattr(self, '_call_contexts'):
             self._call_contexts = {}
         
-        self._call_contexts[session_id] = {
+        context = {
             "phone_number": call_request.phone_number,
             "purpose": call_request.purpose,
             "caller_name": call_request.caller_name,
@@ -143,6 +143,14 @@ class TwilioService:
             "max_duration_minutes": call_request.max_duration_minutes,
             "simulate_initial": call_request.simulate_initial
         }
+        
+        # Add optional context data for function calling
+        if application_id is not None:
+            context["application_id"] = application_id
+        if practitioner_name is not None:
+            context["practitioner_name"] = practitioner_name
+            
+        self._call_contexts[session_id] = context
     
     def get_call_context(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get stored call context for a session"""
@@ -182,7 +190,8 @@ class TwilioService:
                                        simulate_initial: bool = False,
                                        npi: str = None,
                                        last_4_ssn: str = None,
-                                       dob: str = None) -> CallResult:
+                                       dob: str = None,
+                                       application_id: int = None) -> CallResult:
         """Make an education verification call"""
         
         # Build provider context section
@@ -217,12 +226,28 @@ class TwilioService:
         Provider Context:
         {provider_context_str}
         
-        > Typically you send a form to the institution to verify the education credentials, check if they will send back the same form or if they will send a different form.
+        5. Be polite and professional throughout
+        6. If they cannot help, ask to be transferred to someone who can assist with education verification
+        7. For in-residency verification, ask for the residency program name and the year of graduation. Check for the status of the residency program.
+        8. When providing information like NPI number, you must clearly dictate by digit rather than speaking the number. E.g, "1234567890" should be "one two three four five six seven eight nine zero".
         
-        5. Confirm the email address to send the verification details to and estimated time for the verification to be completed.
-        6. Be polite and professional throughout
-        7. If they cannot help, ask to be transferred to someone who can assist with education verification
-        8. For in-residency verification, ask for the residency program name and the year of graduation. Check for the status of the residency program.
+        You are calling to verify education credentials.
+            
+            When you have gathered sufficient information to make a verification decision, call the 
+            complete_education_verification function with your assessment. You should call this function 
+            when you either:
+            1. Successfully verified the education credentials and can approve them
+            2. Found discrepancies or issues that require manual review
+            3. Cannot obtain sufficient information to complete verification
+            
+            After completing the verification, politely conclude the conversation and then call the 
+            end_call function to gracefully terminate the call. Always provide a clear summary of the 
+            conversation and your reasoning for the decision.
+            
+            Remember to:
+            - Only call complete_education_verification ONCE per call
+            - End the call gracefully with the end_call function after verification is complete
+            - Be polite and professional throughout the entire conversation
 
         Keep the conversation focused and efficient. Speak clearly and professionally."""
         
@@ -236,7 +261,7 @@ class TwilioService:
             simulate_initial=simulate_initial
         )
         
-        return self.make_outbound_call(education_request)
+        return self.make_outbound_call(education_request, application_id, student_name)
 
 # Global instance
 twilio_service = TwilioService() 

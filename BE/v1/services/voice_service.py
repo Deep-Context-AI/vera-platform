@@ -161,7 +161,8 @@ class VoiceService:
                                              simulate_initial: bool = False,
                                              npi: str = None,
                                              last_4_ssn: str = None,
-                                             dob: str = None) -> VoiceCallResponse:
+                                             dob: str = None,
+                                             application_id: int = None) -> VoiceCallResponse:
         """
         Make an education verification call
         
@@ -175,6 +176,7 @@ class VoiceService:
             npi: Optional NPI number
             last_4_ssn: Optional last 4 digits of SSN
             dob: Optional date of birth
+            application_id: Optional application ID for verification context
             
         Returns:
             VoiceCallResponse with call results
@@ -190,7 +192,8 @@ class VoiceService:
             simulate_initial=simulate_initial,
             npi=npi,
             last_4_ssn=last_4_ssn,
-            dob=dob
+            dob=dob,
+            application_id=application_id
         )
         
         if result.status == "failed":

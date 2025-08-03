@@ -32,6 +32,11 @@ from v1.services.external.MEDICARE import medicare_service
 from v1.services.external.EDUCATION import education_service
 from v1.services.external.HOSPITAL_PRIVILEGES import hospital_privileges_service
 from v1.services.database import DatabaseService
+from v1.services.engine.verifications.models import (
+    VerificationSteps, VerificationStepDecision, VerificationStepMetadataEnum, VerificationMetadata
+)
+import time
+
 db_service = DatabaseService()
 from v1.services.audit_trail_service import audit_trail_service
 from v1.services.voice_service import voice_service, VoiceCallRequest as VoiceRequest
@@ -125,10 +130,17 @@ class TwilioWebSocketHandler:
             # Initialize Gemini voice service with custom configuration
             from v1.services.voice.gemini_voice_service import GeminiVoiceConfig
             
+            # Extract application context from call context if available
+            application_id = call_context.get("application_id") if call_context else None
+            practitioner_name = call_context.get("practitioner_name") if call_context else None
+            
             gemini_config = GeminiVoiceConfig(
                 voice_name=voice_name,
                 system_instruction=system_instruction,
-                simulate_initial=simulate_initial
+                simulate_initial=simulate_initial,
+                enable_function_calling=True,
+                application_id=application_id,
+                practitioner_name=practitioner_name
             )
             
             self.gemini_service = GeminiVoiceService(config=gemini_config)
@@ -139,7 +151,8 @@ class TwilioWebSocketHandler:
             self.gemini_service.set_callbacks(
                 on_audio_received=self._on_gemini_audio_received,
                 on_turn_complete=self._on_gemini_turn_complete,
-                on_error=self._on_gemini_error
+                on_error=self._on_gemini_error,
+                on_function_call=self._on_gemini_function_call
             )
             
             # Initialize voice session manager
@@ -290,6 +303,183 @@ class TwilioWebSocketHandler:
         else:
             # Recoverable errors (like API signature issues) - log but continue
             logger.warning(f"Recoverable Gemini error: {error}")
+
+    async def _on_gemini_function_call(self, tool_call):
+        """Handle function calls from Gemini"""
+        try:
+            logger.info(f"🔧 Processing Gemini function call: {tool_call}")
+            
+            if not hasattr(tool_call, 'function_calls'):
+                logger.warning("Tool call has no function_calls attribute")
+                return
+            
+            for fc in tool_call.function_calls:
+                function_name = fc.name
+                function_args = fc.args if hasattr(fc, 'args') else {}
+                
+                logger.info(f"📞 Function: {function_name}, Args: {function_args}")
+                
+                if function_name == "complete_education_verification":
+                    await self._handle_education_verification_completion(fc.id, function_args)
+                elif function_name == "end_call":
+                    await self._handle_end_call(fc.id, function_args)
+                else:
+                    logger.warning(f"Unknown function call: {function_name}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Error processing function call: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+    async def _handle_education_verification_completion(self, function_call_id: str, args: dict):
+        """Handle the completion of education verification function call"""
+        try:
+            logger.info(f"🎓 Processing education verification completion: {args}")
+            
+            # Extract function arguments
+            decision = args.get("decision", "requires_review")
+            call_summary = args.get("call_summary", "")
+            reasoning = args.get("reasoning", "")
+            contact_person = args.get("contact_person", "Not specified")
+            verification_status = args.get("verification_status", "completed")
+            
+            # Map decision to our enum
+            verification_decision = (
+                VerificationStepDecision.APPROVED 
+                if decision == "approved" 
+                else VerificationStepDecision.REQUIRES_REVIEW
+            )
+            
+            # Create application_id from session context (assuming it's stored in call context)
+            call_context = twilio_service.get_call_context(self.session_id)
+            application_id = call_context.get("application_id") if call_context else None
+            
+            if not application_id:
+                logger.error("No application_id found in call context")
+                return
+            
+            # Create a user_id for the verification (using system user for voice agent)
+            user_id = "voice_agent_system"
+            
+            # Log the start of verification completion
+            await db_service.log_event(
+                application_id=application_id,
+                actor_id=user_id,
+                action="Education Verification Voice Call Completed",
+                notes=f"Status: {verification_status}, Contact: {contact_person}",
+                prevent_duplicates=True
+            )
+            
+            # Prepare verification metadata
+            start_time = time.time()
+            metadata = VerificationMetadata(
+                model="Gemini Live Voice Agent",
+                response_time=0,  # Voice call duration is tracked separately
+                status=VerificationStepMetadataEnum.COMPLETE,
+                document_url=None  # Voice calls don't generate documents directly
+            )
+            
+            # Save invocation record following the pattern from education.py
+            verification_request = {
+                "verification_type": "voice_call",
+                "session_id": self.session_id,
+                "call_sid": self.call_sid,
+                "phone_number": self.phone_number,
+                "call_purpose": self.call_purpose
+            }
+            
+            verification_response = {
+                "function_call_id": function_call_id,
+                "decision": decision,
+                "call_summary": call_summary,
+                "reasoning": reasoning,
+                "contact_person": contact_person,
+                "verification_status": verification_status,
+                "session_metadata": {
+                    "session_id": self.session_id,
+                    "call_sid": self.call_sid,
+                    "phone_number": self.phone_number,
+                    "message_count": self.message_count,
+                    "is_active": self.is_active
+                }
+            }
+            
+            # Save the invocation record
+            await db_service.save_invocation(
+                application_id=application_id,
+                step_key=VerificationSteps.EDUCATION.value,
+                invocation_type="Voice Agent Function Call",
+                status=verification_decision.value,
+                created_by=user_id,
+                request_json={"voice_verification_request": verification_request},
+                response_json={
+                    "voice_verification_response": verification_response,
+                    "gemini_function_call": {
+                        "function_name": "complete_education_verification",
+                        "arguments": args
+                    }
+                },
+                metadata=metadata
+            )
+            
+            logger.info(f"✅ Education verification completed and saved to database")
+            logger.info(f"📊 Decision: {decision}, Status: {verification_status}")
+            logger.info(f"📝 Summary: {call_summary[:100]}..." if len(call_summary) > 100 else f"📝 Summary: {call_summary}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error handling education verification completion: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+    async def _handle_end_call(self, function_call_id: str, args: dict):
+        """Handle the end call function call from Gemini"""
+        try:
+            logger.info(f"📞 Processing end call request: {args}")
+            
+            # Extract function arguments
+            reason = args.get("reason", "conversation_concluded")
+            farewell_message = args.get("farewell_message", "Thank you and goodbye")
+            
+            logger.info(f"🏁 Ending call - Reason: {reason}, Farewell: {farewell_message}")
+            
+            # Log the call end event
+            call_context = twilio_service.get_call_context(self.session_id)
+            application_id = call_context.get("application_id") if call_context else None
+            
+            if application_id:
+                user_id = "voice_agent_system"
+                await db_service.log_event(
+                    application_id=application_id,
+                    actor_id=user_id,
+                    action="Voice Call Ended by Agent",
+                    notes=f"Reason: {reason}, Farewell: {farewell_message}",
+                    prevent_duplicates=True
+                )
+            
+            # End the Twilio call
+            if self.call_sid:
+                success = twilio_service.end_call(self.call_sid)
+                if success:
+                    logger.info(f"✅ Successfully ended call: {self.call_sid}")
+                    # Mark session as inactive and trigger cleanup
+                    self.is_active = False
+                    
+                    # Also end the Gemini session gracefully
+                    if self.gemini_service:
+                        try:
+                            await self.gemini_service.end_session()
+                            logger.info("✅ Gemini session ended gracefully")
+                        except Exception as gemini_error:
+                            logger.warning(f"⚠️ Error ending Gemini session: {gemini_error}")
+                else:
+                    logger.error(f"❌ Failed to end call: {self.call_sid}")
+            else:
+                logger.warning("⚠️ No call_sid available to end call")
+                
+        except Exception as e:
+            logger.error(f"❌ Error handling end call: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     async def _handle_media_event(self, data: Dict[str, Any]):
         """Handle media events from Twilio"""
@@ -964,7 +1154,8 @@ async def make_education_verification_call(
     simulate_initial: bool = False,
     npi: str = None,
     last_4_ssn: str = None,
-    dob: str = None
+    dob: str = None,
+    application_id: int = None
 ):
     """Make an education verification call with optional provider context"""
     try:
@@ -977,7 +1168,8 @@ async def make_education_verification_call(
             simulate_initial=simulate_initial,
             npi=npi,
             last_4_ssn=last_4_ssn,
-            dob=dob
+            dob=dob,
+            application_id=application_id
         )
         return {
             "success": True,
@@ -1148,135 +1340,202 @@ try:
     def _save_combined_audio_to_volume(combined_data: Dict[str, Any]) -> Dict[str, Any]:
         """Modal function to create combined audio file (incoming + outgoing) as MP3"""
         try:
+            import json
             import os
-            import io
+            import time
             import audioop
+            import logging
             from datetime import datetime
             from pydub import AudioSegment
-            import logging
-            
-            # Import helper functions from audio_utils
-            from v1.services.voice.audio_utils import convert_to_mp3
+            import io
             
             logger = logging.getLogger(__name__)
             
-            # Create directory structure
+            # Create directory structure using mounted volume path
             today = datetime.utcnow().strftime("%Y-%m-%d")
             session_dir = f"/audio_storage/voice_debug/{today}/{combined_data['session_id']}"
+            
+            # Create directory structure
             os.makedirs(session_dir, exist_ok=True)
             
-            # Collect and sort all audio chunks by timestamp
-            all_chunks = []
+            # Prepare audio files info
+            audio_files = []
             
-            # Add incoming chunks (user speech)
-            for chunk in combined_data.get('incoming_chunks', []):
-                all_chunks.append({
-                    "data": chunk["data"],
-                    "timestamp": chunk["timestamp"],
-                    "type": "incoming",
-                    "source": "user"
-                })
+            # Extract audio chunk data
+            incoming_chunks = combined_data.get('incoming_chunks', [])
+            outgoing_chunks = combined_data.get('outgoing_chunks', [])
             
-            # Add outgoing chunks (Gemini speech) 
-            for chunk in combined_data.get('outgoing_chunks', []):
-                all_chunks.append({
-                    "data": chunk["data"],
-                    "timestamp": chunk["timestamp"],
-                    "type": "outgoing",
-                    "source": "assistant"
-                })
+            logger.info(f"Processing combined audio: {len(incoming_chunks)} incoming, {len(outgoing_chunks)} outgoing chunks")
             
-            # Sort by timestamp to create chronological conversation
-            all_chunks.sort(key=lambda x: x["timestamp"])
-            
-            if not all_chunks:
-                return {"status": "skipped", "message": "No audio chunks to process"}
-            
-            # Process audio chunks and combine them
-            combined_audio_segments = []
-            
-            for i, chunk in enumerate(all_chunks):
+            # Create interleaved conversation audio using timeline
+            if incoming_chunks or outgoing_chunks:
                 try:
-                    audio_data = chunk["data"]
-                    chunk_type = chunk["type"]
+                    logger.info("Creating interleaved conversation audio from timeline")
                     
-                    # Both incoming and outgoing are μ-law format, use consistent conversion
-                    # Convert μ-law to PCM then create AudioSegment
-                    pcm_data = audioop.ulaw2lin(audio_data, 2)  # 2 = 16-bit
-                    audio_segment = AudioSegment(
-                        data=pcm_data,
-                        sample_width=2,  # 16-bit
-                        frame_rate=8000,  # 8kHz for both Twilio and converted Gemini audio
-                        channels=1
-                    )
+                    # Create maps for quick chunk lookup
+                    incoming_chunks_map = {chunk["timestamp"]: chunk for chunk in incoming_chunks}
+                    outgoing_chunks_map = {chunk["timestamp"]: chunk for chunk in outgoing_chunks}
                     
-                    # Add a small gap between speakers for clarity (100ms)
-                    if i > 0 and all_chunks[i-1]["source"] != chunk["source"]:
-                        silence = AudioSegment.silent(duration=100)  # 100ms silence
-                        combined_audio_segments.append(silence)
+                    # Build timeline entries with audio chunk references
+                    timeline_with_audio = []
                     
-                    combined_audio_segments.append(audio_segment)
+                    # Add incoming chunks to timeline
+                    for chunk in incoming_chunks:
+                        timeline_with_audio.append({
+                            "timestamp": chunk["timestamp"],
+                            "type": "user_voice",
+                            "audio_data": chunk["data"],
+                            "data_size": len(chunk["data"])
+                        })
                     
+                    # Add outgoing chunks to timeline
+                    for chunk in outgoing_chunks:
+                        timeline_with_audio.append({
+                            "timestamp": chunk["timestamp"],
+                            "type": "gemini_voice",
+                            "audio_data": chunk["data"],
+                            "data_size": len(chunk["data"])
+                        })
+                    
+                    # Sort by timestamp to get conversation flow
+                    timeline_with_audio.sort(key=lambda x: x["timestamp"])
+                    
+                    logger.info(f"Processing {len(timeline_with_audio)} audio chunks in chronological order")
+                    
+                    # Create combined audio segments in timeline order
+                    combined_audio_segments = []
+                    
+                    for i, timeline_entry in enumerate(timeline_with_audio):
+                        audio_data = timeline_entry["audio_data"]
+                        
+                        if audio_data and len(audio_data) > 0:
+                            # Convert μ-law to PCM
+                            pcm_audio = audioop.ulaw2lin(audio_data, 2)  # 2 = 16-bit
+                            
+                            # Create audio segment
+                            audio_segment = AudioSegment(
+                                data=pcm_audio,
+                                sample_width=2,  # 16-bit
+                                frame_rate=8000,  # Twilio sample rate
+                                channels=1  # mono
+                            )
+                            
+                            combined_audio_segments.append(audio_segment)
+                            
+                    if combined_audio_segments:
+                        # Combine all segments into one continuous audio
+                        logger.info(f"Combining {len(combined_audio_segments)} audio segments")
+                        final_audio = combined_audio_segments[0]
+                        for segment in combined_audio_segments[1:]:
+                            final_audio += segment
+                        
+                        # Export as MP3
+                        mp3_buffer = io.BytesIO()
+                        try:
+                            final_audio.export(mp3_buffer, format="mp3", bitrate="128k")
+                            mp3_buffer.seek(0)
+                            audio_data = mp3_buffer.read()
+                            file_ext = "mp3"
+                            logger.info("Successfully created interleaved conversation MP3")
+                        except Exception as mp3_error:
+                            logger.warning(f"MP3 conversion failed, using WAV: {mp3_error}")
+                            wav_buffer = io.BytesIO()
+                            final_audio.export(wav_buffer, format="wav")
+                            wav_buffer.seek(0)
+                            audio_data = wav_buffer.read()
+                            file_ext = "wav"
+                        
+                        # Save the combined conversation file
+                        conversation_filename = f"conversation_interleaved.{file_ext}"
+                        conversation_path = f"{session_dir}/{conversation_filename}"
+                        
+                        with open(conversation_path, "wb") as f:
+                            f.write(audio_data)
+                        
+                        total_incoming_bytes = sum(len(chunk["data"]) for chunk in incoming_chunks)
+                        total_outgoing_bytes = sum(len(chunk["data"]) for chunk in outgoing_chunks)
+                        
+                        audio_files.append({
+                            "type": "conversation_interleaved",
+                            "filename": conversation_filename,
+                            "path": conversation_path,
+                            "storage_path": f"voice_debug/{today}/{combined_data['session_id']}/{conversation_filename}",
+                            "format": file_ext.upper(),
+                            "original_format": "μ-law",
+                            "sample_rate": 8000,
+                            "size_bytes": len(audio_data),
+                            "original_size_bytes": total_incoming_bytes + total_outgoing_bytes,
+                            "timeline_entries": len(timeline_with_audio),
+                            "incoming_chunks": len(incoming_chunks),
+                            "outgoing_chunks": len(outgoing_chunks),
+                            "duration_seconds": len(final_audio) / 1000.0,  # pydub uses milliseconds
+                            "description": f"Interleaved conversation audio with user and Gemini voices in chronological order"
+                        })
+                        
+                        logger.info(f"Saved interleaved conversation: {len(audio_data)} bytes from {len(timeline_with_audio)} timeline entries")
+                        logger.info(f"Conversation duration: {len(final_audio) / 1000.0:.2f} seconds")
+                        
+                    else:
+                        logger.warning("No valid audio segments found for interleaved conversation")
+                        
                 except Exception as e:
-                    logger.error(f"Error processing audio chunk {i}: {e}")
-                    continue
+                    logger.error(f"Failed to create interleaved conversation audio: {e}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
             
-            if not combined_audio_segments:
-                return {"status": "failed", "message": "No valid audio segments processed"}
+            # Create conversation timeline metadata (reusing timeline_with_audio if available)
+            if 'timeline_with_audio' in locals() and timeline_with_audio:
+                conversation_timeline = [
+                    {
+                        "timestamp": entry["timestamp"],
+                        "type": entry["type"],
+                        "data_size": entry["data_size"]
+                    } for entry in timeline_with_audio
+                ]
+                logger.info(f"Using processed timeline with {len(conversation_timeline)} entries")
+            else:
+                # Fallback: create timeline from raw chunks
+                conversation_timeline = []
+                
+                # Add incoming chunks to timeline
+                for chunk in incoming_chunks:
+                    conversation_timeline.append({
+                        "timestamp": chunk["timestamp"],
+                        "type": "user_voice",
+                        "media_timestamp": chunk.get("media_timestamp"),
+                        "data_size": len(chunk["data"])
+                    })
+                
+                # Add outgoing chunks to timeline
+                for chunk in outgoing_chunks:
+                    conversation_timeline.append({
+                        "timestamp": chunk["timestamp"],
+                        "type": "gemini_voice",
+                        "audio_timestamp": chunk.get("audio_timestamp"),
+                        "data_size": len(chunk["data"])
+                    })
+                
+                # Sort timeline by timestamp
+                conversation_timeline.sort(key=lambda x: x["timestamp"])
+                logger.info(f"Created fallback timeline with {len(conversation_timeline)} entries")
             
-            # Combine all audio segments
-            combined_audio = combined_audio_segments[0]
-            for segment in combined_audio_segments[1:]:
-                combined_audio += segment
-            
-            # Export to MP3 with fallback to WAV (reuse conversion logic pattern)
-            try:
-                # Try MP3 first
-                combined_filename = "conversation_combined.mp3"
-                combined_path = f"{session_dir}/{combined_filename}"
-                
-                mp3_buffer = io.BytesIO()
-                combined_audio.export(mp3_buffer, format="mp3", bitrate="128k")
-                mp3_buffer.seek(0)
-                
-                with open(combined_path, "wb") as f:
-                    f.write(mp3_buffer.read())
-                
-                file_format = "MP3"
-                logger.info(f"Successfully created combined MP3 audio file")
-                
-            except Exception as mp3_error:
-                logger.warning(f"MP3 export failed: {mp3_error}, trying WAV")
-                # Fallback to WAV
-                combined_filename = "conversation_combined.wav"
-                combined_path = f"{session_dir}/{combined_filename}"
-                
-                combined_audio.export(combined_path, format="wav")
-                file_format = "WAV"
-                logger.info(f"Successfully created combined WAV audio file")
-            
-            # Create metadata file for the combined recording
-            metadata = {
+            # Save session metadata
+            session_info = {
                 "session_id": combined_data['session_id'],
                 "call_sid": combined_data['call_sid'],
                 "phone_number": combined_data['phone_number'],
                 "call_purpose": combined_data['call_purpose'],
-                "created_at": datetime.utcnow().isoformat(),
-                "combined_file": {
-                    "filename": combined_filename,
-                    "format": file_format,
-                    "duration_seconds": len(combined_audio) / 1000.0,
-                    "total_chunks_processed": len(all_chunks),
-                    "incoming_chunks": combined_data['total_incoming'],
-                    "outgoing_chunks": combined_data['total_outgoing']
-                },
-                "description": "Combined conversation audio with user input and assistant responses"
+                "total_incoming_chunks": combined_data['total_incoming'],
+                "total_outgoing_chunks": combined_data['total_outgoing'],
+                "conversation_timeline": conversation_timeline,
+                "audio_files": audio_files,
+                "saved_at": datetime.utcnow().isoformat(),
+                "format_note": "Interleaved conversation audio saved as MP3 (preferred) or WAV (fallback) with chronological user/Gemini voice flow"
             }
             
             metadata_path = f"{session_dir}/combined_audio_metadata.json"
-            import json
             with open(metadata_path, "w") as f:
-                json.dump(metadata, f, indent=2)
+                json.dump(session_info, f, indent=2)
             
             # Commit changes to volume
             audio_volume.commit()
@@ -1285,21 +1544,21 @@ try:
                 "status": "success",
                 "session_id": combined_data['session_id'],
                 "storage_path": f"voice_debug/{today}/{combined_data['session_id']}",
-                "combined_file": {
-                    "filename": combined_filename,
-                    "format": file_format,
-                    "storage_path": f"voice_debug/{today}/{combined_data['session_id']}/{combined_filename}",
-                    "duration_seconds": len(combined_audio) / 1000.0
-                },
-                "chunks_processed": len(all_chunks),
-                "incoming_chunks": combined_data['total_incoming'],
-                "outgoing_chunks": combined_data['total_outgoing']
+                "audio_files": audio_files,
+                "total_files": len(audio_files),
+                "incoming_chunks_processed": len(incoming_chunks),
+                "outgoing_chunks_processed": len(outgoing_chunks),
+                "conversation_timeline_entries": len(conversation_timeline),
+                "format": "MP3/WAV (auto-detected)",
+                "note": "Interleaved conversation audio saved as single MP3 file with chronological user/Gemini voice flow and timeline metadata"
             }
             
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Error creating combined audio file: {e}")
+            logger.error(f"Error saving combined audio to volume: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {"status": "failed", "message": str(e)}
 
 except ImportError:

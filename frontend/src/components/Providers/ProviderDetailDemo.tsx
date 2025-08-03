@@ -78,7 +78,7 @@ const ProviderSkeleton = () => (
 
 export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) {
   // Hardcoded application ID as requested
-  const applicationId = 19907;
+  const applicationId = 15005;
   
   // Helper function to get highlight color - now using a default yellow color
   const getHighlightColor = () => {
@@ -255,6 +255,10 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
   const [selectedHighlight, setSelectedHighlight] = useState<ProcessedHighlight | null>(null);
   const [pdfDocument, setPdfDocument] = useState<{numPages: number; getPage: (pageNumber: number) => Promise<unknown>} | null>(null);
   const [highlightsLoading, setHighlightsLoading] = useState(false);
+
+  // Audio state for education verification
+  const [stepAudioUrls, setStepAudioUrls] = useState<Record<string, string>>({});
+  const [audioLoading, setAudioLoading] = useState<Record<string, boolean>>({});
 
   // Helper function to get document URL from multiple possible locations
   const getDocumentUrl = (stepDetails: StepDetailsResponse | null): string | null => {
@@ -554,6 +558,31 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
     return step?.status !== 'pending';
   };
 
+  // Function to set audio URL for education verification
+  const fetchEducationAudio = async (stepKey: string) => {
+    if (stepKey !== 'education') return;
+
+    setAudioLoading(prev => ({ ...prev, [stepKey]: true }));
+    
+    try {
+      // Construct the audio file path - using the hardcoded path from the example
+      const audioFilePath = 'voice_debug/2025-08-03/b3360b79-8e95-4968-a627-a931954c3b9b/conversation_interleaved.mp3';
+      
+      // Create the URL to fetch the audio file using the same base URL as other API calls
+      const baseURL = 'https://mikhailocampo--vera-platform-v2-fastapi-app-dev.modal.run';
+      const audioUrl = `${baseURL}/v1/vera/audio/${audioFilePath}`;
+      
+      // Set the audio URL directly - let the audio player handle 404s gracefully
+      setStepAudioUrls(prev => ({ ...prev, [stepKey]: audioUrl }));
+      console.log(`Audio URL set for ${stepKey}: ${audioUrl}`);
+      
+    } catch (error) {
+      console.error(`Error setting audio URL for ${stepKey}:`, error);
+    } finally {
+      setAudioLoading(prev => ({ ...prev, [stepKey]: false }));
+    }
+  };
+
   // Handler for running verification synchronously
   const handleRunVerification = async (stepKey: string) => {
     if (runningSteps.has(stepKey)) return;
@@ -576,6 +605,11 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
       
       // Auto-select the step to show results
       setSelectedStepKey(stepKey);
+      
+      // Fetch audio file for education verification
+      if (stepKey === 'education') {
+        await fetchEducationAudio(stepKey);
+      }
       
     } catch (error) {
       console.error('Failed to run verification:', error);
@@ -1044,6 +1078,11 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                         try {
                                           const details = await getStepDetails(applicationId, step.step_key);
                                           setStepDetails(details);
+                                          
+                                          // Fetch audio for education step if not already loaded
+                                          if (step.step_key === 'education' && !stepAudioUrls[step.step_key]) {
+                                            await fetchEducationAudio(step.step_key);
+                                          }
                                         } catch (error) {
                                           console.error('Failed to fetch step details:', error);
                                           setStepDetailsError('Failed to load step details');
@@ -1115,6 +1154,11 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                 try {
                                   const details = await getStepDetails(applicationId, selectedStepKey);
                                   setStepDetails(details);
+                                  
+                                  // Fetch audio for education step if not already loaded
+                                  if (selectedStepKey === 'education' && !stepAudioUrls[selectedStepKey]) {
+                                    await fetchEducationAudio(selectedStepKey);
+                                  }
                                 } catch {
                                   setStepDetailsError('Failed to load step details');
                                 } finally {
@@ -1304,6 +1348,45 @@ export default function ProviderDetailDemo({ onBack }: ProviderDetailDemoProps) 
                                 {rightPanelTab === 'comments' && (
                                   <div className="h-full flex flex-col">
                                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                      {/* Audio Player for Education Verification */}
+                                      {selectedStepKey === 'education' && !audioLoading[selectedStepKey] && stepAudioUrls[selectedStepKey] && (
+                                        <div className="flex items-start space-x-3">
+                                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                            <span className="text-xs font-medium text-green-700">🎵</span>
+                                          </div>
+                                          <div className="flex-1">
+                                            <div className="bg-green-50 border border-green-200 rounded p-3">
+                                              <h4 className="font-medium text-green-900 mb-3">Education Verification Audio:</h4>
+                                              <audio 
+                                                controls 
+                                                className="w-full"
+                                                preload="metadata"
+                                              >
+                                                <source src={stepAudioUrls[selectedStepKey]} type="audio/mpeg" />
+                                                Your browser does not support the audio element.
+                                              </audio>
+                                              <p className="text-xs text-green-700 mt-2">
+                                                Audio recording of the education verification conversation
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Audio Loading State */}
+                                      {selectedStepKey === 'education' && audioLoading[selectedStepKey] && (
+                                        <div className="flex items-start space-x-3">
+                                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                                          </div>
+                                          <div className="flex-1">
+                                            <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                                              <p className="text-sm text-blue-800">Loading audio file...</p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
                                       {/* Vera's Analysis Comment */}
                                       <div className="flex items-start space-x-3">
                                         <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
