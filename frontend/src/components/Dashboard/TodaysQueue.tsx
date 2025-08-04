@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  CheckCircle, Clock, AlertTriangle, Play, Pause, RotateCw, 
-  FileText, User, Calendar, Zap, Brain, Target, Database,
-  Activity, Shield, Search, Filter, Download, RefreshCw
+  CheckCircle, Clock, AlertTriangle, Play, Pause, 
+  Brain, Target, Activity, Search, Download, RefreshCw
 } from 'lucide-react';
 
 export default function TodaysQueue() {
@@ -195,41 +194,6 @@ export default function TodaysQueue() {
 
         {/* Vera AI Status Cards */}
         <div className="grid grid-cols-4 gap-6 mb-6">
-          <div className="col-span-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 border border-purple-200 mb-4">
-            <h3 className="text-lg font-semibold text-purple-900 mb-3 flex items-center">
-              <Brain className="w-6 h-6 mr-2" />
-              Vera AI - Today's Batch Analysis Summary
-            </h3>
-            <div className="grid grid-cols-3 gap-6 text-sm">
-              <div>
-                <h4 className="font-medium text-purple-800 mb-2">Top Level Results (TLR):</h4>
-                <p className="text-purple-700">
-                  Vera processed 100 providers in 2.3 minutes using advanced ML models trained on 50M+ healthcare credentials. 
-                  The AI achieved 97% average confidence across all verifications by cross-referencing 15 primary source databases 
-                  including NPI Registry, NPDB, state licensing boards, and federal sanctions lists.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium text-purple-800 mb-2">AI Decisions Made:</h4>
-                <p className="text-purple-700">
-                  • Auto-approved 94 providers (94%) with confidence &gt;90%<br/>
-                  • Flagged 3 providers (3%) for committee review due to risk indicators<br/>
-                  • Queued 3 providers (3%) for manual verification due to document quality issues<br/>
-                  • Zero false negatives detected in validation sample
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium text-purple-800 mb-2">Quality Metrics:</h4>
-                <p className="text-purple-700">
-                  • Document OCR accuracy: 98.9%<br/>
-                  • API response success rate: 99.2%<br/>
-                  • Data validation errors: 0.1%<br/>
-                  • Processing speed: 1.38 seconds/provider<br/>
-                  • Audit compliance: 100%
-                </p>
-              </div>
-            </div>
-          </div>
           
           <div className="bg-white rounded-lg p-4 border border-gray-200">
             <div className="flex items-center justify-between">
