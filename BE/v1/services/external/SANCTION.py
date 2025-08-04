@@ -6,7 +6,7 @@ from datetime import datetime
 from v1.models.requests import ComprehensiveSANCTIONRequest
 from v1.models.responses import (
     SANCTIONResponse, ComprehensiveSANCTIONResponse, ProviderInfo, 
-    SanctionMatch, ResponseStatus
+    SanctionMatch, SanctionSummary, ResponseStatus
 )
 from v1.models.database import SanctionCheckModelEnhanced, PractitionerEnhanced
 from v1.services.database import get_supabase_client
@@ -374,12 +374,23 @@ class SANCTIONService:
         # Get check date from database or use current date
         check_date = sanction_data.created_at if sanction_data.created_at else datetime.utcnow()
         
+        # Create summary
+        total_sources_checked = len(sanctions)
+        flagged_for_review = matches_found > 0
+        
+        summary = SanctionSummary(
+            total_sources_checked=total_sources_checked,
+            matches_found=matches_found,
+            flagged_for_review=flagged_for_review
+        )
+        
         return ComprehensiveSANCTIONResponse(
             status=ResponseStatus.SUCCESS,
             message="Comprehensive sanctions check completed successfully",
             provider=provider_info,
             checked_on=check_date,
-            sanctions=sanctions
+            sanctions=sanctions,
+            summary=summary
         )
 
 # Global service instance

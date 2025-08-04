@@ -1,5 +1,6 @@
 from datetime import datetime
 import time
+from typing import List
 
 import v1.services.pseudonymization as pseudo
 from v1.services.clients import call_gemini_model, GeminiModel, get_gemini_client
@@ -8,13 +9,17 @@ from v1.models.requests import ComprehensiveSANCTIONRequest
 from v1.models.responses import ComprehensiveSANCTIONResponse
 from v1.services.engine.verifications.models import (
     VerificationStepResponse, VerificationStepDecision, VerificationStepMetadataEnum, VerificationMetadata,
-    LLMResponse, UserAgent, VerificationSteps, VerificationStepRequest
+    LLMResponse, UserAgent, VerificationSteps, VerificationStepRequest, LLMHighlight
 )
 from v1.services.pii_detection_service import pii_detection_service
 import os
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class SanctionsAnalysisResponse(LLMResponse):
+    highlights: List[LLMHighlight]
 
 
 async def verify_sanctions(request: VerificationStepRequest):
@@ -254,6 +259,16 @@ async def verify_sanctions(request: VerificationStepRequest):
         - License State: {practitioner_address.state[:2].upper()}
 
         Please provide your verification analysis.
+        
+        In your response, please provide a list of highlights that you found in the sanctions record.
+        Each highlight should have an id, quote, and analysis. 
+        The quote should be exact text from the sanctions record that you found to be relevant to the decision. Limit to 3 sentences.
+            - SKIP if its a single word. It must be at least 2 words to be considered a quote.
+            - Do NOT paraphrase the quote. Use the exact text from the sanctions record.
+        The analysis should be a short, 1-2 sentence analysis of the quote.
+        The id should be a unique identifier for the highlight such as `highlight-1`, `highlight-2`, etc.
+        The highlights should be in the order they were found in the sanctions record.
+        
         """
         logger.info("Calling Gemini model for sanctions verification analysis")
 
@@ -265,13 +280,13 @@ async def verify_sanctions(request: VerificationStepRequest):
             system_prompt=SYSTEM_PROMPT,
             messages=[message],
             response_mime_type="application/json",
-            response_schema=LLMResponse,
+            response_schema=SanctionsAnalysisResponse,
             client=client,
         )
 
         # Parse response from Gemini model
         try:
-            assert isinstance(gemini_response, LLMResponse)
+            assert isinstance(gemini_response, SanctionsAnalysisResponse)
             
             decision = gemini_response.decision
             

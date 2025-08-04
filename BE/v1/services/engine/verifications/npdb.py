@@ -240,7 +240,7 @@ async def verify_npdb(request: VerificationStepRequest):
             )
         
         # System prompt for Gemini model
-        MODEL=GeminiModel.GEMINI_25_FLASH_LITE
+        MODEL=GeminiModel.GEMINI_25_FLASH
         
         SYSTEM_PROMPT = f"""
         You are a credentialing examiner verifying the NPDB (National Practitioner Data Bank) record of this practitioner. I want the results to be detailed
@@ -315,13 +315,27 @@ async def verify_npdb(request: VerificationStepRequest):
         Please provide your verification analysis.
         
         In your response, please provide a list of highlights that you found in the NPDB record.
-        Each highlight should have an id, quote, and analysis. 
-        The quote should be exact text from the NPDB record that you found to be relevant to the decision. Limit to 3 sentences.
+        Each highlight should have an id, quote, and analysis. Limit a quote to at most 2 sentences and can be sentence fragments but must ALWAYS be text from the description. A separate service will use Ctrl + F on your quote to find the exact text in the NPDB record so you must be exact.
+        
             - SKIP if its a single word. It must be at least 2 words to be considered a quote.
             - Do NOT paraphrase the quote. Use the exact text from the NPDB record.
+            - Do NOT highlight code, you must highlight only human-readable text.
+        
         The analysis should be a short, 1-2 sentence analysis of the quote.
         The id should be a unique identifier for the highlight such as `highlight-1`, `highlight-2`, etc.
         The highlights should be in the order they were found in the NPDB record.
+        
+        Example Highlight:
+        Input:
+          "The practitioner was found to have committed malpractice in the state of California in 2024. After final judiciual ruling, the settlement amount was $100,000 where the patient was a 60 year old male with a history of hypertension. An internal investigation, initiated by the hospital's risk management department, was conducted. This included a review of the initial medical records, the ED physician's notes, and the subsequent imaging and pathology reports. Expert medical review, by a board-certified gastroenterologist, concluded that the initial presentation of the patient warranted a more thorough investigation, including more detailed imaging studies (like a CT scan)."
+        Output:
+        - id: highlight-1
+            quote: "The practitioner was found to have committed malpractice in the state of California in 2024."
+            analysis: "This is a malpractice report that occurred in California."
+        - id: highlight-2
+            quote: "the settlement amount was $100,000"
+            analysis: "The settlement was $100,000 but this is below the threshold of $400,000 for recredentialing."
+        
         
         """
         logger.info("Calling Gemini model for NPDB verification analysis")
